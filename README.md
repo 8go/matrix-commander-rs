@@ -1,3 +1,15 @@
+[![crates.io - Version](
+https://img.shields.io/crates/v/matrix-commander
+)](https://crates.io/crates/matrix-commander)
+[![crates.io - Downloads](
+https://img.shields.io/crates/d/matrix-commander
+)](https://crates.io/crates/matrix-commander)
+
+<p>
+<img
+src="https://raw.githubusercontent.com/8go/matrix-commander-rs/master/logos/matrix-commander-rs.svg"
+alt="MC logo" height="150">
+
 # matrix-commander-rs
 simple but convenient CLI-based Matrix client app for sending and receiving
 
