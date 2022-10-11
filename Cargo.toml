@@ -1,0 +1,24 @@
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[package]
+name = "matrix-commander"
+version = "0.0.1"
+edition = "2021"
+description = "simple but convenient CLI-based Matrix client app for sending and receiving"
+documentation = "https://docs.rs/matrix-commander"
+readme = "README.md"
+homepage = "https://github.com/8go/matrix-commander-rs"
+repository = "https://github.com/8go/matrix-commander-rs/"
+license = "GPL-3.0-or-later"
+keywords = ["Matrix", "instant-messenger", "chat", "cli", "command-line-tool", "client", "tool", "messaging", "ruma", "matrix-rust-sdk"]
+categories = ["command-line-utilities", "network-programming"]
+exclude = ["todo.txt", ".*"]
+publish = true
+
+
+[dependencies]
+
+# https://doc.rust-lang.org/cargo/reference/manifest.html#the-badges-section
+[badges]
+# The author wants to share it with the community but is not intending to meet anyone's particular use case.
+maintenance = { status = "experimental" }
