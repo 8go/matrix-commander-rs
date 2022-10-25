@@ -18,13 +18,13 @@ publish = true
 
 
 [dependencies]
-argparse = "*"
+argparse = "0.2"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 url = { version = "2.3", features = ["serde"] }
 serde_json = "1.0"
-tracing-subscriber = "*"
-tracing = "*"
+tracing-subscriber = "0.3"
+tracing = "0.1"
 directories = "4.0"
 matrix-sdk = { version = "0.6.0", features = ["markdown", "anyhow"] }
 tokio = { version = "1.20", default-features = false, features = [
