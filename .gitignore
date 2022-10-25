@@ -12,4 +12,6 @@ Cargo.lock
 # To-do list
 todo.txt
 
+src.22*/*
 
+test.txt
