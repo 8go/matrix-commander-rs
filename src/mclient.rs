@@ -44,13 +44,13 @@ use matrix_sdk::{
 };
 
 use crate::{credentials_exist, get_timeout, Credentials, GlobalState};
-use crate::{Error, Result}; // from main.rs
+use crate::{Error, Sync}; // from main.rs
 
 #[path = "emoji_verify.rs"]
 mod emoji_verify; // import verification code
 
 /// Constructor for matrix-sdk async Client, based on restore_login().
-pub(crate) async fn restore_login(gs: &mut GlobalState) -> Result<Client> {
+pub(crate) async fn restore_login(gs: &mut GlobalState) -> Result<Client, Error> {
     if gs.credentials_file_path.is_file() {
         let credentials = Credentials::load(&gs.credentials_file_path)?;
         let credentialsc1 = credentials.clone();
@@ -62,7 +62,8 @@ pub(crate) async fn restore_login(gs: &mut GlobalState) -> Result<Client> {
             credentialsc1.device_id
         );
         client.restore_login(credentialsc2.into()).await?;
-        sync_once(&client, get_timeout(gs)).await?;
+        // we skip sync if requested to do so
+        sync_once(&client, get_timeout(gs), gs.ap.sync).await?;
         Ok(client)
     } else {
         Err(Error::NotLoggedIn)
@@ -77,7 +78,7 @@ pub(crate) async fn login<'a>(
     password: &str,
     device: &str,
     room_default: &str,
-) -> Result<Client> {
+) -> Result<Client, Error> {
     let client = create_client(homeserver.clone(), gs).await?;
     debug!("About to call login_username()");
     let response = client
@@ -113,13 +114,13 @@ pub(crate) async fn login<'a>(
         "new credentials file created = {:?}",
         gs.credentials_file_path
     );
-    sync_once(&client, get_timeout(gs)).await?;
+    sync_once(&client, get_timeout(gs), gs.ap.sync).await?;
     Ok(client)
 }
 
 /// Prepares a client that can then be used for actual login.
 /// Configures the matrix-sdk async Client.
-async fn create_client(homeserver: Url, gs: &GlobalState) -> Result<Client> {
+async fn create_client(homeserver: Url, gs: &GlobalState) -> Result<Client, Error> {
     // The location to save files to
     let sledhome = &gs.sledstore_dir_path;
     info!("Using sled store {:?}", &sledhome);
@@ -142,7 +143,7 @@ async fn create_client(homeserver: Url, gs: &GlobalState) -> Result<Client> {
 }
 
 /// Does emoji verification
-pub(crate) async fn verify(client: &Result<Client>) -> Result {
+pub(crate) async fn verify(client: &Result<Client, Error>) -> Result<(), Error> {
     if let Ok(client) = client {
         // is logged in
         info!("Client logged in: {}", client.logged_in());
@@ -155,7 +156,7 @@ pub(crate) async fn verify(client: &Result<Client>) -> Result {
 }
 
 /// Logs out, destroying the device and removing credentials file
-pub(crate) async fn logout(client: &Result<Client>, gs: &GlobalState) -> Result {
+pub(crate) async fn logout(client: &Result<Client, Error>, gs: &GlobalState) -> Result<(), Error> {
     debug!("Logout on client");
     if let Ok(client) = client {
         // is logged in
@@ -193,7 +194,7 @@ pub(crate) async fn logout(client: &Result<Client>, gs: &GlobalState) -> Result 
 }
 
 /// Only logs out from server, no local changes.
-pub(crate) async fn logout_server(client: &Client) -> Result {
+pub(crate) async fn logout_server(client: &Client) -> Result<(), Error> {
     match client.logout().await {
         Ok(n) => info!("Logout sent to server {:?}", n),
         Err(e) => error!(
@@ -205,13 +206,22 @@ pub(crate) async fn logout_server(client: &Client) -> Result {
 }
 
 /// Utility function to synchronize once.
-pub(crate) async fn sync_once(client: &Client, timeout: u64) -> Result {
-    info!("syncing once, timeout set to {} seconds ...", timeout);
-    client
-        .sync_once(SyncSettings::new().timeout(Duration::new(timeout, 0)))
-        .await?; // sec
-    info!("sync completed");
-    Ok(())
+pub(crate) async fn sync_once(client: &Client, timeout: u64, stype: Sync) -> Result<(), Error> {
+    debug!("value of sync in sync_once() is {:?}", stype);
+    match stype {
+        Sync::Off => {
+            info!("syncing is turned off. No syncing.");
+            Ok(())
+        }
+        Sync::Full => {
+            info!("syncing once, timeout set to {} seconds ...", timeout);
+            client
+                .sync_once(SyncSettings::new().timeout(Duration::new(timeout, 0)))
+                .await?; // sec
+            info!("sync completed");
+            Ok(())
+        }
+    }
 }
 
 /*pub(crate) fn room(&self, room_id: &RoomId) -> Result<room::Room> {
@@ -231,7 +241,7 @@ pub(crate) async fn sync_once(client: &Client, timeout: u64) -> Result {
 }*/
 
 /// Get list of devices for the current user.
-pub(crate) async fn devices(client: &Result<Client>) -> Result {
+pub(crate) async fn devices(client: &Result<Client, Error>) -> Result<(), Error> {
     debug!("Devices on client");
     if let Ok(client) = client {
         // is logged in
@@ -251,17 +261,18 @@ pub(crate) async fn devices(client: &Result<Client>) -> Result {
 
 /// Sent text message is various formats and types.
 pub(crate) async fn message(
-    client: &Result<Client>,
+    client: &Result<Client, Error>,
     msg: String,
     room: String,
     code: bool,
     markdown: bool,
     notice: bool,
     emote: bool,
-) -> Result {
+) -> Result<(), Error> {
     if client.is_err() {
         return Err(Error::InvalidClientConnection);
     }
+    debug!("In message(): room is {}, msg is {}", room, msg);
     let (nmsg, md) = if code {
         let mut fmt_msg = String::from("```");
         // fmt_msg.push_str("name-of-language");  // Todo
@@ -296,6 +307,7 @@ pub(crate) async fn message(
         })
     };
     let proom = RoomId::parse(room).unwrap();
+    debug!("In message(): parsed room is {:?}", proom);
     client
         .as_ref()
         .unwrap()
@@ -308,12 +320,12 @@ pub(crate) async fn message(
 
 /// Send a file of various Mime formats.
 pub(crate) async fn file(
-    client: &Result<Client>,
+    client: &Result<Client, Error>,
     filename: PathBuf,
     room: String,          // RoomId
     label: Option<String>, // used as filename for attachment
     mime: Option<Mime>,
-) -> Result {
+) -> Result<(), Error> {
     if client.is_err() {
         return Err(Error::InvalidClientConnection);
     }

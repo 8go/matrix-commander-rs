@@ -62,7 +62,9 @@ Safe!
 - Use [ruma](https://crates.io/crates/ruma) if and where needed.
 - Make it so as much as possible can be done in a single call.
   Currently the send-and-forget is already working:
-  `matrix-commander-rs --login password --user-login @john:some.homeserver.org --password secret --device matrix-commander-rs --room-default \!someRoomId:some.homeserver.org --message Hello --logout me`.
+  `matrix-commander-rs --login password --user-login @john:some.homeserver.org
+  --password secret --device matrix-commander-rs --room-default
+  \!someRoomId:some.homeserver.org --message Hello --logout me`.
 
 # Immediate action items
 - revise existing code, where is it inefficient?
@@ -278,20 +280,31 @@ Optional arguments:
                         arbitrary rooms. When specifying the room id some
                         shells require the exclamation mark to be escaped with
                         a backslash.
--f,--file FILE        Send this file (e.g. PDF, DOC, MP4). First files are
-                      sent, then text messages are sent.
---notice              There are 3 message types for '--message'. Text,
-                      Notice, and Emote. By default, if no command line
-                      options are specified, 'Text' will be used. Use
-                      '--notice' or '--emote' to set the type to Notice or
-                      Emote respectively. '--notice' allows sending of text
-                      as a notice. '--emote' allows sending of text as an
-                      emote.
---emote               There are 3 message types for '--message'. Text,
-                      Notice, and Emote. By default, if no command line
-                      options are specified, 'Text' will be used. Use
-                      '--notice' or '--emote' to set the type to Notice or
-                      Emote respectively. '--notice' allows sending of text
-                      as a notice. '--emote' allows sending of text as an
-                      emote.
+  -f,--file FILE        Send this file (e.g. PDF, DOC, MP4). First files are
+                        sent, then text messages are sent.
+  --notice              There are 3 message types for '--message'. Text,
+                        Notice, and Emote. By default, if no command line
+                        options are specified, 'Text' will be used. Use
+                        '--notice' or '--emote' to set the type to Notice or
+                        Emote respectively. '--notice' allows sending of text
+                        as a notice. '--emote' allows sending of text as an
+                        emote.
+  --emote               There are 3 message types for '--message'. Text,
+                        Notice, and Emote. By default, if no command line
+                        options are specified, 'Text' will be used. Use
+                        '--notice' or '--emote' to set the type to Notice or
+                        Emote respectively. '--notice' allows sending of text
+                        as a notice. '--emote' allows sending of text as an
+                        emote.
+  --sync SYNC           This option decides on whether the program synchronizes
+                        the state with the server before a 'send' action.
+                        Currently two choices are offered: 'Full' and 'Off'.
+                        Provide one of these choices. The default is 'Full'. If
+                        you want to use the default, then there is no need to
+                        use this option. If you have chosen 'Full', the full
+                        state, all state events will be synchronized between
+                        this program and the server before a 'send'. If you
+                        have chosen 'Off', synchronization will be skipped
+                        entirely before the 'send' which will improve
+                        performance.
 ```

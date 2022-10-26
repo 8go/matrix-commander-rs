@@ -9,6 +9,8 @@ git pull
 
 echo "Update version number in Cargo.toml."
 
+scripts/update-1-help.py # create helpfile and update README.md accordingly
+
 cargo fmt
 
 # show files containing changes that were not yet committed into git

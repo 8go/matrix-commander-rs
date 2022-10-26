@@ -38,13 +38,15 @@
 
 use atty::Stream;
 use std::env;
+use std::fmt::{self, Debug};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::{debug, enabled, /* warn, */ error, info, Level};
 // Collect, List, Store, StoreFalse,
-use argparse::{ArgumentParser, IncrBy, StoreOption, StoreTrue};
+use argparse::{ArgumentParser, IncrBy, Store, StoreOption, StoreTrue};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -144,14 +146,49 @@ pub enum Error {
     Http(#[from] matrix_sdk::HttpError),
 }
 
-// impl Error {
-//     pub(crate) fn custom<T>(message: &'static str) -> Result<T> {
-//         Err(Error::Custom(message))
-//     }
-// }
+/// Function to create custom error messaages on the fly with static text
+#[allow(dead_code)]
+impl Error {
+    pub(crate) fn custom<T>(message: &'static str) -> Result<T, Error> {
+        Err(Error::Custom(message))
+    }
+}
 
-/// Trivial definition of Result type
-pub(crate) type Result<T = ()> = std::result::Result<T, Error>;
+/// Enumerator used for --sync option
+//#[allow(non_camel_case_types)]
+#[derive(Clone, Debug, Copy)]
+enum Sync {
+    // None: only useful if one needs to know if option was used or not.
+    // Sort of like an or instead of an Option<Sync>.
+    // We do not need to know if user used the option or not,
+    // we just need to know the value.
+    // None,
+    Off,
+    // partial,
+    /// full: the default value
+    Full,
+}
+
+/// Converting from String to Sync for --sync option
+impl FromStr for Sync {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Sync, ()> {
+        return match src.to_lowercase().as_ref() {
+            "off" => Ok(Sync::Off),
+            "full" => Ok(Sync::Full),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Sync for --sync option
+impl fmt::Display for Sync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
 
 /// A public struct with private fields to keep the command line arguments from
 /// library `argparse`.
@@ -179,6 +216,7 @@ pub struct Args {
     file: Option<String>,
     notice: bool,
     emote: bool,
+    sync: Sync,
 }
 
 impl Args {
@@ -206,6 +244,7 @@ impl Args {
             file: None,
             notice: false,
             emote: false,
+            sync: Sync::Full,
         }
     }
 }
@@ -241,7 +280,7 @@ impl AsRef<Credentials> for Credentials {
 /// implementation of Credentials struct
 impl Credentials {
     /// Constructor for Credentials
-    fn load(path: &Path) -> Result<Credentials> {
+    fn load(path: &Path) -> Result<Credentials, Error> {
         let reader = File::open(path)?;
         Credentials::set_permissions(&reader)?;
         let credentials: Credentials = serde_json::from_reader(reader)?;
@@ -252,7 +291,7 @@ impl Credentials {
     }
 
     /// Writing the credentials to a file
-    fn save(&self, path: &Path) -> Result {
+    fn save(&self, path: &Path) -> Result<(), Error> {
         fs::create_dir_all(path.parent().ok_or(Error::NoNomeDirectory)?)?;
         let writer = File::create(path)?;
         serde_json::to_writer_pretty(&writer, self)?;
@@ -261,7 +300,7 @@ impl Credentials {
     }
 
     #[cfg(unix)]
-    fn set_permissions(file: &File) -> Result {
+    fn set_permissions(file: &File) -> Result<(), Error> {
         use std::os::unix::fs::PermissionsExt;
         let perms = file.metadata()?.permissions();
         // is the file world-readable? if so, reset the permissions to 600
@@ -273,7 +312,7 @@ impl Credentials {
     }
 
     #[cfg(not(unix))]
-    fn set_permissions(file: &File) -> Result {
+    fn set_permissions(file: &File) -> Result<(), Error> {
         Ok(())
     }
 
@@ -697,7 +736,7 @@ fn sledstore_exist(gs: &mut GlobalState) -> bool {
 }
 
 /// Handle the --login CLI argument
-pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client> {
+pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
     let login_type = gs.ap.login.as_ref().unwrap();
     if login_type != "password" && login_type != "sso" {
         error!(
@@ -747,7 +786,7 @@ pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client> {
 
 /// Attempt a restore-login iff the --login CLI argument is missing.
 /// In other words try a re-login using the access token from the credentials file.
-pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client> {
+pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client, Error> {
     info!("restore_login implicitly chosen.");
     if !credentials_exist(gs) {
         error!(concat!(
@@ -766,13 +805,16 @@ pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client> {
 }
 
 /// Handle the --verify CLI argument
-pub(crate) async fn cli_verify(clientres: &Result<Client>) -> Result {
+pub(crate) async fn cli_verify(clientres: &Result<Client, Error>) -> Result<(), Error> {
     info!("Verify chosen.");
     return crate::verify(clientres).await;
 }
 
 /// Handle the --message CLI argument
-pub(crate) async fn cli_message(clientres: &Result<Client>, gs: &GlobalState) -> Result {
+pub(crate) async fn cli_message(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
     info!("Message chosen.");
     if gs.ap.message.is_none() {
         return Ok(()); // nothing to do
@@ -819,7 +861,10 @@ pub(crate) async fn cli_message(clientres: &Result<Client>, gs: &GlobalState) ->
 }
 
 /// Handle the --file CLI argument
-pub(crate) async fn cli_file(clientres: &Result<Client>, gs: &GlobalState) -> Result {
+pub(crate) async fn cli_file(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
     info!("File chosen.");
     if gs.ap.file.is_none() {
         return Ok(()); // nothing to do
@@ -847,17 +892,17 @@ pub(crate) async fn cli_file(clientres: &Result<Client>, gs: &GlobalState) -> Re
 }
 
 /// Handle the --devices CLI argument
-pub(crate) async fn cli_devices(clientres: &Result<Client>) -> Result {
+pub(crate) async fn cli_devices(clientres: &Result<Client, Error>) -> Result<(), Error> {
     info!("Devices chosen.");
     return crate::devices(clientres).await;
 }
 
 /// Handle the --logout CLI argument
 pub(crate) async fn cli_logout(
-    clientres: &Result<Client>,
+    clientres: &Result<Client, Error>,
     gs: &GlobalState,
     arg: String,
-) -> Result {
+) -> Result<(), Error> {
     info!("Logout chosen.");
     if arg != "me" && arg != "all" {
         error!("Login option only supports 'me' and 'all' as choice.");
@@ -872,10 +917,11 @@ pub(crate) async fn cli_logout(
 
 /// We need your code contributions! Please add features and make PRs! :pray: :clap:
 #[tokio::main]
-async fn main() -> Result {
+async fn main() -> Result<(), Error> {
     let prog_desc: String;
     let verify_desc: String;
     let logout_desc: String;
+    let sync_desc: String;
 
     let mut gs: GlobalState = GlobalState::new("test".to_string());
 
@@ -1299,6 +1345,27 @@ async fn main() -> Result {
             ),
         );
 
+        sync_desc = format!(
+            concat!(
+                "This option decides on whether the program ",
+                "synchronizes the state with the server before a 'send' action. ",
+                "Currently two choices are offered: '{full}' and '{off}'. ",
+                "Provide one of these choices. ",
+                "The default is '{full}'. If you want to use the default, ",
+                "then there is no need to use this option. ",
+                "If you have chosen '{full}', ",
+                "the full state, all state events will be synchronized between ",
+                "this program and the server before a 'send'. ",
+                "If you have chosen '{off}', ",
+                "synchronization will be skipped entirely before the 'send' ",
+                "which will improve performance.",
+            ),
+            full = Sync::Full,
+            off = Sync::Off
+        );
+        ap.refer(&mut gs.ap.sync)
+            .add_option(&["--sync"], Store, &sync_desc);
+
         ap.parse_args_or_exit();
     }
 
@@ -1378,6 +1445,7 @@ async fn main() -> Result {
     debug!("file option is {:?}", gs.ap.file);
     debug!("notice flag is {:?}", gs.ap.notice);
     debug!("emote flag is {:?}", gs.ap.emote);
+    debug!("sync option is {:?}", gs.ap.sync);
 
     // Todo : make all option args lower case
     if gs.ap.version {
