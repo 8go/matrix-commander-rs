@@ -44,9 +44,9 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{debug, enabled, /* warn, */ error, info, Level};
+use tracing::{debug, enabled, error, info, warn, Level};
 // Collect, List, Store, StoreFalse,
-use argparse::{ArgumentParser, IncrBy, Store, StoreOption, StoreTrue};
+use argparse::{ArgumentParser, /* Collect, */ IncrBy, List, Store, StoreOption, StoreTrue};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -66,7 +66,10 @@ use matrix_sdk::{
 };
 
 mod mclient; // import matrix-sdk Client related code
-use crate::mclient::{devices, file, login, logout, message, restore_login, verify};
+use crate::mclient::{
+    devices, file, get_room_info, listen_all, listen_forever, listen_once, listen_tail, login,
+    logout, message, restore_login, verify,
+};
 
 /// the version number from Cargo.toml at compile time
 const VERSION_O: Option<&str> = option_env!("CARGO_PKG_VERSION");
@@ -155,7 +158,6 @@ impl Error {
 }
 
 /// Enumerator used for --sync option
-//#[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
 enum Sync {
     // None: only useful if one needs to know if option was used or not.
@@ -163,6 +165,7 @@ enum Sync {
     // We do not need to know if user used the option or not,
     // we just need to know the value.
     // None,
+    /// Turns syncing off for sending operations to improve performance
     Off,
     // partial,
     /// full: the default value
@@ -183,6 +186,89 @@ impl FromStr for Sync {
 
 /// Creates .to_string() for Sync for --sync option
 impl fmt::Display for Sync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --listen (--tail) option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum Listen {
+    // None: only useful if one needs to know if option was used or not.
+    // Sort of like an or instead of an Option<Sync>.
+    // We do not need to know if user used the option or not,
+    // we just need to know the value.
+    /// Never: Indicates to not listen, default
+    Never,
+    /// Once: Indicates to listen once in *all* rooms and then continue
+    Once,
+    /// Forever: Indicates to listen forever in *all* rooms, until process is killed manually. This is the only option that remains in the event loop.
+    Forever,
+    /// Tail: Indicates to get the last N messages from the specified romm(s) and then continue
+    Tail,
+    /// All: Indicates to get *all* the messages from from the specified romm(s) and then continue
+    All,
+}
+
+/// Converting from String to Listen for --listen option
+impl FromStr for Listen {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Listen, ()> {
+        return match src.to_lowercase().as_ref() {
+            "never" => Ok(Listen::Never),
+            "once" => Ok(Listen::Once),
+            "forever" => Ok(Listen::Forever),
+            "tail" => Ok(Listen::Tail),
+            "all" => Ok(Listen::All),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Listen for --listen option
+impl fmt::Display for Listen {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --output option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum Output {
+    // None: only useful if one needs to know if option was used or not.
+    // Sort of like an or instead of an Option<Sync>.
+    // We do not need to know if user used the option or not,
+    // we just need to know the value.
+    /// Text: Indicates to print human readable text, default
+    Text,
+    /// Json: Indicates to print output in Json format
+    Json,
+    /// Json Max: Indicates to to print the maximum anount of output in Json format
+    JsonMax,
+    /// Json Spec: Indicates to to print output in Json format, but only data that is according to Matrix Specifications
+    JsonSpec,
+}
+
+/// Converting from String to Listen for --listen option
+impl FromStr for Output {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Output, ()> {
+        return match src.to_lowercase().replace("-", "_").as_ref() {
+            "text" => Ok(Output::Text),
+            "json" => Ok(Output::Json),
+            "jsonmax" | "json_max" => Ok(Output::JsonMax), // accept all 3: jsonmax, json-max, json_max
+            "jsonspec" | "json_spec" => Ok(Output::JsonSpec),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Listen for --listen option
+impl fmt::Display for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
@@ -217,6 +303,12 @@ pub struct Args {
     notice: bool,
     emote: bool,
     sync: Sync,
+    listen: Listen,
+    tail: u64,
+    listen_self: bool,
+    whoami: bool,
+    output: Output,
+    get_room_info: Vec<String>,
 }
 
 impl Args {
@@ -245,6 +337,12 @@ impl Args {
             notice: false,
             emote: false,
             sync: Sync::Full,
+            listen: Listen::Never,
+            tail: 0u64,
+            listen_self: false,
+            whoami: false,
+            output: Output::Text,
+            get_room_info: Vec::new(),
         }
     }
 }
@@ -697,6 +795,19 @@ fn get_room(gs: &GlobalState) -> Option<String> {
     }
 }
 
+/// Get the default room id from the credentials file.
+/// On error return None.
+fn get_room_default_from_credentials(gs: &GlobalState) -> Option<String> {
+    debug!(
+        "get_room_default_from_credentials() shows credentials {:?}",
+        gs.credentials
+    );
+    return match &gs.credentials {
+        Some(inner) => Some(inner.room_default.clone()),
+        None => None,
+    };
+}
+
 /// Return true if credentials file exists, false otherwise
 fn credentials_exist(gs: &GlobalState) -> bool {
     let dp = get_credentials_default_path();
@@ -891,10 +1002,131 @@ pub(crate) async fn cli_file(
     .await;
 }
 
+/// Handle the --listen once CLI argument
+pub(crate) async fn cli_listen_once(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Listen Once chosen.");
+    if clientres.as_ref().is_err() {
+        return Ok(()); // nothing to do, this error has already been reported
+    }
+    return listen_once(
+        clientres,
+        gs.ap.listen_self,
+        crate::whoami(gs)?,
+        gs.ap.output,
+    )
+    .await;
+}
+
+/// Handle the --listen forever CLI argument
+pub(crate) async fn cli_listen_forever(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Listen Forever chosen.");
+    if clientres.as_ref().is_err() {
+        return Ok(()); // nothing to do, this error has already been reported
+    }
+    return listen_forever(
+        clientres,
+        gs.ap.listen_self,
+        crate::whoami(gs)?,
+        gs.ap.output,
+    )
+    .await;
+}
+
+/// Handle the --listen tail CLI argument
+pub(crate) async fn cli_listen_tail(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Listen Tail chosen.");
+    if clientres.as_ref().is_err() {
+        return Ok(()); // nothing to do, this error has already been reported
+    }
+    let roomstr = match get_room(gs) {
+        Some(inner) => inner,
+        _ => return Err(Error::InvalidRoom),
+    };
+    return listen_tail(
+        clientres,
+        roomstr, // Todo: this is wrong, should be a vector of the user specified rooms
+        gs.ap.tail,
+        gs.ap.listen_self,
+        crate::whoami(gs)?,
+        gs.ap.output,
+    )
+    .await;
+}
+
+/// Handle the --listen all CLI argument
+pub(crate) async fn cli_listen_all(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Listen All chosen.");
+    if clientres.as_ref().is_err() {
+        return Ok(()); // nothing to do, this error has already been reported
+    }
+    let roomstr = match get_room(gs) {
+        Some(inner) => inner,
+        _ => return Err(Error::InvalidRoom),
+    };
+    return listen_all(
+        clientres,
+        roomstr, // Todo: this is wrong, should be a vector of the user specified rooms
+        gs.ap.listen_self,
+        crate::whoami(gs)?,
+        gs.ap.output,
+    )
+    .await;
+}
+
 /// Handle the --devices CLI argument
-pub(crate) async fn cli_devices(clientres: &Result<Client, Error>) -> Result<(), Error> {
+pub(crate) async fn cli_devices(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
     info!("Devices chosen.");
-    return crate::devices(clientres).await;
+    return crate::devices(clientres, gs.ap.output).await;
+}
+
+/// Utility function, returns user_id of itself
+pub(crate) fn whoami(gs: &GlobalState) -> Result<OwnedUserId, Error> {
+    let whoami = match &gs.credentials {
+        Some(inner) => inner.user_id.clone(),
+        _ => return Err(Error::NotLoggedIn),
+    };
+    return Ok(whoami);
+}
+
+/// Handle the --whoami CLI argument
+pub(crate) fn cli_whoami(gs: &GlobalState) -> Result<(), Error> {
+    info!("Whoami chosen.");
+    let whoami = crate::whoami(gs)?;
+    match gs.ap.output {
+        Output::Text => println!("{}", whoami),
+        Output::JsonSpec => (),
+        _ => println!("{{\"user_id\": \"{}\"}}", whoami),
+    }
+    return Ok(());
+}
+
+/// Handle the --get-room-info CLI argument
+pub(crate) async fn cli_get_room_info(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Get-room-info chosen.");
+    let mut vec = gs.ap.get_room_info.clone();
+    if vec.iter().any(|x| x == "--") {
+        vec.push(get_room_default_from_credentials(gs).unwrap());
+    }
+    vec.retain(|x| x != "--");
+    return crate::get_room_info(clientres, vec, gs.ap.output).await;
 }
 
 /// Handle the --logout CLI argument
@@ -922,6 +1154,7 @@ async fn main() -> Result<(), Error> {
     let verify_desc: String;
     let logout_desc: String;
     let sync_desc: String;
+    let whoami_desc: String;
 
     let mut gs: GlobalState = GlobalState::new("test".to_string());
 
@@ -1295,6 +1528,9 @@ async fn main() -> Result<(), Error> {
                 "be sent to arbitrary rooms. When specifying the ",
                 "room id some shells require the exclamation mark ",
                 "to be escaped with a backslash. ",
+                "Not all listen operations ",
+                "allow setting a room. Read more under the --listen options ",
+                "and similar. ",
             ),
         );
 
@@ -1365,6 +1601,154 @@ async fn main() -> Result<(), Error> {
         );
         ap.refer(&mut gs.ap.sync)
             .add_option(&["--sync"], Store, &sync_desc);
+
+        ap.refer(&mut gs.ap.listen).add_option(
+            &["--listen"],
+            Store,
+            concat!(
+                "The '--listen' option takes one argument. There are ",
+                "several choices: 'never', 'once', 'forever', 'tail', ",
+                "and 'all'. By default, --listen is set to 'never'. So, ",
+                "by default no listening will be done. Set it to ",
+                "'forever' to listen for and print incoming messages to ",
+                "stdout. '--listen forever' will listen to all messages ",
+                "on all rooms forever. To stop listening 'forever', use ",
+                "Control-C on the keyboard or send a signal to the ",
+                "process or service. ",
+                // The PID for signaling can be found ",
+                // "in a PID file in directory "/home/user/.run". "-- ",
+                "'--listen once' will get all the messages from all rooms ",
+                "that are currently queued up. So, with 'once' the ",
+                "program will start, print waiting messages (if any) ",
+                "and then stop. The timeout for 'once' is set to 10 ",
+                "seconds. So, be patient, it might take up to that ",
+                "amount of time. 'tail' reads and prints the last N ",
+                "messages from the specified rooms, then quits. The ",
+                "number N can be set with the '--tail' option. With ",
+                "'tail' some messages read might be old, i.e. already ",
+                "read before, some might be new, i.e. never read ",
+                "before. It prints the messages and then the program ",
+                "stops. Messages are sorted, last-first. Look at '--tail' ",
+                "as that option is related to '--listen tail'. The option ",
+                "'all' gets all messages available, old and new. Unlike ",
+                "'once' and 'forever' that listen in ALL rooms, 'tail' ",
+                "and 'all' listen only to the room specified in the ",
+                "credentials file or the --room options. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.tail).add_option(
+            &["--tail"],
+            Store,
+            concat!(
+                "The '--tail' option reads and prints up to the last N ",
+                "messages from the specified rooms, then quits. It ",
+                "takes one argument, an integer, which we call N here. ",
+                "If there are fewer than N messages in a room, it reads ",
+                "and prints up to N messages. It gets the last N ",
+                "messages in reverse order. It print the newest message ",
+                "first, and the oldest message last. If '--listen-self' ",
+                "is not set it will print less than N messages in many ",
+                "cases because N messages are obtained, but some of ",
+                "them are discarded by default if they are from the ",
+                "user itself. Look at '--listen' as this option is ",
+                "related to '--tail'. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.listen_self).add_option(
+            &["-y", "--listen-self"],
+            StoreTrue,
+            concat!(
+                "If set and listening, then program will listen to and ",
+                "print also the messages sent by its own user. By ",
+                "default messages from oneself are not printed. ",
+            ),
+        );
+
+        whoami_desc = format!(
+            concat!(
+                "Print the user id used by {prog} (itself). ",
+                "One can get this information also by looking at the ",
+                "credentials file. ",
+            ),
+            prog = get_prog_without_ext(),
+        );
+
+        ap.refer(&mut gs.ap.whoami)
+            .add_option(&["--whoami"], StoreTrue, &whoami_desc);
+
+        ap.refer(&mut gs.ap.output).add_option(
+            &["--output"],
+            Store,
+            concat!(
+                "This option decides on how the output is presented. ",
+                "Currently offered choices are: 'text', 'json', 'json-max', ",
+                "and 'json-spec'. Provide one of these choices. ",
+                "The default is 'text'. If you want to use the default, ",
+                "then there is no need to use this option. If you have ",
+                "chosen 'text', the output will be formatted with the ",
+                "intention to be consumed by humans, i.e. readable ",
+                "text. If you have chosen 'json', the output will be ",
+                "formatted as JSON. The content of the JSON object ",
+                "matches the data provided by the matrix-nio SDK. In ",
+                "some occassions the output is enhanced by having a few ",
+                "extra data items added for convenience. In most cases ",
+                "the output will be processed by other programs rather ",
+                "than read by humans. Option 'json-max' is practically ",
+                "the same as 'json', but yet another additional field ",
+                "is added. The data item 'transport_response' which ",
+                "gives information on how the data was obtained and ",
+                "transported is also being added. For '--listen' a few ",
+                "more fields are added. In most cases the output will ",
+                "be processed by other programs rather than read by ",
+                "humans. Option 'json-spec' only prints information ",
+                "that adheres 1-to-1 to the Matrix Specification. ",
+                "Currently only the events on '--listen' and '--tail' ",
+                "provide data exactly as in the Matrix Specification. ",
+                "If no data is available that corresponds exactly with ",
+                "the Matrix Specification, no data will be printed. In ",
+                "short, currently '--json-spec' only provides outputs ",
+                "for '--listen' and '--tail'. ",
+                // "All other arguments like ",
+                // "'--get-room-info' will print no output. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.get_room_info).add_option(
+            &["--get-room-info"],
+            List,
+            concat!(
+                "Get the room information such as room display name, ",
+                "room alias, room creator, etc. for one or multiple ",
+                "specified rooms. The included room 'display name' is ",
+                "also referred to as 'room name' or incorrectly even as ",
+                "room title. If one or more room are given, the room ",
+                "informations of these rooms will be fetched. If no ",
+                "room is specified, the room information for the ",
+                "pre-configured default room configured is ",
+                "fetched. ",
+                "If no room is given, '--' must be used. ",
+                // "Rooms can be given via room id (e.g. ",
+                // "'\!SomeRoomId:matrix.example.com'), canonical (full) ",
+                // "room alias (e.g. '#SomeRoomAlias:matrix.example.com'), ",
+                // "or short alias (e.g. 'SomeRoomAlias' or ",
+                // "'#SomeRoomAlias'). ",
+                "As response room id, room display ",
+                "name, room canonical alias, room topic, room creator, ",
+                "and room encryption are printed. One line per room ",
+                "will be printed. ",
+                // "Since either room id or room alias ",
+                // "are accepted as input and both room id and room alias ",
+                // "are given as output, one can hence use this option to ",
+                // "map from room id to room alias as well as vice versa ",
+                // "from room alias to room id. ",
+                // "Do not confuse this option ",
+                // "with the options '--get-display-name' and ",
+                // "'--set-display-name', which get/set the user display name, ",
+                // "not the room display name. ",
+            ),
+        );
 
         ap.parse_args_or_exit();
     }
@@ -1446,6 +1830,12 @@ async fn main() -> Result<(), Error> {
     debug!("notice flag is {:?}", gs.ap.notice);
     debug!("emote flag is {:?}", gs.ap.emote);
     debug!("sync option is {:?}", gs.ap.sync);
+    debug!("listen option is {:?}", gs.ap.listen);
+    debug!("tail option is {:?}", gs.ap.tail);
+    debug!("listen_self flag is {:?}", gs.ap.listen_self);
+    debug!("whoami flag is {:?}", gs.ap.whoami);
+    debug!("output option is {:?}", gs.ap.output);
+    debug!("get-room-info option is {:?}", gs.ap.get_room_info);
 
     // Todo : make all option args lower case
     if gs.ap.version {
@@ -1472,7 +1862,18 @@ async fn main() -> Result<(), Error> {
             // return Err(Error::LoginFailed);
         }
     };
+    if gs.ap.tail > 0 {
+        // overwrite --listen if user has chosen both
+        if gs.ap.listen != Listen::Never && gs.ap.listen != Listen::Tail {
+            warn!(
+                "2 listening methods were specified. Overwritten with --tail. {:?} {}",
+                gs.ap.listen, gs.ap.tail
+            )
+        }
+        gs.ap.listen = Listen::Tail
+    }
     let gsclone = gs.clone();
+
     if gsclone.ap.verify && clientres.as_ref().is_ok() {
         match crate::cli_verify(&clientres).await {
             Ok(ref _n) => debug!("crate::verify successful"),
@@ -1480,10 +1881,30 @@ async fn main() -> Result<(), Error> {
         };
     };
 
+    // get actions
+
     if gsclone.ap.devices && clientres.as_ref().is_ok() {
-        match crate::cli_devices(&clientres).await {
+        match crate::cli_devices(&clientres, &gsclone).await {
             Ok(ref _n) => debug!("crate::message successful"),
             Err(ref e) => error!("Error: crate::message reported {}", e),
+        };
+    };
+
+    // This might work even without client (server connection)
+    if gsclone.ap.whoami {
+        match crate::cli_whoami(&gsclone) {
+            Ok(ref _n) => debug!("crate::whoami successful"),
+            Err(ref e) => error!("Error: crate::whoami reported {}", e),
+        };
+    };
+
+    // If no room specified "--" must be specified
+    // Otherwise it would be impossible to distinguish not using option or not specifying a room in option,
+    // In addition, argparse requires at least 1 room to be given.
+    if gsclone.ap.get_room_info.len() > 0 && clientres.as_ref().is_ok() {
+        match crate::cli_get_room_info(&clientres, &gsclone).await {
+            Ok(ref _n) => debug!("crate::get_room_info successful"),
+            Err(ref e) => error!("Error: crate::get_room_info reported {}", e),
         };
     };
 
@@ -1500,6 +1921,38 @@ async fn main() -> Result<(), Error> {
         match crate::cli_file(&clientres, &gsclone).await {
             Ok(ref _n) => debug!("crate::file successful"),
             Err(ref e) => error!("Error: crate::file reported {}", e),
+        };
+    };
+
+    // listen once
+    if gsclone.ap.listen == Listen::Once && clientres.as_ref().is_ok() {
+        match crate::cli_listen_once(&clientres, &gsclone).await {
+            Ok(ref _n) => debug!("crate::listen_once successful"),
+            Err(ref e) => error!("Error: crate::listen_once reported {}", e),
+        };
+    };
+
+    // listen forever
+    if gsclone.ap.listen == Listen::Forever && clientres.as_ref().is_ok() {
+        match crate::cli_listen_forever(&clientres, &gsclone).await {
+            Ok(ref _n) => debug!("crate::listen_forever successful"),
+            Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
+        };
+    };
+
+    // listen tail
+    if gsclone.ap.listen == Listen::Tail && clientres.as_ref().is_ok() {
+        match crate::cli_listen_tail(&clientres, &gsclone).await {
+            Ok(ref _n) => debug!("crate::listen_tail successful"),
+            Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
+        };
+    };
+
+    // listen all
+    if gsclone.ap.listen == Listen::All && clientres.as_ref().is_ok() {
+        match crate::cli_listen_all(&clientres, &gsclone).await {
+            Ok(ref _n) => debug!("crate::listen_all successful"),
+            Err(ref e) => error!("Error: crate::listen_all reported {}", e),
         };
     };
 

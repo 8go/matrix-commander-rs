@@ -23,7 +23,7 @@ This project depends on you. The project will only advance if you provide
 the code. Have a look at the repo
 [matrix-commander-rs](https://github.com/8go/matrix-commander-rs/).
 Please help! :pray: Please contribute code to make this vision a reality,
-and to one day have a functional
+and to one day have a fully functional and feature-rich
 [matrix-commander](https://crates.io/crates/matrix-commander) crate.
 Safe!
 
@@ -37,6 +37,8 @@ Safe!
 - Emoji verification
 - Sending a text message
 - Sending a file
+- Listening for new and incoming messages
+- Getting and printing old messages 
 - Listing devices
 - Logout and removal of device
 - Things like argument parsing, logging, etc.
@@ -59,7 +61,7 @@ Safe!
 - Use similar modules as used in Python, e.g.
   [argparse](https://crates.io/crates/argparse).
 - Use [matrix-rust-sdk](https://crates.io/crates/matrix-sdk).
-- Use [ruma](https://crates.io/crates/ruma) if and where needed.
+- Use [ruma](https://crates.io/crates/ruma) if and only if and where needed.
 - Make it so as much as possible can be done in a single call.
   Currently the send-and-forget is already working:
   `matrix-commander-rs --login password --user-login @john:some.homeserver.org
@@ -75,7 +77,8 @@ Safe!
 - create Github workflow so that the crate on `crates.io` gets
   generated automatically on `pull request` or `push`.
 - implement `login` via SSO
-- implement various `listen` (receive) methods
+- implement various `listen` (receive) methods for different file
+  type (file, audio, video, etc.)
 - make output (e.g. list of devices in JSON in addition to text)
 - ...
 
@@ -279,7 +282,8 @@ Optional arguments:
                         listen on the room. Messages cannot be sent to
                         arbitrary rooms. When specifying the room id some
                         shells require the exclamation mark to be escaped with
-                        a backslash.
+                        a backslash. Not all listen operations allow setting a
+                        room. Read more under the --listen options and similar.
   -f,--file FILE        Send this file (e.g. PDF, DOC, MP4). First files are
                         sent, then text messages are sent.
   --notice              There are 3 message types for '--message'. Text,
@@ -307,4 +311,88 @@ Optional arguments:
                         have chosen 'Off', synchronization will be skipped
                         entirely before the 'send' which will improve
                         performance.
+  --listen LISTEN       The '--listen' option takes one argument. There are
+                        several choices: 'never', 'once', 'forever', 'tail',
+                        and 'all'. By default, --listen is set to 'never'. So,
+                        by default no listening will be done. Set it to
+                        'forever' to listen for and print incoming messages to
+                        stdout. '--listen forever' will listen to all messages
+                        on all rooms forever. To stop listening 'forever', use
+                        Control-C on the keyboard or send a signal to the
+                        process or service. '--listen once' will get all the
+                        messages from all rooms that are currently queued up.
+                        So, with 'once' the program will start, print waiting
+                        messages (if any) and then stop. The timeout for 'once'
+                        is set to 10 seconds. So, be patient, it might take up
+                        to that amount of time. 'tail' reads and prints the
+                        last N messages from the specified rooms, then quits.
+                        The number N can be set with the '--tail' option. With
+                        'tail' some messages read might be old, i.e. already
+                        read before, some might be new, i.e. never read before.
+                        It prints the messages and then the program stops.
+                        Messages are sorted, last-first. Look at '--tail' as
+                        that option is related to '--listen tail'. The option
+                        'all' gets all messages available, old and new. Unlike
+                        'once' and 'forever' that listen in ALL rooms, 'tail'
+                        and 'all' listen only to the room specified in the
+                        credentials file or the --room options.
+  --tail TAIL           The '--tail' option reads and prints up to the last N
+                        messages from the specified rooms, then quits. It takes
+                        one argument, an integer, which we call N here. If
+                        there are fewer than N messages in a room, it reads and
+                        prints up to N messages. It gets the last N messages in
+                        reverse order. It print the newest message first, and
+                        the oldest message last. If '--listen-self' is not set
+                        it will print less than N messages in many cases
+                        because N messages are obtained, but some of them are
+                        discarded by default if they are from the user itself.
+                        Look at '--listen' as this option is related to
+                        '--tail'.
+  -y,--listen-self      If set and listening, then program will listen to and
+                        print also the messages sent by its own user. By
+                        default messages from oneself are not printed.
+  --whoami              Print the user id used by matrix-commander (itself).
+                        One can get this information also by looking at the
+                        credentials file.
+  --output OUTPUT       This option decides on how the output is presented.
+                        Currently offered choices are: 'text', 'json',
+                        'json-max', and 'json-spec'. Provide one of these
+                        choices. The default is 'text'. If you want to use the
+                        default, then there is no need to use this option. If
+                        you have chosen 'text', the output will be formatted
+                        with the intention to be consumed by humans, i.e.
+                        readable text. If you have chosen 'json', the output
+                        will be formatted as JSON. The content of the JSON
+                        object matches the data provided by the matrix-nio SDK.
+                        In some occassions the output is enhanced by having a
+                        few extra data items added for convenience. In most
+                        cases the output will be processed by other programs
+                        rather than read by humans. Option 'json-max' is
+                        practically the same as 'json', but yet another
+                        additional field is added. The data item
+                        'transport_response' which gives information on how the
+                        data was obtained and transported is also being added.
+                        For '--listen' a few more fields are added. In most
+                        cases the output will be processed by other programs
+                        rather than read by humans. Option 'json-spec' only
+                        prints information that adheres 1-to-1 to the Matrix
+                        Specification. Currently only the events on '--listen'
+                        and '--tail' provide data exactly as in the Matrix
+                        Specification. If no data is available that corresponds
+                        exactly with the Matrix Specification, no data will be
+                        printed. In short, currently '--json-spec' only
+                        provides outputs for '--listen' and '--tail'.
+  --get-room-info GET_ROOM_INFO
+                        Get the room information such as room display name,
+                        room alias, room creator, etc. for one or multiple
+                        specified rooms. The included room 'display name' is
+                        also referred to as 'room name' or incorrectly even as
+                        room title. If one or more room are given, the room
+                        informations of these rooms will be fetched. If no room
+                        is specified, the room information for the
+                        pre-configured default room configured is fetched. If
+                        no room is given, '--' must be used. As response room
+                        id, room display name, room canonical alias, room
+                        topic, room creator, and room encryption are printed.
+                        One line per room will be printed.
 ```
