@@ -23,10 +23,10 @@
 //! Usage:
 //! - matrix-commander-rs --login password # first time only
 //! - matrix-commander-rs --verify # emoji verification
-//! - matrix-commander-rs --message "Hello World"
+//! - matrix-commander-rs --message "Hello World" "Good Bye!"
 //! - matrix-commander-rs --file test.txt
 //! - or do many things at a time:
-//! - matrix-commander-rs --message Hi --file test.txt --devices --logout me
+//! - matrix-commander-rs --message Hi --file test.txt --devices --get-room-info
 //!
 //! For more information, see the README.md
 //! <https://github.com/8go/matrix-commander-rs/blob/main/README.md>
@@ -65,11 +65,13 @@ use matrix_sdk::{
     Session,
 };
 
-mod mclient; // import matrix-sdk Client related code
-use crate::mclient::{
-    devices, file, get_room_info, listen_all, listen_forever, listen_once, listen_tail, login,
-    logout, message, restore_login, verify,
-};
+/// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
+mod mclient;
+use crate::mclient::{devices, file, get_room_info, login, logout, message, restore_login, verify};
+
+// import matrix-sdk Client related code related to receiving messages and listening
+mod listen;
+use crate::listen::{listen_all, listen_forever, listen_once, listen_tail};
 
 /// the version number from Cargo.toml at compile time
 const VERSION_O: Option<&str> = option_env!("CARGO_PKG_VERSION");
@@ -129,6 +131,9 @@ pub enum Error {
 
     #[error("Unsupported CLI parameter")]
     UnsupportedCliParameter,
+
+    #[error("Missing Room")]
+    MissingRoom,
 
     #[error("Missing CLI parameter")]
     MissingCliParameter,
@@ -287,7 +292,7 @@ pub struct Args {
     verbose: usize,
     login: Option<String>,
     verify: bool,
-    message: Option<String>,
+    message: Vec<String>,
     logout: Option<String>,
     homeserver: Option<Url>,
     user_login: Option<String>,
@@ -298,8 +303,8 @@ pub struct Args {
     timeout: Option<u64>,
     markdown: bool,
     code: bool,
-    room: Option<String>,
-    file: Option<String>,
+    room: Vec<String>,
+    file: Vec<String>,
     notice: bool,
     emote: bool,
     sync: Sync,
@@ -309,6 +314,7 @@ pub struct Args {
     whoami: bool,
     output: Output,
     get_room_info: Vec<String>,
+    file_name: Vec<PathBuf>,
 }
 
 impl Args {
@@ -321,7 +327,7 @@ impl Args {
             verbose: 0usize,
             login: None,
             verify: false,
-            message: None,
+            message: Vec::new(),
             logout: None,
             homeserver: None,
             user_login: None,
@@ -332,8 +338,8 @@ impl Args {
             timeout: Some(TIMEOUT_DEFAULT),
             markdown: false,
             code: false,
-            room: None,
-            file: None,
+            room: Vec::new(),
+            file: Vec::new(),
             notice: false,
             emote: false,
             sync: Sync::Full,
@@ -343,6 +349,7 @@ impl Args {
             whoami: false,
             output: Output::Text,
             get_room_info: Vec::new(),
+            file_name: Vec::new(),
         }
     }
 }
@@ -377,6 +384,25 @@ impl AsRef<Credentials> for Credentials {
 
 /// implementation of Credentials struct
 impl Credentials {
+    /// Default constructor
+    fn new(
+        homeserver: Url,
+        user_id: OwnedUserId,
+        access_token: String,
+        device_id: OwnedDeviceId,
+        room_default: String,
+        refresh_token: Option<String>,
+    ) -> Self {
+        Self {
+            homeserver,
+            user_id,
+            access_token,
+            device_id,
+            room_default,
+            refresh_token,
+        }
+    }
+
     /// Constructor for Credentials
     fn load(path: &Path) -> Result<Credentials, Error> {
         let reader = File::open(path)?;
@@ -412,25 +438,6 @@ impl Credentials {
     #[cfg(not(unix))]
     fn set_permissions(file: &File) -> Result<(), Error> {
         Ok(())
-    }
-
-    /// Default constructor
-    fn new(
-        homeserver: Url,
-        user_id: OwnedUserId,
-        access_token: String,
-        device_id: OwnedDeviceId,
-        room_default: String,
-        refresh_token: Option<String>,
-    ) -> Self {
-        Self {
-            homeserver,
-            user_id,
-            access_token,
-            device_id,
-            room_default,
-            refresh_token,
-        }
     }
 }
 
@@ -774,25 +781,17 @@ fn get_room_default(gs: &mut GlobalState) {
 
 /// A room is either specified with --room or the default from credentials file is used
 /// On error return None.
-fn get_room(gs: &GlobalState) -> Option<String> {
-    debug!("get_room() shows credentials {:?}", gs.credentials);
-    let room = gs.ap.room.clone();
-    let droom = match &gs.credentials {
-        Some(inner) => Some(inner.room_default.clone()),
-        None => None,
-    };
-    if room.is_none() && droom.is_none() {
-        error!(
-            "Error: InvalidRoom in get_room(). {:?} {:?}",
-            gs.ap, gs.credentials
-        );
-        return None;
+fn get_rooms(gs: &GlobalState) -> Vec<String> {
+    debug!("get_rooms() shows credentials {:?}", gs.credentials);
+    let droom = get_room_default_from_credentials(gs);
+    if gs.ap.room.len() == 0 {
+        if droom.is_none() {
+            error!("Error: No room provided. Most likely operations will be skipped later due to no rooms being specified.");
+        } else {
+            return vec![droom.unwrap()];
+        }
     }
-    if room.is_none() {
-        return droom;
-    } else {
-        return room;
-    }
+    gs.ap.room.clone()
 }
 
 /// Get the default room id from the credentials file.
@@ -804,7 +803,10 @@ fn get_room_default_from_credentials(gs: &GlobalState) -> Option<String> {
     );
     return match &gs.credentials {
         Some(inner) => Some(inner.room_default.clone()),
-        None => None,
+        None => {
+            error!("Error: cannot get default room from credentials file.");
+            None
+        }
     };
 }
 
@@ -927,42 +929,54 @@ pub(crate) async fn cli_message(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("Message chosen.");
-    if gs.ap.message.is_none() {
+    if gs.ap.message.len() == 0 {
         return Ok(()); // nothing to do
     }
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    let msg = gs.ap.message.as_ref().unwrap();
-    if msg == "" {
-        info!("Skipping empty text message.");
-        return Ok(());
-    };
-    let fmsg = if msg == "-" {
-        let mut line = String::new();
-        if atty::is(Stream::Stdin) {
-            print!("Message: ");
-            std::io::stdout()
-                .flush()
-                .expect("error: could not flush stdout");
-            io::stdin().read_line(&mut line)?;
+    let mut fmsgs: Vec<String> = Vec::new(); // formatted msgs
+    for msg in gs.ap.message.iter() {
+        if msg == "" {
+            info!("Skipping empty text message.");
+            continue;
+        };
+        if msg == "--" {
+            info!("Skipping '--' text message as these are used to separate arguments.");
+            continue;
+        };
+        // \- and \\- map to - (stdin pipe)
+        // \\\- maps to text r'-', a 1-letter message
+        let fmsg = if msg == r"\-" || msg == r"\\-" {
+            let mut line = String::new();
+            if atty::is(Stream::Stdin) {
+                print!("Message: ");
+                std::io::stdout()
+                    .flush()
+                    .expect("error: could not flush stdout");
+                io::stdin().read_line(&mut line)?;
+            } else {
+                io::stdin().read_to_string(&mut line)?;
+            }
+            line
+        } else if msg == r"\\\-" {
+            "-".to_string()
+        } else if msg == r"\-\-" {
+            "--".to_string()
+        } else if msg == r"\-\-\-" {
+            "---".to_string()
         } else {
-            io::stdin().read_to_string(&mut line)?;
-        }
-        line
-    } else if msg == r"\-" {
-        "-".to_string()
-    } else {
-        msg.to_string()
-    };
-    let roomstr = match get_room(gs) {
-        Some(inner) => inner,
-        _ => return Err(Error::InvalidRoom),
-    };
+            msg.to_string()
+        };
+        fmsgs.push(fmsg);
+    }
+    if fmsgs.len() == 0 {
+        return Ok(()); // nothing to do
+    }
     return message(
         clientres,
-        fmsg,
-        roomstr,
+        fmsgs,
+        get_rooms(gs),
         gs.ap.code,
         gs.ap.markdown,
         gs.ap.notice,
@@ -977,27 +991,34 @@ pub(crate) async fn cli_file(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("File chosen.");
-    if gs.ap.file.is_none() {
+    if gs.ap.file.len() == 0 {
         return Ok(()); // nothing to do
     }
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    let filename = gs.ap.file.as_ref().unwrap();
-    if filename == "" {
-        info!("Skipping empty file name.");
-        return Ok(());
-    };
-    let roomstr = match get_room(gs) {
-        Some(inner) => inner,
-        _ => return Err(Error::InvalidRoom),
+    let mut files: Vec<PathBuf> = Vec::new();
+    for filename in &gs.ap.file {
+        match filename.as_str() {
+            "" => info!("Skipping empty file name."),
+            r"\-" | r"\\-" => files.push(PathBuf::from("-".to_string())),
+            r"\\\-" => files.push(PathBuf::from(r"\-".to_string())),
+            _ => files.push(PathBuf::from(filename)),
+        }
+    }
+    let pb: PathBuf; // label to attach to a stdin pipe data in case there is data piped in from stdin
+    pb = if gs.ap.file_name.len() > 0 {
+        gs.ap.file_name[0].clone()
+    } else {
+        PathBuf::from("file")
     };
     return file(
         clientres,
-        PathBuf::from(filename),
-        roomstr,
+        files,
+        get_rooms(gs),
         None, // label, use default filename
         None, // mime, guess it
+        pb,   // lavel for stdin pipe
     )
     .await;
 }
@@ -1047,13 +1068,9 @@ pub(crate) async fn cli_listen_tail(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    let roomstr = match get_room(gs) {
-        Some(inner) => inner,
-        _ => return Err(Error::InvalidRoom),
-    };
     return listen_tail(
         clientres,
-        roomstr, // Todo: this is wrong, should be a vector of the user specified rooms
+        get_rooms(gs),
         gs.ap.tail,
         gs.ap.listen_self,
         crate::whoami(gs)?,
@@ -1071,13 +1088,9 @@ pub(crate) async fn cli_listen_all(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    let roomstr = match get_room(gs) {
-        Some(inner) => inner,
-        _ => return Err(Error::InvalidRoom),
-    };
     return listen_all(
         clientres,
-        roomstr, // Todo: this is wrong, should be a vector of the user specified rooms
+        get_rooms(gs),
         gs.ap.listen_self,
         crate::whoami(gs)?,
         gs.ap.output,
@@ -1155,6 +1168,7 @@ async fn main() -> Result<(), Error> {
     let logout_desc: String;
     let sync_desc: String;
     let whoami_desc: String;
+    let file_desc: String;
 
     let mut gs: GlobalState = GlobalState::new("test".to_string());
 
@@ -1168,8 +1182,10 @@ async fn main() -> Result<(), Error> {
                 "On second run we suggest to use --verify to get verified. ",
                 "Emoji verification is built-in which can be used ",
                 "to verify devices. ",
-                "On further runs this program implements a simple Matrix CLI ",
-                "client that can send messages, verify devices, operate on rooms, ",
+                "Or combine both --login and --verify in the first run. ",
+                "On further runs {prog:?} implements a simple Matrix CLI ",
+                "client that can send messages or files, listen to messages, ",
+                "operate on rooms, ",
                 "etc.  ───  ─── ",
                 "This project is currently only a vision. The Python package {prog:?} ",
                 "exists. The vision is to have a compatible program in Rust. I cannot ",
@@ -1303,49 +1319,6 @@ async fn main() -> Result<(), Error> {
         ap.refer(&mut gs.ap.verify)
             .add_option(&["--verify"], StoreTrue, &verify_desc);
 
-        ap.refer(&mut gs.ap.message).add_option(
-            &["-m", "--message"],
-            StoreOption,
-            concat!(
-                // "Send this message. Message data must not be binary data, it ",
-                // "must be text. If no '-m' is used and no other conflicting ",
-                // "arguments are provided, and information is piped into the program, ",
-                // "then the piped data will be used as message. ",
-                // "Finally, if there are no operations at all in the arguments, then ",
-                // "a message will be read from stdin, i.e. from the keyboard. ",
-                // "This option can be used multiple times to send ",
-                // "multiple messages. If there is data piped ",
-                // "into this program, then first data from the ",
-                // "pipe is published, then messages from this ",
-                // "option are published. Messages will be sent last, ",
-                // "i.e. after objects like images, audio, files, events, etc. ",
-                // "Input piped via stdin can additionally be specified with the ",
-                // "special character '-'. ",
-                // "If you want to feed a text message into the program ",
-                // "via a pipe, via stdin, then specify the special ",
-                // "character '-'. If '-' is specified as message, ",
-                // "then the program will read the message from stdin. ",
-                // "If your message is literally '-' then use '\\-' ",
-                // "as message in the argument. ",
-                // "'-' may appear in any position, i.e. '-m \"start\" - \"end\"' ",
-                // "will send 3 messages out of which the second one is read from stdin. ",
-                // "'-' may appear only once overall in all arguments. ",
-                "Send this message. Message data must not be binary data, it ",
-                "must be text. ",
-                "Input piped via stdin can additionally be specified with the ",
-                "special character '-'. ",
-                "If you want to feed a text message into the program ",
-                "via a pipe, via stdin, then specify the special ",
-                "character '-'. If '-' is specified as message, ",
-                "then the program will read the message from stdin. ",
-                "If your message is literally '-' then use '\\-' ",
-                "as message in the argument. In some shells this needs to be ",
-                "escaped requiring a '\\-'. If you want to read the message from ",
-                "the keyboard use '-' and do not pipe anything into stdin, then ",
-                "a message will be requested and read from the keyboard. ",
-                "Keyboard input is limited to one line. ",
-            ),
-        );
         logout_desc = format!(
             concat!(
                 "Logout this or all devices from the Matrix homeserver. ",
@@ -1458,6 +1431,47 @@ async fn main() -> Result<(), Error> {
             ),
         );
 
+        ap.refer(&mut gs.ap.message).add_option(
+            &["-m", "--message"],
+            List,
+            concat!(
+                "Send one or more messages. Message data must not be binary data, it ",
+                "must be text. ",
+                // If no '-m' is used and no other conflicting ",
+                // "arguments are provided, and information is piped into the program, ",
+                // "then the piped data will be used as message. ",
+                // "Finally, if there are no operations at all in the arguments, then ",
+                // "a message will be read from stdin, i.e. from the keyboard. ",
+                // "This option can be used multiple times to send ",
+                // "multiple messages. If there is data piped ",
+                // "into this program, then first data from the ",
+                // "pipe is published, then messages from this ",
+                // "option are published. Messages will be sent last, ",
+                // "i.e. after objects like images, audio, files, events, etc. ",
+                "Input piped via stdin can additionally be specified with the ",
+                "special character '-'. ",
+                "Since '-' is also a special character for argument parsing, ",
+                "the '-' for stdin pipe has to be escaped twice. In short, ",
+                r"use '\\-' to indicated stdin pipe. ",
+                "If you want to feed a text message into the program ",
+                "via a pipe, via stdin, then specify the special ",
+                r"character '\\-'. ",
+                r"If your message is literally a single letter '-' then use a ",
+                r"triple-escaped '-', i.e. '\\\-'. ",
+                "However, depending on which shell you are using and if you are ",
+                "quoting with double qotes or with single quotes, you may have ",
+                "to add more backslashes to achieve double or triple escape sequences. ",
+                "as message in the argument. If you want to read the message from ",
+                r"the keyboard use '\\-' and do not pipe anything into stdin, then ",
+                "a message will be requested and read from the keyboard. ",
+                "Keyboard input is limited to one line. ",
+                "The stdin indicator '-' may appear in any position, ",
+                r"i.e. -m 'start' '\\-' 'end' ",
+                "will send 3 messages out of which the second one is read from stdin. ",
+                "The stdin indicator '-' may appear only once overall in all arguments. ",
+            ),
+        );
+
         ap.refer(&mut gs.ap.markdown).add_option(
             &["--markdown"],
             StoreTrue,
@@ -1490,7 +1504,7 @@ async fn main() -> Result<(), Error> {
 
         ap.refer(&mut gs.ap.room).add_option(
             &["-r", "--room"],
-            StoreOption,
+            List,
             concat!(
                 // "Optionally specify one or multiple rooms via room ids or ",
                 // "room aliases. --room is used by various send actions and ",
@@ -1515,15 +1529,18 @@ async fn main() -> Result<(), Error> {
                 // "allow setting a room. Read more under the --listen options ",
                 // "and similar. Most actions also support room aliases instead of ",
                 // "room ids. Some even short room aliases.",
-                "Optionally specify a room by room id. '--room' is used by ",
-                "by various options like '--message'. If no '--room' is ",
+                "Optionally specify one or multiple rooms by room ids. ",
+                "'--room' is used by ",
+                "by various options like '--message', '--file', and some ",
+                "variants of '--listen'. ",
+                "If no '--room' is ",
                 "provided the default room from the credentials file will be ",
                 "used. ",
                 "If a room is provided in the '--room' argument, then it ",
                 "will be used ",
                 "instead of the one from the credentials file. ",
                 "The user must have access to the specified room ",
-                "in order to send messages there or listen on the room. ",
+                "in order to send messages to it or listen on the room. ",
                 "Messages cannot ",
                 "be sent to arbitrary rooms. When specifying the ",
                 "room id some shells require the exclamation mark ",
@@ -1534,22 +1551,27 @@ async fn main() -> Result<(), Error> {
             ),
         );
 
-        ap.refer(&mut gs.ap.file).add_option(
-            &["-f", "--file"],
-            StoreOption,
+        file_desc = format!(
             concat!(
-                // "Send this file (e.g. PDF, DOC, MP4). "
-                // "This option can be used multiple times to send "
-                // "multiple files. First files are sent, "
-                // "then text messages are sent. "
-                // "If you want to feed a file into {PROG_WITHOUT_EXT} "
-                // "via a pipe, via stdin, then specify the special "
-                // "character '-'. See description of '-i' to see how '-' is handled.",
-                "Send this file (e.g. PDF, DOC, MP4). ",
+                "Send one or multiple files (e.g. PDF, DOC, MP4). ",
                 "First files are sent, ",
                 "then text messages are sent. ",
+                "If you want to feed a file into {prog:?} ",
+                "via a pipe, via stdin, then specify the special ",
+                "character '-' as stdin indicator. ",
+                "See description of '--message' to see how the stdin indicator ",
+                "'-' is handled. ",
+                "If you pipe a file into stdin, you can optionally use '--file-name' to ",
+                "attach a label and indirectly a MIME type to the piped data. ",
+                "E.g. if you pipe in a PNG file, you might want to specify additionally ",
+                "'--file-name image.png'. As such the label 'image' will be given ",
+                "to the data and the MIME type 'png' will be attached to it. "
             ),
+            prog = get_prog_without_ext()
         );
+
+        ap.refer(&mut gs.ap.file)
+            .add_option(&["-f", "--file"], List, &file_desc);
 
         ap.refer(&mut gs.ap.notice).add_option(
             &["--notice"],
@@ -1750,6 +1772,20 @@ async fn main() -> Result<(), Error> {
             ),
         );
 
+        ap.refer(&mut gs.ap.file_name).add_option(
+            &["--file-name"],
+            List,
+            concat!(
+                "Specify one or multiple file names for some actions. ",
+                "This is an optional argument. Use this option in ",
+                "combination with options like '--file -' ",
+                // "or '--download' ",
+                "to specify ",
+                "one or multiple file names. Ignored if used by itself ",
+                "without an appropriate corresponding action.",
+            ),
+        );
+
         ap.parse_args_or_exit();
     }
 
@@ -1836,6 +1872,7 @@ async fn main() -> Result<(), Error> {
     debug!("whoami flag is {:?}", gs.ap.whoami);
     debug!("output option is {:?}", gs.ap.output);
     debug!("get-room-info option is {:?}", gs.ap.get_room_info);
+    debug!("file-name option is {:?}", gs.ap.file_name);
 
     // Todo : make all option args lower case
     if gs.ap.version {
@@ -1908,16 +1945,16 @@ async fn main() -> Result<(), Error> {
         };
     };
 
-    // send text message
-    if gsclone.ap.message.is_some() && clientres.as_ref().is_ok() {
+    // send text message(s)
+    if gsclone.ap.message.len() != 0 && clientres.as_ref().is_ok() {
         match crate::cli_message(&clientres, &gsclone).await {
             Ok(ref _n) => debug!("crate::message successful"),
             Err(ref e) => error!("Error: crate::message reported {}", e),
         };
     };
 
-    // send file
-    if gsclone.ap.file.is_some() && clientres.as_ref().is_ok() {
+    // send file(s)
+    if gsclone.ap.file.len() != 0 && clientres.as_ref().is_ok() {
         match crate::cli_file(&clientres, &gsclone).await {
             Ok(ref _n) => debug!("crate::file successful"),
             Err(ref e) => error!("Error: crate::file reported {}", e),

@@ -4,14 +4,15 @@ Usage:
 Welcome to "matrix-commander", a Matrix CLI client. ─── On first run use
 --login to log in, to authenticate. On second run we suggest to use --verify to
 get verified. Emoji verification is built-in which can be used to verify
-devices. On further runs this program implements a simple Matrix CLI client
-that can send messages, verify devices, operate on rooms, etc. ───
-─── This project is currently only a vision. The Python package
-"matrix-commander" exists. The vision is to have a compatible program in Rust.
-I cannot do it myself, but I can coordinate and merge your pull requests. Have
-a look at the repo "https://github.com/8go/matrix-commander-rs/". Please help!
-Please contribute code to make this vision a reality, and to one day have a
-functional "matrix-commander" crate. Safe!
+devices. Or combine both --login and --verify in the first run. On further runs
+"matrix-commander" implements a simple Matrix CLI client that can send messages
+or files, listen to messages, operate on rooms, etc. ─── ─── This
+project is currently only a vision. The Python package "matrix-commander"
+exists. The vision is to have a compatible program in Rust. I cannot do it
+myself, but I can coordinate and merge your pull requests. Have a look at the
+repo "https://github.com/8go/matrix-commander-rs/". Please help! Please
+contribute code to make this vision a reality, and to one day have a functional
+"matrix-commander" crate. Safe!
 
 Optional arguments:
   -h,--help             Show this help message and exit
@@ -95,19 +96,6 @@ Optional arguments:
                         the webpage. In the terminal you should see a text
                         message indicating success. You should now be verified
                         across all devices and across all users.
-  -m,--message MESSAGE  Send this message. Message data must not be binary
-                        data, it must be text. Input piped via stdin can
-                        additionally be specified with the special character
-                        '-'. If you want to feed a text message into the
-                        program via a pipe, via stdin, then specify the special
-                        character '-'. If '-' is specified as message, then the
-                        program will read the message from stdin. If your
-                        message is literally '-' then use '\-' as message in
-                        the argument. In some shells this needs to be escaped
-                        requiring a '\-'. If you want to read the message from
-                        the keyboard use '-' and do not pipe anything into
-                        stdin, then a message will be requested and read from
-                        the keyboard. Keyboard input is limited to one line.
   --logout LOGOUT       Logout this or all devices from the Matrix homeserver.
                         This requires exactly one argument. Two choices are
                         offered: 'me' and 'all'. Provide one of these choices.
@@ -167,6 +155,28 @@ Optional arguments:
   --timeout TIMEOUT     Set the timeout of the calls to the Matrix server. By
                         default they are set to 60 seconds. Specify the timeout
                         in seconds. Use 0 for infinite timeout.
+  -m,--message MESSAGE  Send one or more messages. Message data must not be
+                        binary data, it must be text. Input piped via stdin can
+                        additionally be specified with the special character
+                        '-'. Since '-' is also a special character for argument
+                        parsing, the '-' for stdin pipe has to be escaped
+                        twice. In short, use '\\-' to indicated stdin pipe. If
+                        you want to feed a text message into the program via a
+                        pipe, via stdin, then specify the special character
+                        '\\-'. If your message is literally a single letter '-'
+                        then use a triple-escaped '-', i.e. '\\\-'. However,
+                        depending on which shell you are using and if you are
+                        quoting with double qotes or with single quotes, you
+                        may have to add more backslashes to achieve double or
+                        triple escape sequences. as message in the argument. If
+                        you want to read the message from the keyboard use
+                        '\\-' and do not pipe anything into stdin, then a
+                        message will be requested and read from the keyboard.
+                        Keyboard input is limited to one line. The stdin
+                        indicator '-' may appear in any position, i.e. -m
+                        'start' '\\-' 'end' will send 3 messages out of which
+                        the second one is read from stdin. The stdin indicator
+                        '-' may appear only once overall in all arguments.
   --markdown            There are 3 message formats for '--message'. Plain
                         text, MarkDown, and Code. By default, if no command
                         line options are specified, 'plain text' will be used.
@@ -181,20 +191,31 @@ Optional arguments:
                         MarkDown or Code respectively. '--markdown' allows
                         sending of text formatted in MarkDown language.
                         '--code' allows sending of text as a Code block.
-  -r,--room ROOM        Optionally specify a room by room id. '--room' is used
-                        by by various options like '--message'. If no '--room'
-                        is provided the default room from the credentials file
-                        will be used. If a room is provided in the '--room'
-                        argument, then it will be used instead of the one from
-                        the credentials file. The user must have access to the
-                        specified room in order to send messages there or
-                        listen on the room. Messages cannot be sent to
+  -r,--room ROOM        Optionally specify one or multiple rooms by room ids.
+                        '--room' is used by by various options like
+                        '--message', '--file', and some variants of '--listen'.
+                        If no '--room' is provided the default room from the
+                        credentials file will be used. If a room is provided in
+                        the '--room' argument, then it will be used instead of
+                        the one from the credentials file. The user must have
+                        access to the specified room in order to send messages
+                        to it or listen on the room. Messages cannot be sent to
                         arbitrary rooms. When specifying the room id some
                         shells require the exclamation mark to be escaped with
                         a backslash. Not all listen operations allow setting a
                         room. Read more under the --listen options and similar.
-  -f,--file FILE        Send this file (e.g. PDF, DOC, MP4). First files are
-                        sent, then text messages are sent.
+  -f,--file FILE        Send one or multiple files (e.g. PDF, DOC, MP4). First
+                        files are sent, then text messages are sent. If you
+                        want to feed a file into "matrix-commander" via a pipe,
+                        via stdin, then specify the special character '-' as
+                        stdin indicator. See description of '--message' to see
+                        how the stdin indicator '-' is handled. If you pipe a
+                        file into stdin, you can optionally use '--file-name'
+                        to attach a label and indirectly a MIME type to the
+                        piped data. E.g. if you pipe in a PNG file, you might
+                        want to specify additionally '--file-name image.png'.
+                        As such the label 'image' will be given to the data and
+                        the MIME type 'png' will be attached to it.
   --notice              There are 3 message types for '--message'. Text,
                         Notice, and Emote. By default, if no command line
                         options are specified, 'Text' will be used. Use
@@ -304,3 +325,8 @@ Optional arguments:
                         id, room display name, room canonical alias, room
                         topic, room creator, and room encryption are printed.
                         One line per room will be printed.
+  --file-name FILE_NAME Specify one or multiple file names for some actions.
+                        This is an optional argument. Use this option in
+                        combination with options like '--file -' to specify one
+                        or multiple file names. Ignored if used by itself
+                        without an appropriate corresponding action.
