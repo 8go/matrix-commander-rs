@@ -19,13 +19,12 @@ use std::fs;
 // use std::io::{self, Write};
 // use std::ops::Deref;
 // use std::path::Path;
-//use serde::{Deserialize, Serialize};
-//use serde_json::Result;
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 // use thiserror::Error;
 // use directories::ProjectDirs;
 // use serde::{Deserialize, Serialize};
+//use serde_json::Result;
 use mime::Mime;
 use url::Url;
 
@@ -34,10 +33,11 @@ use matrix_sdk::{
     config::{RequestConfig, StoreConfig, SyncSettings},
     instant::Duration,
     // Session,
-    // room,
+    room,
     // room::Room,
     // ruma::
     ruma::{
+        api::client::room::create_room::v3::Request as CreateRoomRequest,
         events::room::message::{
             EmoteMessageEventContent,
             // FileMessageEventContent,
@@ -51,39 +51,44 @@ use matrix_sdk::{
             // SyncRoomMessageEvent,
             TextMessageEventContent,
         },
+        // UserId,
+        OwnedRoomId,
+        // OwnedRoomOrAliasId, OwnedServerName,
+        // device_id, room_id, session_id, user_id, OwnedDeviceId, OwnedUserId,
+        // UInt,
         // OwnedRoomAliasId,
         // OwnedRoomId,
         // OwnedUserId,
         // serde::Raw,
         // events::OriginalMessageLikeEvent,
         RoomId,
-        // UserId,
-        // OwnedRoomId, OwnedRoomOrAliasId, OwnedServerName,
-        // device_id, room_id, session_id, user_id, OwnedDeviceId, OwnedUserId,
-        // UInt,
     },
     Client,
 };
 
+// from main.rs
 use crate::{credentials_exist, get_timeout, Credentials, GlobalState};
-use crate::{Error, Listen, Output, Sync}; // from main.rs
+use crate::{Error, Listen, Output, Sync};
 
+// import verification code
 #[path = "emoji_verify.rs"]
-mod emoji_verify; // import verification code
+mod emoji_verify;
 
 /// Constructor for matrix-sdk async Client, based on restore_login().
 pub(crate) async fn restore_login(gs: &mut GlobalState) -> Result<Client, Error> {
     if gs.credentials_file_path.is_file() {
         let credentials = Credentials::load(&gs.credentials_file_path)?;
-        let credentialsc1 = credentials.clone();
-        let credentialsc2 = credentials.clone();
-        gs.credentials = Some(credentials);
-        let client = create_client(credentialsc1.homeserver, gs).await?;
+        debug!("restore_login: credentials are {:?}", &credentials);
+        let clihomeserver = gs.ap.homeserver.clone();
+        let homeserver = clihomeserver.unwrap_or_else(|| credentials.homeserver.clone());
         info!(
-            "restoring device with device_id = {:?}",
-            credentialsc1.device_id
+            "restoring device with device_id = {:?} on homeserver {:?}.",
+            &credentials.device_id, &homeserver
         );
-        client.restore_login(credentialsc2.into()).await?;
+        let session: matrix_sdk::Session = credentials.clone().into();
+        gs.credentials = Some(credentials);
+        let client = create_client(&homeserver, gs).await?;
+        client.restore_login(session).await?;
         if gs.ap.listen == Listen::Never {
             sync_once(&client, get_timeout(gs), gs.ap.sync).await?;
         } else {
@@ -104,7 +109,7 @@ pub(crate) async fn login<'a>(
     device: &str,
     room_default: &str,
 ) -> Result<Client, Error> {
-    let client = create_client(homeserver.clone(), gs).await?;
+    let client = create_client(homeserver, gs).await?;
     debug!("About to call login_username()");
     let response = client
         .login_username(&username, password)
@@ -149,7 +154,7 @@ pub(crate) async fn login<'a>(
 
 /// Prepares a client that can then be used for actual login.
 /// Configures the matrix-sdk async Client.
-async fn create_client(homeserver: Url, gs: &GlobalState) -> Result<Client, Error> {
+async fn create_client(homeserver: &Url, gs: &GlobalState) -> Result<Client, Error> {
     // The location to save files to
     let sledhome = &gs.sledstore_dir_path;
     info!("Using sled store {:?}", &sledhome);
@@ -163,7 +168,7 @@ async fn create_client(homeserver: Url, gs: &GlobalState) -> Result<Client, Erro
                 .retry_timeout(Duration::from_secs(get_timeout(gs))),
         );
     let client = builder
-        .sled_store(&sledhome, None)
+        .sled_store(sledhome, None)
         .expect("error: cannot add sled store to ClientBuilder.")
         .build()
         .await
@@ -177,7 +182,7 @@ pub(crate) async fn verify(client: &Result<Client, Error>) -> Result<(), Error> 
         // is logged in
         info!("Client logged in: {}", client.logged_in());
         info!("Client access token used: {:?}", client.access_token());
-        emoji_verify::sync(&client).await?; // wait in sync for other party to initiate emoji verify
+        emoji_verify::sync(client).await?; // wait in sync for other party to initiate emoji verify
         Ok(())
     } else {
         Err(Error::NotLoggedIn)
@@ -189,9 +194,9 @@ pub(crate) async fn logout(client: &Result<Client, Error>, gs: &GlobalState) -> 
     debug!("Logout on client");
     if let Ok(client) = client {
         // is logged in
-        logout_server(&client).await?;
+        logout_server(client).await?;
     }
-    if credentials_exist(&gs) {
+    if credentials_exist(gs) {
         match fs::remove_file(&gs.credentials_file_path) {
             Ok(()) => info!(
                 "Credentials file successfully remove {:?}",
@@ -247,7 +252,7 @@ pub(crate) async fn sync_once(client: &Client, timeout: u64, stype: Sync) -> Res
             info!("syncing once, timeout set to {} seconds ...", timeout);
             client
                 .sync_once(SyncSettings::new().timeout(Duration::new(timeout, 0)))
-                .await?; // sec
+                .await?;
             info!("sync completed");
             Ok(())
         }
@@ -304,7 +309,7 @@ pub(crate) async fn devices(
 /// Includes items such as room id, room display name, room alias, and room topic.
 pub(crate) async fn get_room_info(
     clientres: &Result<Client, Error>,
-    rooms: Vec<String>,
+    rooms: &[String],
     output: Output,
 ) -> Result<(), Error> {
     debug!("Getting room info");
@@ -312,7 +317,7 @@ pub(crate) async fn get_room_info(
         // is logged in
         for (i, roomstr) in rooms.iter().enumerate() {
             debug!("Room number {} with room id {}", i, roomstr);
-            let room_id = match RoomId::parse(&roomstr) {
+            let room_id = match RoomId::parse(roomstr) {
                 Ok(ref inner) => inner.clone(),
                 Err(ref e) => {
                     error!("Invalid room id: {:?} {:?}", roomstr, e);
@@ -324,12 +329,12 @@ pub(crate) async fn get_room_info(
                 Output::Text => println!(
                     "{}    {}    {}    {}",
                     room_id,
-                    room.name().unwrap_or("".to_string()), // alternatively: room.display_name().await.ok().unwrap(),
+                    room.name().unwrap_or_default(), // alternatively: room.display_name().await.ok().unwrap(),
                     match room.canonical_alias() {
                         Some(inner) => inner.to_string(),
                         _ => "".to_string(),
                     },
-                    room.topic().unwrap_or("".to_string()),
+                    room.topic().unwrap_or_default(),
                     // user_id of room creator,
                     // encrypted boolean
                 ),
@@ -337,12 +342,12 @@ pub(crate) async fn get_room_info(
                 _ => println!(
                     "{{\"room_id\": {:?}, \"display_name\": {:?}, \"alias\": {:?}, \"topic\": {:?}}}",
                     room_id,
-                    room.name().unwrap_or("".to_string()), // alternatively: room.display_name().await.ok().unwrap(),
+                    room.name().unwrap_or_default(), // alternatively: room.display_name().await.ok().unwrap(),
                     match room.canonical_alias() {
                         Some(inner) => inner.to_string(),
                         _ => "".to_string(),
                     },
-                    room.topic().unwrap_or("".to_string()),
+                    room.topic().unwrap_or_default(),
                     // user_id of room creator,
                     // encrypted boolean
                 ),
@@ -354,12 +359,322 @@ pub(crate) async fn get_room_info(
     }
 }
 
+/// Utility function to print Common room info
+pub(crate) fn print_common_room(room: &room::Common, output: Output) {
+    debug!("common room: {:?}", room);
+    match output {
+        Output::Text => println!(
+            "Room:    {:?}    {}    {:?}    {}    {:?}    {:?}",
+            room.room_id(),
+            serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+            room.canonical_alias()
+                .map_or(r#""#.to_string(), |v| v.to_string()),
+            serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
+            room.name().unwrap_or_default(),
+            room.topic().unwrap_or_default(),
+            // room.display_name() // this call would go to the server
+        ),
+        Output::JsonSpec => (),
+        _ => {
+            println!(
+                        "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
+                        room.room_id(),
+                        serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+                        room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
+                        serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
+                        room.name().unwrap_or_default(),
+                        room.topic().unwrap_or_default(),
+                    );
+        }
+    }
+}
+
+/// Print list of rooms of a given type (invited, joined, left, all) of the current user.
+pub(crate) fn print_rooms(
+    clientres: &Result<Client, Error>,
+    rooms: Option<matrix_sdk::RoomType>, // None is the default and prints all 3 types of rooms
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Rooms (local)");
+    if let Ok(client) = clientres {
+        // is logged in
+        match rooms {
+            None => {
+                // ALL rooms, default
+                for r in client.rooms() {
+                    // *r changes type to Common, so &(*r), or just &r for short
+                    print_common_room(&r, output);
+                }
+            }
+            Some(matrix_sdk::RoomType::Invited) => {
+                for r in client.invited_rooms() {
+                    print_common_room(&r, output);
+                }
+            }
+            Some(matrix_sdk::RoomType::Joined) => {
+                for r in client.joined_rooms() {
+                    print_common_room(&r, output);
+                }
+            }
+            Some(matrix_sdk::RoomType::Left) => {
+                for r in client.left_rooms() {
+                    print_common_room(&r, output);
+                }
+            }
+        };
+        Ok(())
+    } else {
+        Err(Error::NotLoggedIn)
+    }
+}
+
+/// Print list of all rooms (invited, joined, left) of the current user.
+pub(crate) async fn rooms(clientres: &Result<Client, Error>, output: Output) -> Result<(), Error> {
+    debug!("Rooms (local)");
+    print_rooms(clientres, None, output)
+}
+
+/// Print list of all invited rooms (not joined, not left) of the current user.
+pub(crate) async fn invited_rooms(
+    clientres: &Result<Client, Error>,
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Invited_rooms (local)");
+    print_rooms(clientres, Some(matrix_sdk::RoomType::Invited), output)
+}
+
+/// Print list of all joined rooms (not invited, not left) of the current user.
+pub(crate) async fn joined_rooms(
+    clientres: &Result<Client, Error>,
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Joined_rooms (local)");
+    print_rooms(clientres, Some(matrix_sdk::RoomType::Joined), output)
+}
+
+/// Print list of all left rooms (not invited, not joined) of the current user.
+pub(crate) async fn left_rooms(
+    clientres: &Result<Client, Error>,
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Left_rooms (local)");
+    print_rooms(clientres, Some(matrix_sdk::RoomType::Left), output)
+}
+
+/// Create rooms, one for each alias name in the list.
+/// Alias name can be empty, i.e. ''.
+/// If and when available set the room name from the name list.
+/// If and when available set the topic name from the topic list.
+/// As output it lists/prints the newly generated room ids and and the corresponding room aliases.
+pub(crate) async fn room_create(
+    clientres: &Result<Client, Error>,
+    room_aliases: &[String], // list of simple alias names like 'SomeAlias', not full aliases
+    room_names: &[String],   // list of room names, optional
+    room_topics: &[String],  // list of room topics, optional
+    output: Output,          // how to format output
+) -> Result<(), Error> {
+    debug!("Creating room(s)");
+    let mut err_count = 0u32;
+    if let Ok(client) = clientres {
+        // is logged in
+        for (i, a) in room_aliases.iter().enumerate() {
+            // a...alias
+            debug!(
+                "In position {} we have alias name {}, room name {:?}, room topic {:?}.",
+                i,
+                a,
+                room_names.get(i),
+                room_topics.get(i)
+            );
+            let aopt = if a.is_empty() { None } else { Some(a.as_str()) };
+            let nopt = match room_names.get(i) {
+                Some(inner) => {
+                    if inner.is_empty() {
+                        None
+                    } else {
+                        Some(inner.as_str())
+                    }
+                }
+                None => None,
+            };
+            let topt = match room_topics.get(i) {
+                Some(inner) => {
+                    if inner.is_empty() {
+                        None
+                    } else {
+                        Some(inner.as_str())
+                    }
+                }
+                None => None,
+            };
+            let mut request = CreateRoomRequest::new();
+            request.name = nopt;
+            request.room_alias_name = aopt;
+            request.topic = topt;
+            match client.create_room(request).await {
+                Ok(response) => {
+                    debug!("create_room succeeded, result is {:?}.", response);
+                    if output != Output::Text {
+                        // trait Serialize not implemented for Result
+                        let mut jstr: String = "{".to_owned();
+                        jstr.push_str(&format!("\"room_id\": \"{}\"", response.room_id));
+                        if let Some(alias) = aopt {
+                            jstr.push_str(&format!(", \"alias\": \"{}\"", alias))
+                        }
+                        if let Some(name) = nopt {
+                            jstr.push_str(&format!(", \"name\": \"{}\"", name))
+                        }
+                        if let Some(topic) = topt {
+                            jstr.push_str(&format!(", \"topic\": \"{}\"", topic))
+                        }
+                        jstr.push('}');
+                        println!("{}", jstr);
+                    } else {
+                        println!(
+                            "{}    {}    {}    {}",
+                            response.room_id,
+                            aopt.unwrap_or("None"),
+                            nopt.unwrap_or("None"),
+                            topt.unwrap_or("None")
+                        );
+                    }
+                }
+                Err(ref e) => {
+                    err_count += 1;
+                    error!("Error: create_room failed, reported error {:?}.", e);
+                }
+            }
+        }
+        if err_count != 0 {
+            Err(Error::CreateRoomFailed)
+        } else {
+            Ok(())
+        }
+    } else {
+        Err(Error::NotLoggedIn)
+    }
+}
+
+/// Leave room(s), leave all the rooms whose ids are given in the list.
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_leave(
+    clientres: &Result<Client, Error>,
+    room_ids: &[String], // list of room ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!("Leaving room(s)");
+    let mut err_count = 0u32;
+    if let Ok(client) = clientres {
+        // is logged in
+        // convert Vec of strings into a slice of array of OwnedRoomIds
+        let mut roomids: Vec<OwnedRoomId> = Vec::new();
+        for room_id in room_ids {
+            roomids.push(match RoomId::parse(room_id.clone()) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    continue;
+                }
+            });
+        }
+        for (i, id) in roomids.iter().enumerate() {
+            debug!("In position {} we have room id {:?}.", i, id,);
+            let jroomopt = client.get_joined_room(id);
+            match jroomopt {
+                Some(jroom) => match jroom.leave().await {
+                    Ok(_) => {
+                        info!("Left room {:?} successfully.", id);
+                    }
+                    Err(ref e) => {
+                        error!("Error: leave() returned error {:?}.", e);
+                        err_count += 1;
+                    }
+                },
+                None => {
+                    error!("Error: get_joined_room() returned error. Are you member of this room?");
+                    err_count += 1;
+                }
+            }
+        }
+        if err_count != 0 {
+            Err(Error::LeaveRoomFailed)
+        } else {
+            Ok(())
+        }
+    } else {
+        Err(Error::NotLoggedIn)
+    }
+}
+
+/// Forget room(s), forget all the rooms whose ids are given in the list.
+/// Before you can forget a room you must leave it first.
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_forget(
+    clientres: &Result<Client, Error>,
+    room_ids: &[String], // list of room ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!("Forgetting room(s)");
+    let mut err_count = 0u32;
+    if let Ok(client) = clientres {
+        // is logged in
+        debug!("All rooms of this user: {:?}.", client.rooms());
+        // get latest room states
+        // client.sync_once(SyncSettings::new()).await?;   // Todo: sync necessary?
+        // convert Vec of strings into a slice of array of OwnedRoomIds
+        let mut roomids: Vec<OwnedRoomId> = Vec::new();
+        for room_id in room_ids {
+            roomids.push(match RoomId::parse(room_id.clone()) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    continue;
+                }
+            });
+        }
+        for (i, id) in roomids.iter().enumerate() {
+            debug!("In position {} we have room id {:?}.", i, id,);
+            let jroomopt = client.get_left_room(id);
+            match jroomopt {
+                Some(jroom) => match jroom.forget().await {
+                    Ok(_) => {
+                        info!("Forgot room {:?} successfully.", id);
+                    }
+                    Err(ref e) => {
+                        error!("Error: forget() returned error {:?}.", e);
+                        err_count += 1;
+                    }
+                },
+                None => {
+                    error!("Error: get_left_room() returned error. Have you been a member of this room? Have you left this room before? Leave the room before forgetting it.");
+                    err_count += 1;
+                }
+            }
+        }
+        if err_count != 0 {
+            Err(Error::ForgetRoomFailed)
+        } else {
+            Ok(())
+        }
+    } else {
+        Err(Error::NotLoggedIn)
+    }
+}
+
 /// Send one or more text message
 /// supporting various formats and types.
 pub(crate) async fn message(
     client: &Result<Client, Error>,
-    msgs: Vec<String>,
-    roomnames: Vec<String>,
+    msgs: &[String],
+    roomnames: &[String],
     code: bool,
     markdown: bool,
     notice: bool,
@@ -372,7 +687,7 @@ pub(crate) async fn message(
     if client.is_err() {
         return Err(Error::InvalidClientConnection);
     }
-    if roomnames.len() == 0 {
+    if roomnames.is_empty() {
         return Err(Error::InvalidRoom);
     }
     let mut fmsgs: Vec<MessageType> = Vec::new(); // formatted msgs
@@ -382,7 +697,7 @@ pub(crate) async fn message(
             fmt_msg = String::from("```");
             // fmt_msg.push_str("name-of-language");  // Todo
             fmt_msg.push('\n');
-            fmt_msg.push_str(&msg);
+            fmt_msg.push_str(msg);
             if !fmt_msg.ends_with('\n') {
                 fmt_msg.push('\n');
             }
@@ -413,7 +728,7 @@ pub(crate) async fn message(
         };
         fmsgs.push(fmsg);
     }
-    if fmsgs.len() == 0 {
+    if fmsgs.is_empty() {
         return Ok(()); // nothing to do
     }
     let mut err_count = 0u32;
@@ -451,11 +766,11 @@ pub(crate) async fn message(
 // Implicitely this label also determines the MIME type of the piped data.
 pub(crate) async fn file(
     client: &Result<Client, Error>,
-    filenames: Vec<PathBuf>,
-    roomnames: Vec<String>,
-    label: Option<String>, // used as filename for attachment
+    filenames: &[PathBuf],
+    roomnames: &[String],
+    label: Option<&str>, // used as filename for attachment
     mime: Option<Mime>,
-    stdin_filename: PathBuf, // if a file is piped in on stdin
+    stdin_filename: &PathBuf, // if a file is piped in on stdin
 ) -> Result<(), Error> {
     debug!(
         "In file(): roomnames are {:?}, files are {:?}",
@@ -464,10 +779,10 @@ pub(crate) async fn file(
     if client.is_err() {
         return Err(Error::InvalidClientConnection);
     }
-    if roomnames.len() == 0 {
+    if roomnames.is_empty() {
         return Err(Error::InvalidRoom);
     }
-    if filenames.len() == 0 {
+    if filenames.is_empty() {
         return Ok(()); // nothing to do
     }
     let mut err_count = 0u32;
@@ -481,7 +796,7 @@ pub(crate) async fn file(
             .get_joined_room(&proom)
             .ok_or(Error::InvalidRoom)?;
         for mut filename in filenames.iter() {
-            let data = if filename.to_str().unwrap() == "-".to_string() {
+            let data = if filename.to_str().unwrap() == "-" {
                 // read from stdin
                 let mut buffer = Vec::new();
                 if atty::is(Stream::Stdin) {
@@ -493,33 +808,32 @@ pub(crate) async fn file(
                 // read the whole file
                 io::stdin().read_to_end(&mut buffer)?;
                 // change filename from "-" to "file" so that label shows up as "file"
-                filename = &stdin_filename;
+                filename = stdin_filename;
                 buffer
             } else {
-                if filename.to_str().unwrap() == r"\-".to_string() {
+                if filename.to_str().unwrap() == r"\-" {
                     pb = PathBuf::from(r"-").clone();
                     filename = &pb;
                 }
-                fs::read(&filename).unwrap_or_else(|e| {
+                fs::read(filename).unwrap_or_else(|e| {
                     error!("file not found: {:?} {:?}", filename, e);
                     err_count += 1;
                     Vec::new()
                 })
             };
-            if data.len() == 0 {
+            if data.is_empty() {
                 error!("No data to send. Data is empty.");
                 err_count += 1;
             } else {
                 match room
                     .send_attachment(
                         label
-                            .as_ref()
                             .map(Cow::from)
                             .or_else(|| filename.file_name().as_ref().map(|o| o.to_string_lossy()))
                             .ok_or(Error::InvalidFile)?
                             .as_ref(),
                         mime.as_ref().unwrap_or(
-                            &mime_guess::from_path(&filename)
+                            &mime_guess::from_path(filename)
                                 .first_or(mime::APPLICATION_OCTET_STREAM),
                         ),
                         &data,

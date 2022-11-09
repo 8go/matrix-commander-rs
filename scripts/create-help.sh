@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 old_width=$(stty size | cut -d' ' -f2-) && stty cols 69 && cargo run -- --help >help.txt &&
     stty cols $old_width && stty size && echo -n "Max width: " && wc -L help.txt
 

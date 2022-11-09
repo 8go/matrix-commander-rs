@@ -7,7 +7,7 @@
 //! It implements the emoji-verification protocol.
 
 use std::io::{self, Write};
-use tracing::{debug, info}; // debug, error, info, warn,
+use tracing::{debug, info};
 
 // Code for emoji verify
 use matrix_sdk::{
@@ -33,6 +33,7 @@ use crate::get_prog_without_ext;
 
 /// Utility function to get user response interactively. Answer question if emojis match.
 /// The event manager calls this function once emoji verification has been initiated.
+// The arguments client and sas cannot be borrowed. If borrowed they would go out of scope.
 async fn wait_for_confirmation(client: Client, sas: SasVerification) {
     let emoji = sas.emoji().expect("The emojis should be available now.");
 
@@ -214,7 +215,7 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
                 .get_verification(&ev.sender, ev.content.relates_to.event_id.as_str())
                 .await
             {
-                tokio::spawn(wait_for_confirmation(client.clone(), sas));
+                tokio::spawn(wait_for_confirmation(client, sas));
             }
         },
     );

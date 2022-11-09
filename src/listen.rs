@@ -83,7 +83,7 @@ use crate::{Error, Output};
 
 /// Lower-level utility function to handle originalsyncmessagelikeevent
 fn handle_originalsyncmessagelikeevent(
-    originalsyncmessagelikeevent: OriginalSyncMessageLikeEvent<RoomMessageEventContent>,
+    ev: &OriginalSyncMessageLikeEvent<RoomMessageEventContent>,
     room_id: &OwnedRoomId,
     context: &Ctx<EvHandlerContext>,
 ) {
@@ -91,15 +91,15 @@ fn handle_originalsyncmessagelikeevent(
     // if Json is output this event processing is never needed and never reached
     debug!(
         "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
-        originalsyncmessagelikeevent.content,
-        originalsyncmessagelikeevent.sender,
+        ev.content,
+        ev.sender,
         room_id, // ev does not contain room!
-        originalsyncmessagelikeevent.event_id,
+        ev.event_id,
     );
-    if context.whoami != originalsyncmessagelikeevent.sender || context.listen_self {
+    if context.whoami != ev.sender || context.listen_self {
         // The compiler knows that it is RoomMessageEventContent, because it comes from room::messages()
         // print_type_of(&orginialmessagelikeevent.content); // ruma_common::events::room::message::RoomMessageEventContent
-        match originalsyncmessagelikeevent.content.msgtype {
+        match ev.content.msgtype.to_owned() {
             MessageType::Text(textmessageeventcontent) => {
                 // debug!("Msg of type Text");
                 let TextMessageEventContent {
@@ -110,7 +110,7 @@ fn handle_originalsyncmessagelikeevent(
                 } = textmessageeventcontent;
                 println!(
                     "Message: type Text: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
-                    body, room_id, originalsyncmessagelikeevent.sender, originalsyncmessagelikeevent.event_id, formatted,
+                    body, room_id, ev.sender, ev.event_id, formatted,
                 );
             }
             MessageType::File(filemessageeventcontent) => {
@@ -126,7 +126,7 @@ fn handle_originalsyncmessagelikeevent(
                 } = filemessageeventcontent;
                 println!(
                     "Message: type File: body {:?}, room {:?}, sender {:?}, event id {:?}, filename {:?}, source {:?}, info {:?}",
-                    body, room_id, originalsyncmessagelikeevent.sender, originalsyncmessagelikeevent.event_id, filename, source, info,
+                    body, room_id, ev.sender, ev.event_id, filename, source, info,
                 );
             }
             _ => warn!("Not handling this message type. Not implemented yet."),
@@ -137,6 +137,7 @@ fn handle_originalsyncmessagelikeevent(
 }
 
 /// Utility function to handle RedactedSyncRoomMessageEvent events.
+// None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_redactedsyncroommessageevent(
     ev: RedactedSyncRoomMessageEvent,
     _room: Room,
@@ -167,6 +168,7 @@ async fn handle_redactedsyncroommessageevent(
 }
 
 /// Utility function to handle SyncRoomRedactionEvent events.
+// None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_syncroomredactedevent(
     ev: SyncRoomRedactionEvent,
     _room: Room,
@@ -194,6 +196,7 @@ async fn handle_syncroomredactedevent(
 }
 
 /// Utility function to handle SyncRoomEncryptedEvent events.
+// None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_syncroomencryptedevent(
     ev: SyncRoomEncryptedEvent,
     room: Room,
@@ -229,6 +232,7 @@ async fn handle_syncroomencryptedevent(
 }
 
 /// Utility function to handle OriginalSyncRoomEncryptedEvent events.
+// None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_originalsyncroomencryptedevent(
     ev: OriginalSyncRoomEncryptedEvent,
     room: Room,
@@ -254,6 +258,7 @@ async fn handle_originalsyncroomencryptedevent(
 }
 
 /// Utility function to handle SyncRoomMessageEvent events.
+// None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_syncroommessageevent(
     ev: SyncRoomMessageEvent,
     room: Room,
@@ -277,7 +282,7 @@ async fn handle_syncroommessageevent(
     match ev {
         SyncMessageLikeEvent::Original(orginialmessagelikeevent) => {
             handle_originalsyncmessagelikeevent(
-                orginialmessagelikeevent,
+                &orginialmessagelikeevent,
                 &RoomId::parse(room.room_id()).unwrap(),
                 &context,
             );
@@ -471,9 +476,9 @@ fn print_type_of<T>(_: &T) {
 /// Running it twice in a row (while no new messages were sent) should deliver the same output, response.
 pub(crate) async fn listen_tail(
     clientres: &Result<Client, Error>,
-    roomnames: Vec<String>, // roomId
-    number: u64,            // number of messages to print, N
-    listen_self: bool,      // listen to my own messages?
+    roomnames: &Vec<String>, // roomId
+    number: u64,             // number of messages to print, N
+    listen_self: bool,       // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
@@ -484,7 +489,7 @@ pub(crate) async fn listen_tail(
         }
         Ok(client) => client,
     };
-    if roomnames.len() == 0 {
+    if roomnames.is_empty() {
         return Err(Error::MissingRoom);
     }
     info!(
@@ -499,7 +504,16 @@ pub(crate) async fn listen_tail(
     // convert Vec of strings into a slice of array of OwnedRoomIds
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for roomname in roomnames {
-        roomids.push(RoomId::parse(roomname.clone()).unwrap());
+        roomids.push(match RoomId::parse(roomname.clone()) {
+            Ok(id) => id,
+            Err(ref e) => {
+                error!(
+                    "Error: invalid room id {:?}. Error reported is {:?}.",
+                    roomname, e
+                );
+                continue;
+            }
+        });
     }
     let ownedroomidarraysliceoption: Option<&[OwnedRoomId]> = Some(roomids.as_slice());
     // // old code, when there was only 1 roomname
@@ -573,7 +587,7 @@ pub(crate) async fn listen_tail(
                                             orginialmessagelikeevent,
                                         );
                                     handle_originalsyncmessagelikeevent(
-                                        orginialsyncmessagelikeevent,
+                                        &orginialsyncmessagelikeevent,
                                         &room_id,
                                         &ctx,
                                     );
@@ -638,9 +652,9 @@ pub(crate) async fn listen_tail(
         }
     }
     if err_count != 0 {
-        return Err(Error::NotImplementedYet);
+        Err(Error::NotImplementedYet)
     } else {
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -649,8 +663,8 @@ pub(crate) async fn listen_tail(
 /// and then continues by returning.
 pub(crate) async fn listen_all(
     clientres: &Result<Client, Error>,
-    roomnames: Vec<String>, // roomId
-    listen_self: bool,      // listen to my own messages?
+    roomnames: &Vec<String>, // roomId
+    listen_self: bool,       // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
@@ -661,7 +675,7 @@ pub(crate) async fn listen_all(
         }
         Ok(client) => client,
     };
-    if roomnames.len() == 0 {
+    if roomnames.is_empty() {
         return Err(Error::MissingRoom);
     }
     info!(
@@ -783,8 +797,8 @@ pub(crate) async fn listen_all(
         }
     }
     if err_count != 0 {
-        return Err(Error::NotImplementedYet);
+        Err(Error::ListenFailed)
     } else {
-        return Ok(());
+        Ok(())
     }
 }

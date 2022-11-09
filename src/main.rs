@@ -22,10 +22,11 @@
 //!
 //! Usage:
 //! - matrix-commander-rs --login password # first time only
-//! - matrix-commander-rs --verify # emoji verification
+//! - matrix-commander-rs --verify emoji # emoji verification
 //! - matrix-commander-rs --message "Hello World" "Good Bye!"
 //! - matrix-commander-rs --file test.txt
 //! - or do many things at a time:
+//! - matrix-commander-rs --login password --verify emoji
 //! - matrix-commander-rs --message Hi --file test.txt --devices --get-room-info
 //!
 //! For more information, see the README.md
@@ -36,7 +37,10 @@
 // #![allow(unused_variables)] // Todo
 // #![allow(unused_imports)] // Todo
 
+use argparse::{ArgumentParser, /* Collect, */ IncrBy, List, Store, StoreOption, StoreTrue};
 use atty::Stream;
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::{self, Debug};
 use std::fs::{self, File};
@@ -44,12 +48,8 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{debug, enabled, error, info, warn, Level};
-// Collect, List, Store, StoreFalse,
-use argparse::{ArgumentParser, /* Collect, */ IncrBy, List, Store, StoreOption, StoreTrue};
-use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::{debug, enabled, error, info, warn, Level};
 use url::Url;
 
 use matrix_sdk::{
@@ -67,7 +67,10 @@ use matrix_sdk::{
 
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
-use crate::mclient::{devices, file, get_room_info, login, logout, message, restore_login, verify};
+use crate::mclient::{
+    devices, file, get_room_info, invited_rooms, joined_rooms, left_rooms, login, logout, message,
+    restore_login, room_create, room_forget, room_leave, rooms, verify,
+};
 
 // import matrix-sdk Client related code related to receiving messages and listening
 mod listen;
@@ -81,6 +84,10 @@ const VERSION: &str = "unknown version";
 const PKG_NAME_O: Option<&str> = option_env!("CARGO_PKG_NAME");
 /// fallback if static compile time value is None
 const PKG_NAME: &str = "matrix-commander";
+/// the name of binary program from Cargo.toml at compile time, usually matrix-commander-rs
+const BIN_NAME_O: Option<&str> = option_env!("CARGO_BIN_NAME");
+/// fallback if static compile time value is None
+const BIN_NAME: &str = "matrix-commander-rs";
 /// he repo name from Cargo.toml at compile time,
 /// e.g. string `https://github.com/8go/matrix-commander-rs/`
 const PKG_REPOSITORY_O: Option<&str> = option_env!("CARGO_PKG_REPOSITORY");
@@ -108,6 +115,9 @@ pub enum Error {
     #[error("Invalid Room")]
     InvalidRoom,
 
+    #[error("Homeserver Not Set")]
+    HomeserverNotSet,
+
     #[error("Invalid File")]
     InvalidFile,
 
@@ -119,6 +129,18 @@ pub enum Error {
 
     #[error("Send Failed")]
     SendFailed,
+
+    #[error("Listen Failed")]
+    ListenFailed,
+
+    #[error("Create Room Failed")]
+    CreateRoomFailed,
+
+    #[error("Leave Room Failed")]
+    LeaveRoomFailed,
+
+    #[error("Forget Room Failed")]
+    ForgetRoomFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -162,8 +184,44 @@ impl Error {
     }
 }
 
+/// Enumerator used for --login option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum Login {
+    /// None: no login specified, don't login
+    None,
+    /// Password: login with password
+    Password,
+    /// AccessToken: login with access-token
+    AccessToken,
+    /// SSO: login with SSO, single-sign on
+    Sso,
+}
+
+/// Converting from String to Login for --login option
+impl FromStr for Login {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Login, ()> {
+        return match src.to_lowercase().trim() {
+            "none" => Ok(Login::None),
+            "password" => Ok(Login::Password),
+            "access_token" | "access-token" | "accesstoken" => Ok(Login::AccessToken),
+            "sso" => Ok(Login::Sso),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Login for --login option
+impl fmt::Display for Login {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
 /// Enumerator used for --sync option
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 enum Sync {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
@@ -181,7 +239,7 @@ enum Sync {
 impl FromStr for Sync {
     type Err = ();
     fn from_str(src: &str) -> Result<Sync, ()> {
-        return match src.to_lowercase().as_ref() {
+        return match src.to_lowercase().trim() {
             "off" => Ok(Sync::Off),
             "full" => Ok(Sync::Full),
             _ => Err(()),
@@ -191,6 +249,69 @@ impl FromStr for Sync {
 
 /// Creates .to_string() for Sync for --sync option
 impl fmt::Display for Sync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --verify option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum Verify {
+    /// None: option not used, no verification done
+    None,
+    /// Emoji: verify via emojis
+    Emoji,
+}
+
+/// Converting from String to Verify for --verify option
+impl FromStr for Verify {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Verify, ()> {
+        return match src.to_lowercase().trim() {
+            "none" => Ok(Verify::None),
+            "emoji" => Ok(Verify::Emoji),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Verify for --verify option
+impl fmt::Display for Verify {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --logout option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum Logout {
+    // None: Log out nowhere, don't do anything, default
+    None,
+    /// Me: Log out from the currently used device
+    Me,
+    /// All: Log out from all devices of the user
+    All,
+}
+
+/// Converting from String to Logout for --logout option
+impl FromStr for Logout {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Logout, ()> {
+        return match src.to_lowercase().trim() {
+            "none" => Ok(Logout::None),
+            "me" => Ok(Logout::Me),
+            "all" => Ok(Logout::All),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Sync for --sync option
+impl fmt::Display for Logout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
@@ -221,7 +342,7 @@ enum Listen {
 impl FromStr for Listen {
     type Err = ();
     fn from_str(src: &str) -> Result<Listen, ()> {
-        return match src.to_lowercase().as_ref() {
+        return match src.to_lowercase().trim() {
             "never" => Ok(Listen::Never),
             "once" => Ok(Listen::Once),
             "forever" => Ok(Listen::Forever),
@@ -234,6 +355,48 @@ impl FromStr for Listen {
 
 /// Creates .to_string() for Listen for --listen option
 impl fmt::Display for Listen {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --log-level option
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum LogLevel {
+    /// None: not set, default.
+    None,
+    /// Error: Indicates to print only errors
+    Error,
+    /// Warn: Indicates to print warnings and errors
+    Warn,
+    /// Info: Indicates to to print info, warn and errors
+    Info,
+    /// Debug: Indicates to to print debug and the rest
+    Debug,
+    /// Trace: Indicates to to print everything
+    Trace,
+}
+
+/// Converting from String to Listen for --listen option
+impl FromStr for LogLevel {
+    type Err = ();
+    fn from_str(src: &str) -> Result<LogLevel, ()> {
+        return match src.to_lowercase().trim() {
+            "none" => Ok(LogLevel::None),
+            "error" => Ok(LogLevel::Error),
+            "warn" => Ok(LogLevel::Warn),
+            "info" => Ok(LogLevel::Info),
+            "debug" => Ok(LogLevel::Debug),
+            "trace" => Ok(LogLevel::Trace),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Listen for --listen option
+impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
@@ -262,7 +425,7 @@ enum Output {
 impl FromStr for Output {
     type Err = ();
     fn from_str(src: &str) -> Result<Output, ()> {
-        return match src.to_lowercase().replace("-", "_").as_ref() {
+        return match src.to_lowercase().replace('-', "_").trim() {
             "text" => Ok(Output::Text),
             "json" => Ok(Output::Json),
             "jsonmax" | "json_max" => Ok(Output::JsonMax), // accept all 3: jsonmax, json-max, json_max
@@ -288,12 +451,12 @@ pub struct Args {
     contribute: bool,
     version: bool,
     debug: usize,
-    log_level: Option<String>,
+    log_level: LogLevel,
     verbose: usize,
-    login: Option<String>,
-    verify: bool,
+    login: Login,
+    verify: Verify,
     message: Vec<String>,
-    logout: Option<String>,
+    logout: Logout,
     homeserver: Option<Url>,
     user_login: Option<String>,
     password: Option<String>,
@@ -315,6 +478,21 @@ pub struct Args {
     output: Output,
     get_room_info: Vec<String>,
     file_name: Vec<PathBuf>,
+    room_create: Vec<String>,
+    room_leave: Vec<String>,
+    room_forget: Vec<String>,
+    name: Vec<String>,
+    topic: Vec<String>,
+    rooms: bool,
+    invited_rooms: bool,
+    joined_rooms: bool,
+    left_rooms: bool,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Args {
@@ -323,12 +501,12 @@ impl Args {
             contribute: false,
             version: false,
             debug: 0usize,
-            log_level: None,
+            log_level: LogLevel::None,
             verbose: 0usize,
-            login: None,
-            verify: false,
+            login: Login::None,
+            verify: Verify::None,
             message: Vec::new(),
-            logout: None,
+            logout: Logout::None,
             homeserver: None,
             user_login: None,
             password: None,
@@ -350,6 +528,15 @@ impl Args {
             output: Output::Text,
             get_room_info: Vec::new(),
             file_name: Vec::new(),
+            room_create: Vec::new(),
+            room_leave: Vec::new(),
+            room_forget: Vec::new(),
+            name: Vec::new(),
+            topic: Vec::new(),
+            rooms: false,
+            invited_rooms: false,
+            joined_rooms: false,
+            left_rooms: false,
         }
     }
 }
@@ -508,10 +695,17 @@ pub struct GlobalState {
     // self.warn_count = 0  # how many warnings have occurred so far
 }
 
+// implement the Default trait for GlobalState
+impl Default for GlobalState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Implementation of the GlobalState struct.
 impl GlobalState {
     /// Default constructor of GlobalState
-    pub fn new(_arg: String) -> GlobalState {
+    pub fn new() -> GlobalState {
         GlobalState {
             ap: Args::new(),
             // e.g. /home/user/.local/share/matrix-commander/credentials.json
@@ -563,7 +757,7 @@ fn get_sledstore_default_path() -> PathBuf {
 /// Gets the *actual* path (including file name) of the sled store directory
 /// The default path might not be the actual path as it can be overwritten with command line
 /// options.
-fn get_sledstore_actual_path(gs: &mut GlobalState) -> &PathBuf {
+fn get_sledstore_actual_path(gs: &GlobalState) -> &PathBuf {
     &gs.sledstore_dir_path
 }
 
@@ -577,6 +771,11 @@ fn get_pkg_name() -> &'static str {
     PKG_NAME_O.unwrap_or(PKG_NAME)
 }
 
+/// Gets Rust binary name, static if available, otherwise default.
+fn get_bin_name() -> &'static str {
+    BIN_NAME_O.unwrap_or(BIN_NAME)
+}
+
 /// Gets Rust package repository, static if available, otherwise default.
 fn get_pkg_repository() -> &'static str {
     PKG_REPOSITORY_O.unwrap_or(PKG_REPOSITORY)
@@ -584,7 +783,8 @@ fn get_pkg_repository() -> &'static str {
 
 /// Gets program name without extension.
 fn get_prog_without_ext() -> &'static str {
-    get_pkg_name() // Todo: add "-rs" postfix
+    get_bin_name() // with -rs suffix
+                   // get_pkg_name() // without -rs suffix
 }
 
 /// Gets timeout, argument-defined if available, otherwise default.
@@ -594,7 +794,7 @@ fn get_timeout(gs: &GlobalState) -> u64 {
 
 /// Prints the version information
 pub fn version() {
-    println!("");
+    println!();
     println!(
         "  _|      _|      _|_|_|                     {}",
         get_prog_without_ext()
@@ -611,12 +811,12 @@ pub fn version() {
     );
     print!("  _|      _|      _|_|_|     / '-----' \\     ");
     println!("please submit PRs to make the vision a reality");
-    println!("");
+    println!();
 }
 
 /// Asks the public for help
 pub fn contribute() {
-    println!("");
+    println!();
     println!(
         "This project is currently only a vision. The Python package {} exists. ",
         get_prog_without_ext()
@@ -642,7 +842,7 @@ fn get_homeserver(gs: &mut GlobalState) {
             .read_line(&mut input)
             .expect("error: unable to read user input");
 
-        match input.trim().as_ref() {
+        match input.trim() {
             "" => {
                 error!("Empty homeserver name is not allowed!");
             }
@@ -676,7 +876,7 @@ fn get_user_login(gs: &mut GlobalState) {
             .read_line(&mut input)
             .expect("error: unable to read user input");
 
-        match input.trim().as_ref() {
+        match input.trim() {
             "" => {
                 error!("Empty user name is not allowed!");
             }
@@ -703,7 +903,7 @@ fn get_password(gs: &mut GlobalState) {
             .read_line(&mut input)
             .expect("error: unable to read user input");
 
-        match input.trim().as_ref() {
+        match input.trim() {
             "" => {
                 error!("Empty password is not allowed!");
             }
@@ -736,7 +936,7 @@ fn get_device(gs: &mut GlobalState) {
             .read_line(&mut input)
             .expect("error: unable to read user input");
 
-        match input.trim().as_ref() {
+        match input.trim() {
             "" => {
                 error!("Empty device is not allowed!");
             }
@@ -766,7 +966,7 @@ fn get_room_default(gs: &mut GlobalState) {
             .read_line(&mut input)
             .expect("error: unable to read user input");
 
-        match input.trim().as_ref() {
+        match input.trim() {
             "" => {
                 error!("Empty name of default room is not allowed!");
             }
@@ -781,17 +981,25 @@ fn get_room_default(gs: &mut GlobalState) {
 
 /// A room is either specified with --room or the default from credentials file is used
 /// On error return None.
-fn get_rooms(gs: &GlobalState) -> Vec<String> {
-    debug!("get_rooms() shows credentials {:?}", gs.credentials);
+fn set_rooms(gs: &mut GlobalState) {
+    debug!("set_rooms() shows credentials {:?}", gs.credentials);
     let droom = get_room_default_from_credentials(gs);
-    if gs.ap.room.len() == 0 {
-        if droom.is_none() {
-            error!("Error: No room provided. Most likely operations will be skipped later due to no rooms being specified.");
+    if gs.ap.room.is_empty() {
+        if let Some(i) = droom {
+            gs.ap.room.push(i); // since --room is empty, use default room from credentials
         } else {
-            return vec![droom.unwrap()];
+            error!("Error: No room provided. Most likely operations will be skipped later due to no rooms being specified.");
         }
     }
-    gs.ap.room.clone()
+}
+
+/// Before get_rooms() is called the rooms should have been updated with set_rooms() first.
+/// Get the user specified rooms (which might either have been specified with --room or
+/// be the default room from the credentials file).
+/// On error return None.
+fn get_rooms(gs: &GlobalState) -> &Vec<String> {
+    debug!("get_rooms() shows credentials {:?}", gs.credentials);
+    &gs.ap.room
 }
 
 /// Get the default room id from the credentials file.
@@ -801,13 +1009,13 @@ fn get_room_default_from_credentials(gs: &GlobalState) -> Option<String> {
         "get_room_default_from_credentials() shows credentials {:?}",
         gs.credentials
     );
-    return match &gs.credentials {
+    match &gs.credentials {
         Some(inner) => Some(inner.room_default.clone()),
         None => {
             error!("Error: cannot get default room from credentials file.");
             None
         }
-    };
+    } // returning match result
 }
 
 /// Return true if credentials file exists, false otherwise
@@ -829,7 +1037,7 @@ fn credentials_exist(gs: &GlobalState) -> bool {
 
 /// Return true if sledstore dir exists, false otherwise
 #[allow(dead_code)]
-fn sledstore_exist(gs: &mut GlobalState) -> bool {
+fn sledstore_exist(gs: &GlobalState) -> bool {
     let dp = get_sledstore_default_path();
     let ap = get_sledstore_actual_path(gs);
     debug!(
@@ -850,18 +1058,17 @@ fn sledstore_exist(gs: &mut GlobalState) -> bool {
 
 /// Handle the --login CLI argument
 pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
-    let login_type = gs.ap.login.as_ref().unwrap();
-    if login_type != "password" && login_type != "sso" {
-        error!(
-            "Login option only supports 'password' and 'sso' as choice. {} is unknown.",
-            login_type
-        );
-        return Err(Error::UnknownCliParameter);
-    }
-    if login_type == "sso" {
-        error!("Login option 'sso' currently not supported. Use 'password' for the time being.");
+    if gs.ap.login == Login::None {
         return Err(Error::UnsupportedCliParameter);
     }
+    if gs.ap.login == Login::Sso || gs.ap.login == Login::AccessToken {
+        error!(
+            "Login option '{:?}' currently not supported. Use 'password' for the time being.",
+            gs.ap.login
+        );
+        return Err(Error::UnsupportedCliParameter);
+    }
+    // login is Login::Password
     get_homeserver(gs);
     get_user_login(gs);
     get_password(gs);
@@ -879,7 +1086,7 @@ pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
             "Or just run your command again but without the '--login' option to log in ",
             "via your existing credentials and access token. ",
         ));
-        return Err(Error::LoginUnnecessary);
+        Err(Error::LoginUnnecessary) // returning
     } else {
         let client = crate::login(
             gs,
@@ -906,7 +1113,7 @@ pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client, Er
             "Credentials file does not exists. Consider doing a '--logout' to clean up, ",
             "then perform a '--login'."
         ));
-        return Err(Error::NotLoggedIn);
+        Err(Error::NotLoggedIn) // returning
     } else {
         let client = crate::restore_login(gs).await?;
         debug!(
@@ -920,7 +1127,7 @@ pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client, Er
 /// Handle the --verify CLI argument
 pub(crate) async fn cli_verify(clientres: &Result<Client, Error>) -> Result<(), Error> {
     info!("Verify chosen.");
-    return crate::verify(clientres).await;
+    crate::verify(clientres).await
 }
 
 /// Handle the --message CLI argument
@@ -929,7 +1136,7 @@ pub(crate) async fn cli_message(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("Message chosen.");
-    if gs.ap.message.len() == 0 {
+    if gs.ap.message.is_empty() {
         return Ok(()); // nothing to do
     }
     if clientres.as_ref().is_err() {
@@ -937,7 +1144,7 @@ pub(crate) async fn cli_message(
     }
     let mut fmsgs: Vec<String> = Vec::new(); // formatted msgs
     for msg in gs.ap.message.iter() {
-        if msg == "" {
+        if msg.is_empty() {
             info!("Skipping empty text message.");
             continue;
         };
@@ -970,19 +1177,19 @@ pub(crate) async fn cli_message(
         };
         fmsgs.push(fmsg);
     }
-    if fmsgs.len() == 0 {
+    if fmsgs.is_empty() {
         return Ok(()); // nothing to do
     }
-    return message(
+    message(
         clientres,
-        fmsgs,
+        &fmsgs,
         get_rooms(gs),
         gs.ap.code,
         gs.ap.markdown,
         gs.ap.notice,
         gs.ap.emote,
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --file CLI argument
@@ -991,7 +1198,7 @@ pub(crate) async fn cli_file(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("File chosen.");
-    if gs.ap.file.len() == 0 {
+    if gs.ap.file.is_empty() {
         return Ok(()); // nothing to do
     }
     if clientres.as_ref().is_err() {
@@ -1006,21 +1213,21 @@ pub(crate) async fn cli_file(
             _ => files.push(PathBuf::from(filename)),
         }
     }
-    let pb: PathBuf; // label to attach to a stdin pipe data in case there is data piped in from stdin
-    pb = if gs.ap.file_name.len() > 0 {
+    // pb: label to attach to a stdin pipe data in case there is data piped in from stdin
+    let pb: PathBuf = if !gs.ap.file_name.is_empty() {
         gs.ap.file_name[0].clone()
     } else {
         PathBuf::from("file")
     };
-    return file(
+    file(
         clientres,
-        files,
+        &files,
         get_rooms(gs),
         None, // label, use default filename
         None, // mime, guess it
-        pb,   // lavel for stdin pipe
+        &pb,  // lavel for stdin pipe
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --listen once CLI argument
@@ -1032,13 +1239,13 @@ pub(crate) async fn cli_listen_once(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    return listen_once(
+    listen_once(
         clientres,
         gs.ap.listen_self,
         crate::whoami(gs)?,
         gs.ap.output,
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --listen forever CLI argument
@@ -1050,13 +1257,13 @@ pub(crate) async fn cli_listen_forever(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    return listen_forever(
+    listen_forever(
         clientres,
         gs.ap.listen_self,
         crate::whoami(gs)?,
         gs.ap.output,
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --listen tail CLI argument
@@ -1068,7 +1275,7 @@ pub(crate) async fn cli_listen_tail(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    return listen_tail(
+    listen_tail(
         clientres,
         get_rooms(gs),
         gs.ap.tail,
@@ -1076,7 +1283,7 @@ pub(crate) async fn cli_listen_tail(
         crate::whoami(gs)?,
         gs.ap.output,
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --listen all CLI argument
@@ -1088,14 +1295,14 @@ pub(crate) async fn cli_listen_all(
     if clientres.as_ref().is_err() {
         return Ok(()); // nothing to do, this error has already been reported
     }
-    return listen_all(
+    listen_all(
         clientres,
         get_rooms(gs),
         gs.ap.listen_self,
         crate::whoami(gs)?,
         gs.ap.output,
     )
-    .await;
+    .await // returning
 }
 
 /// Handle the --devices CLI argument
@@ -1104,7 +1311,7 @@ pub(crate) async fn cli_devices(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("Devices chosen.");
-    return crate::devices(clientres, gs.ap.output).await;
+    crate::devices(clientres, gs.ap.output).await // returning
 }
 
 /// Utility function, returns user_id of itself
@@ -1113,7 +1320,7 @@ pub(crate) fn whoami(gs: &GlobalState) -> Result<OwnedUserId, Error> {
         Some(inner) => inner.user_id.clone(),
         _ => return Err(Error::NotLoggedIn),
     };
-    return Ok(whoami);
+    Ok(whoami)
 }
 
 /// Handle the --whoami CLI argument
@@ -1125,7 +1332,7 @@ pub(crate) fn cli_whoami(gs: &GlobalState) -> Result<(), Error> {
         Output::JsonSpec => (),
         _ => println!("{{\"user_id\": \"{}\"}}", whoami),
     }
-    return Ok(());
+    Ok(())
 }
 
 /// Handle the --get-room-info CLI argument
@@ -1139,38 +1346,112 @@ pub(crate) async fn cli_get_room_info(
         vec.push(get_room_default_from_credentials(gs).unwrap());
     }
     vec.retain(|x| x != "--");
-    return crate::get_room_info(clientres, vec, gs.ap.output).await;
+    crate::get_room_info(clientres, &vec, gs.ap.output).await
+}
+
+/// Handle the --rooms CLI argument
+pub(crate) async fn cli_rooms(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Rooms chosen.");
+    crate::rooms(clientres, gs.ap.output).await
+}
+
+/// Handle the --invited-rooms CLI argument
+pub(crate) async fn cli_invited_rooms(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Invited-rooms chosen.");
+    crate::invited_rooms(clientres, gs.ap.output).await
+}
+
+/// Handle the --joined-rooms CLI argument
+pub(crate) async fn cli_joined_rooms(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Joined-rooms chosen.");
+    crate::joined_rooms(clientres, gs.ap.output).await
+}
+
+/// Handle the --left-rooms CLI argument
+pub(crate) async fn cli_left_rooms(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Left-rooms chosen.");
+    crate::left_rooms(clientres, gs.ap.output).await
+}
+
+/// Handle the --room-create CLI argument
+pub(crate) async fn cli_room_create(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Room-create chosen.");
+    crate::room_create(
+        clientres,
+        &gs.ap.room_create,
+        &gs.ap.name,
+        &gs.ap.topic,
+        gs.ap.output,
+    )
+    .await
+}
+
+/// Handle the --room-leave CLI argument
+pub(crate) async fn cli_room_leave(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Room-leave chosen.");
+    crate::room_leave(clientres, &gs.ap.room_leave, gs.ap.output).await
+}
+
+/// Handle the --room-forget CLI argument
+pub(crate) async fn cli_room_forget(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
+    info!("Room-forget chosen.");
+    crate::room_forget(clientres, &gs.ap.room_forget, gs.ap.output).await
 }
 
 /// Handle the --logout CLI argument
 pub(crate) async fn cli_logout(
     clientres: &Result<Client, Error>,
     gs: &GlobalState,
-    arg: String,
 ) -> Result<(), Error> {
     info!("Logout chosen.");
-    if arg != "me" && arg != "all" {
-        error!("Login option only supports 'me' and 'all' as choice.");
-        return Err(Error::UnknownCliParameter);
+    if gs.ap.logout == Logout::None {
+        return Ok(());
     }
-    if arg == "all" {
-        error!("Logout option 'all' currently not supported. Use 'me' for the time being.");
+    if gs.ap.logout == Logout::All {
+        error!(
+            "Logout option '{:?}' currently not supported. Use '{:?}' for the time being.",
+            Logout::All,
+            Logout::Me
+        );
         return Err(Error::UnsupportedCliParameter);
     }
-    return crate::logout(clientres, gs).await;
+    crate::logout(clientres, gs).await
 }
 
 /// We need your code contributions! Please add features and make PRs! :pray: :clap:
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let prog_desc: String;
+    let loglevel_desc: String;
     let verify_desc: String;
+    let login_desc: String;
     let logout_desc: String;
     let sync_desc: String;
     let whoami_desc: String;
     let file_desc: String;
 
-    let mut gs: GlobalState = GlobalState::new("test".to_string());
+    let mut gs: GlobalState = GlobalState::new();
 
     {
         // this block limits scope of borrows by ap.refer() method
@@ -1221,18 +1502,23 @@ async fn main() -> Result<(), Error> {
                 "Additionally, have a look also at the option '--verbose'. ",
             ),
         );
-        ap.refer(&mut gs.ap.log_level).add_option(
-            &["--log-level"],
-            StoreOption,
+        loglevel_desc = format!(
             concat!(
                 "Set the log level by overwriting the default log level. ",
                 "If not used, then the default ",
                 "log level set with environment variable 'RUST_LOG' will be used. ",
                 "Possible values are ",
-                "'DEBUG', 'INFO', 'WARN', and 'ERROR'. ",
+                "'{trace}', '{debug}', '{info}', '{warn}', and '{error}'. ",
                 "See also '--debug' and '--verbose'.",
             ),
+            error = LogLevel::Error,
+            warn = LogLevel::Warn,
+            info = LogLevel::Info,
+            debug = LogLevel::Debug,
+            trace = LogLevel::Trace,
         );
+        ap.refer(&mut gs.ap.log_level)
+            .add_option(&["--log-level"], Store, &loglevel_desc);
         ap.refer(&mut gs.ap.verbose).add_option(
             &["--verbose"],
             IncrBy(1usize),
@@ -1244,15 +1530,13 @@ async fn main() -> Result<(), Error> {
                 "So, if '--debug' is not used then '--verbose' will be ignored.",
             ),
         );
-        ap.refer(&mut gs.ap.login).add_option(
-            &["--login"],
-            StoreOption,
+        login_desc = format!(
             concat!(
                 "Login to and authenticate with the Matrix homeserver. ",
                 "This requires exactly one argument, the login method. ",
-                "Currently two choices are offered: 'password' and 'sso'. ",
+                "Currently two choices are offered: '{password}' and '{sso}'. ",
                 "Provide one of these methods. ",
-                "If you have chosen 'password', ",
+                "If you have chosen '{password}', ",
                 "you will authenticate through your account password. You can ",
                 "optionally provide these additional arguments: ",
                 "--homeserver to specify the Matrix homeserver, ",
@@ -1260,7 +1544,7 @@ async fn main() -> Result<(), Error> {
                 "--password to specify the password, ",
                 "--device to specify a device name, ",
                 "--room-default to specify a default room for sending/listening. ",
-                "If you have chosen 'sso', ",
+                "If you have chosen '{sso}', ",
                 "you will authenticate through Single Sign-On. A web-browser will ",
                 "be started and you authenticate on the webpage. You can ",
                 "optionally provide these additional arguments: ",
@@ -1276,12 +1560,18 @@ async fn main() -> Result<(), Error> {
                 "on headless homeservers where there is no ",
                 "browser installed or accessible.",
             ),
+            password = Login::Password,
+            sso = Login::Sso,
         );
+        ap.refer(&mut gs.ap.login)
+            .add_option(&["--login"], Store, &login_desc);
+
         verify_desc = format!(
             concat!(
                 "Perform verification. By default, no ",
                 "verification is performed. ",
-                "Verification is done via Emojis. ",
+                "Verification is currently only offered via Emojis. ",
+                "Hence, specify '--verify {emoji}'. ",
                 "If verification is desired, run this program in the ",
                 "foreground (not as a service) and without a pipe. ",
                 "While verification is optional it is highly recommended, and it ",
@@ -1314,16 +1604,17 @@ async fn main() -> Result<(), Error> {
                 "In the terminal you should see a text message indicating success. ",
                 "You should now be verified across all devices and across all users.",
             ),
-            prog = get_prog_without_ext()
+            prog = get_prog_without_ext(),
+            emoji = Verify::Emoji,
         );
         ap.refer(&mut gs.ap.verify)
-            .add_option(&["--verify"], StoreTrue, &verify_desc);
+            .add_option(&["--verify"], Store, &verify_desc);
 
         logout_desc = format!(
             concat!(
                 "Logout this or all devices from the Matrix homeserver. ",
                 "This requires exactly one argument. ",
-                "Two choices are offered: 'me' and 'all'. ",
+                "Two choices are offered: '{me}' and '{all}'. ",
                 "Provide one of these choices. ",
                 "If you choose 'me', only the one device {prog} ",
                 "is currently using will be logged out. ",
@@ -1338,10 +1629,13 @@ async fn main() -> Result<(), Error> {
                 "{prog} without ever logging out. --logout is a cleanup ",
                 "if you have decided not to use this (or all) device(s) ever again.",
             ),
-            prog = get_prog_without_ext()
+            prog = get_prog_without_ext(),
+            me = Logout::Me,
+            all = Logout::All,
         );
         ap.refer(&mut gs.ap.logout)
-            .add_option(&["--logout"], StoreOption, &logout_desc);
+            .add_option(&["--logout"], Store, &logout_desc);
+
         ap.refer(&mut gs.ap.homeserver).add_option(
             &["--homeserver"],
             StoreOption,
@@ -1396,6 +1690,7 @@ async fn main() -> Result<(), Error> {
                 "Multiple devices (with different device id) may have the same device ",
                 "name. In short, the same device name can be assigned to multiple ",
                 "different devices if desired.",
+                "Don't confuse this option with --devices. ",
             ),
         );
 
@@ -1417,7 +1712,8 @@ async fn main() -> Result<(), Error> {
             StoreTrue,
             concat!(
                 "Print the list of devices. All device of this ",
-                "account will be printed, one device per line.",
+                "account will be printed, one device per line. ",
+                "Don't confuse this option with --device. ",
             ),
         );
 
@@ -1600,6 +1896,83 @@ async fn main() -> Result<(), Error> {
                 "'--notice' allows sending of text ",
                 "as a notice. '--emote' allows ",
                 "sending of text as an emote.",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.room_create).add_option(
+            &["--room-create"],
+            List,
+            concat!(
+                "Create one or multiple rooms. One or multiple room",
+                "aliases can be specified. For each alias specified a ",
+                "room will be created. For each created room one line ",
+                "with room id, alias, name and topic will be printed ",
+                "to stdout. If ",
+                "you are not interested in an alias, provide an empty ",
+                "string like ''. The alias provided must be in canocial ",
+                "local form, i.e. if you want a final full alias like ",
+                "'#SomeRoomAlias:matrix.example.com' you must provide ",
+                "the string 'SomeRoomAlias'. The user must be permitted ",
+                "to create rooms. Combine --room-create with --name and ",
+                "--topic to add names and topics to the room(s) to be ",
+                "created. ",
+                "If the output is in JSON format, then the values that ",
+                "are not set and hence have default values are not shown ",
+                "in the JSON output. E.g. if no topic is given, then ",
+                "there will be no topic field in the JSON output. ",
+                "Room aliases have to be unique. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.room_leave).add_option(
+            &["--room-leave"],
+            List,
+            concat!(
+                "Leave this room or these rooms. One or multiple room ",
+                "aliases can be specified. The room (or multiple ones) ",
+                "provided in the arguments will be left. ",
+                "You can run both commands '--room-leave' and ",
+                "'--room-forget' at the same time.",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.room_forget).add_option(
+            &["--room-forget"],
+            List,
+            concat!(
+                "After leaving a room you should (most likely) forget ",
+                r"the room. Forgetting a room removes the users\' room ",
+                "history. One or multiple room aliases can be ",
+                "specified. The room (or multiple ones) provided in the ",
+                "arguments will be forgotten. If all users forget a ",
+                "room, the room can eventually be deleted on the ",
+                "server. You must leave a room first, before you can ",
+                "forget it.",
+                "You can run both commands '--room-leave' and ",
+                "'--room-forget' at the same time.",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.name).add_option(
+            &["--name"],
+            List,
+            concat!(
+                "Specify one or multiple names. This option is only ",
+                "meaningful in combination with option --room-create. ",
+                "This option --name specifies the names to be used with ",
+                "the command --room-create. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.topic).add_option(
+            &["--topic"],
+            List,
+            concat!(
+                "TOPIC [TOPIC ...] ",
+                "Specify one or multiple topics. This option is only ",
+                "meaningful in combination with option --room-create. ",
+                "This option --topic specifies the topics to be used ",
+                "with the command --room-create. ",
             ),
         );
 
@@ -1786,35 +2159,67 @@ async fn main() -> Result<(), Error> {
             ),
         );
 
+        ap.refer(&mut gs.ap.rooms).add_option(
+            &["--rooms"],
+            StoreTrue,
+            concat!(
+                "Print the list of past and current rooms. All rooms that you ",
+                "are currently a member of (joined rooms), that you had been a ",
+                "member of in the past (left rooms), and rooms that you have ",
+                "been invited to (invited rooms) will be printed, ",
+                "one room per line. See also '--invited-rooms', ",
+                "'--joined-rooms', and '--left-rooms'. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.invited_rooms).add_option(
+            &["--invited-rooms"],
+            StoreTrue,
+            concat!(
+                "Print the list of invited rooms. All rooms that you are ",
+                "currently invited to will be printed, one room per line. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.joined_rooms).add_option(
+            &["--joined-rooms"],
+            StoreTrue,
+            concat!(
+                "Print the list of joined rooms. All rooms that you are ",
+                "currently a member of will be printed, one room per line. ",
+            ),
+        );
+
+        ap.refer(&mut gs.ap.left_rooms).add_option(
+            &["--left-rooms"],
+            StoreTrue,
+            concat!(
+                "Print the list of left rooms. All rooms that you have ",
+                "left in the past will be printed, one room per line. ",
+            ),
+        );
+
         ap.parse_args_or_exit();
     }
 
     // handle log level and debug options
-    let env_org_rust_log = env::var("RUST_LOG")
-        .unwrap_or("".to_string())
-        .to_uppercase();
+    let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
     if gs.ap.debug > 0 {
         // -d overwrites --log-level
-        gs.ap.log_level = Some("DEBUG".to_string())
+        gs.ap.log_level = LogLevel::Debug
     }
-    if gs.ap.log_level.is_some() {
-        let ll = gs.ap.log_level.clone().unwrap();
-        if ll != "DEBUG" && ll != "INFO" && ll != "WARN" && ll != "ERROR" {
-            error!("Log-level option only supports 'DEBUG', 'INFO', 'WARN', or 'ERROR' as choice.");
-        }
+    if gs.ap.log_level != LogLevel::None {
         // overwrite environment variable
-        env::set_var("RUST_LOG", &ll);
+        env::set_var("RUST_LOG", gs.ap.log_level.to_string());
     } else {
-        gs.ap.log_level = Some(env_org_rust_log.clone())
+        gs.ap.log_level = LogLevel::from_str(&env_org_rust_log).unwrap_or(LogLevel::Error);
     }
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
     tracing_subscriber::fmt::init();
     debug!("Original RUST_LOG env var is {}", env_org_rust_log);
     debug!(
         "Final RUST_LOG env var is {}",
-        env::var("RUST_LOG")
-            .unwrap_or("".to_string())
-            .to_uppercase()
+        env::var("RUST_LOG").unwrap_or_default().to_uppercase()
     );
     debug!("Final log_level option is {:?}", gs.ap.log_level);
     if enabled!(Level::TRACE) {
@@ -1828,29 +2233,11 @@ async fn main() -> Result<(), Error> {
     debug!("contribute flag is {}", gs.ap.contribute);
     debug!("version flag is set to {}", gs.ap.version);
     debug!("debug flag is {}", gs.ap.debug);
-    match gs.ap.log_level {
-        Some(inner) => {
-            gs.ap.log_level = Some(inner.trim().to_lowercase());
-        }
-        _ => (),
-    }
     debug!("log_level option is {:?}", gs.ap.log_level);
     debug!("verbose option is {}", gs.ap.verbose);
-    match gs.ap.login {
-        Some(inner) => {
-            gs.ap.login = Some(inner.trim().to_lowercase());
-        }
-        _ => (),
-    }
     debug!("login option is {:?}", gs.ap.login);
     debug!("verify flag is {:?}", gs.ap.verify);
     debug!("message option is {:?}", gs.ap.message);
-    match gs.ap.logout {
-        Some(inner) => {
-            gs.ap.logout = Some(inner.trim().to_lowercase());
-        }
-        _ => (),
-    }
     debug!("logout option is {:?}", gs.ap.logout);
     debug!("homeserver option is {:?}", gs.ap.homeserver);
     debug!("user_login option is {:?}", gs.ap.user_login);
@@ -1873,6 +2260,15 @@ async fn main() -> Result<(), Error> {
     debug!("output option is {:?}", gs.ap.output);
     debug!("get-room-info option is {:?}", gs.ap.get_room_info);
     debug!("file-name option is {:?}", gs.ap.file_name);
+    debug!("room-create option is {:?}", gs.ap.room_create);
+    debug!("room-leave option is {:?}", gs.ap.room_leave);
+    debug!("room-forget option is {:?}", gs.ap.room_forget);
+    debug!("name option is {:?}", gs.ap.name);
+    debug!("topic-create option is {:?}", gs.ap.topic);
+    debug!("rooms option is {:?}", gs.ap.rooms);
+    debug!("invited-rooms option is {:?}", gs.ap.invited_rooms);
+    debug!("joined-rooms option is {:?}", gs.ap.joined_rooms);
+    debug!("left-rooms option is {:?}", gs.ap.left_rooms);
 
     // Todo : make all option args lower case
     if gs.ap.version {
@@ -1881,7 +2277,7 @@ async fn main() -> Result<(), Error> {
     if gs.ap.contribute {
         crate::contribute();
     };
-    let clientres = if gs.ap.login.is_some() {
+    let clientres = if gs.ap.login != Login::None {
         crate::cli_login(&mut gs).await
     } else {
         crate::cli_restore_login(&mut gs).await
@@ -1899,6 +2295,7 @@ async fn main() -> Result<(), Error> {
             // return Err(Error::LoginFailed);
         }
     };
+    set_rooms(&mut gs); // if no rooms in --room, set rooms to default room from credentials file
     if gs.ap.tail > 0 {
         // overwrite --listen if user has chosen both
         if gs.ap.listen != Listen::Never && gs.ap.listen != Listen::Tail {
@@ -1909,9 +2306,8 @@ async fn main() -> Result<(), Error> {
         }
         gs.ap.listen = Listen::Tail
     }
-    let gsclone = gs.clone();
 
-    if gsclone.ap.verify && clientres.as_ref().is_ok() {
+    if gs.ap.verify != Verify::None && clientres.as_ref().is_ok() {
         match crate::cli_verify(&clientres).await {
             Ok(ref _n) => debug!("crate::verify successful"),
             Err(ref e) => error!("Error: crate::verify reported {}", e),
@@ -1920,16 +2316,16 @@ async fn main() -> Result<(), Error> {
 
     // get actions
 
-    if gsclone.ap.devices && clientres.as_ref().is_ok() {
-        match crate::cli_devices(&clientres, &gsclone).await {
-            Ok(ref _n) => debug!("crate::message successful"),
-            Err(ref e) => error!("Error: crate::message reported {}", e),
+    if gs.ap.devices && clientres.as_ref().is_ok() {
+        match crate::cli_devices(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::devices successful"),
+            Err(ref e) => error!("Error: crate::devices reported {}", e),
         };
     };
 
     // This might work even without client (server connection)
-    if gsclone.ap.whoami {
-        match crate::cli_whoami(&gsclone) {
+    if gs.ap.whoami {
+        match crate::cli_whoami(&gs) {
             Ok(ref _n) => debug!("crate::whoami successful"),
             Err(ref e) => error!("Error: crate::whoami reported {}", e),
         };
@@ -1938,69 +2334,114 @@ async fn main() -> Result<(), Error> {
     // If no room specified "--" must be specified
     // Otherwise it would be impossible to distinguish not using option or not specifying a room in option,
     // In addition, argparse requires at least 1 room to be given.
-    if gsclone.ap.get_room_info.len() > 0 && clientres.as_ref().is_ok() {
-        match crate::cli_get_room_info(&clientres, &gsclone).await {
+    if !gs.ap.get_room_info.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_get_room_info(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::get_room_info successful"),
             Err(ref e) => error!("Error: crate::get_room_info reported {}", e),
         };
     };
 
+    if gs.ap.rooms && clientres.as_ref().is_ok() {
+        match crate::cli_rooms(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::rooms successful"),
+            Err(ref e) => error!("Error: crate::rooms reported {}", e),
+        };
+    };
+
+    if gs.ap.invited_rooms && clientres.as_ref().is_ok() {
+        match crate::cli_invited_rooms(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::invited_rooms successful"),
+            Err(ref e) => error!("Error: crate::invited_rooms reported {}", e),
+        };
+    };
+
+    if gs.ap.joined_rooms && clientres.as_ref().is_ok() {
+        match crate::cli_joined_rooms(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::joined_rooms successful"),
+            Err(ref e) => error!("Error: crate::joined_rooms reported {}", e),
+        };
+    };
+
+    if gs.ap.left_rooms && clientres.as_ref().is_ok() {
+        match crate::cli_left_rooms(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::left_rooms successful"),
+            Err(ref e) => error!("Error: crate::left_rooms reported {}", e),
+        };
+    };
+
+    // set actions
+
+    if !gs.ap.room_create.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_room_create(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::room_create successful"),
+            Err(ref e) => error!("Error: crate::room_create reported {}", e),
+        };
+    };
+
+    if !gs.ap.room_leave.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_room_leave(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::room_leave successful"),
+            Err(ref e) => error!("Error: crate::room_leave reported {}", e),
+        };
+    };
+
+    if !gs.ap.room_forget.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_room_forget(&clientres, &gs).await {
+            Ok(ref _n) => debug!("crate::room_forget successful"),
+            Err(ref e) => error!("Error: crate::room_forget reported {}", e),
+        };
+    };
+
     // send text message(s)
-    if gsclone.ap.message.len() != 0 && clientres.as_ref().is_ok() {
-        match crate::cli_message(&clientres, &gsclone).await {
+    if !gs.ap.message.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_message(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::message successful"),
             Err(ref e) => error!("Error: crate::message reported {}", e),
         };
     };
 
     // send file(s)
-    if gsclone.ap.file.len() != 0 && clientres.as_ref().is_ok() {
-        match crate::cli_file(&clientres, &gsclone).await {
+    if !gs.ap.file.is_empty() && clientres.as_ref().is_ok() {
+        match crate::cli_file(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::file successful"),
             Err(ref e) => error!("Error: crate::file reported {}", e),
         };
     };
 
     // listen once
-    if gsclone.ap.listen == Listen::Once && clientres.as_ref().is_ok() {
-        match crate::cli_listen_once(&clientres, &gsclone).await {
+    if gs.ap.listen == Listen::Once && clientres.as_ref().is_ok() {
+        match crate::cli_listen_once(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_once successful"),
             Err(ref e) => error!("Error: crate::listen_once reported {}", e),
         };
     };
 
     // listen forever
-    if gsclone.ap.listen == Listen::Forever && clientres.as_ref().is_ok() {
-        match crate::cli_listen_forever(&clientres, &gsclone).await {
+    if gs.ap.listen == Listen::Forever && clientres.as_ref().is_ok() {
+        match crate::cli_listen_forever(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_forever successful"),
             Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
         };
     };
 
     // listen tail
-    if gsclone.ap.listen == Listen::Tail && clientres.as_ref().is_ok() {
-        match crate::cli_listen_tail(&clientres, &gsclone).await {
+    if gs.ap.listen == Listen::Tail && clientres.as_ref().is_ok() {
+        match crate::cli_listen_tail(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_tail successful"),
             Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
         };
     };
 
     // listen all
-    if gsclone.ap.listen == Listen::All && clientres.as_ref().is_ok() {
-        match crate::cli_listen_all(&clientres, &gsclone).await {
+    if gs.ap.listen == Listen::All && clientres.as_ref().is_ok() {
+        match crate::cli_listen_all(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_all successful"),
             Err(ref e) => error!("Error: crate::listen_all reported {}", e),
         };
     };
 
-    if gsclone.ap.logout.is_some() {
-        match crate::cli_logout(
-            &clientres,
-            &gsclone,
-            gsclone.ap.logout.as_ref().unwrap().to_string(),
-        )
-        .await
-        {
+    if gs.ap.logout != Logout::None {
+        match crate::cli_logout(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::logout successful"),
             Err(ref e) => error!("Error: crate::verify reported {}", e),
         };

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 echo "Welcome!"
 echo "The script outlines the rough workflow"
@@ -11,6 +11,7 @@ echo "Update version number in Cargo.toml."
 
 scripts/update-1-help.py # create helpfile and update README.md accordingly
 
+cargo clippy     --color always 2>&1 | less -r # if output is very long
 cargo fmt
 
 # show files containing changes that were not yet committed into git
