@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -18,7 +18,7 @@ publish = true
 
 
 [dependencies]
-argparse = "0.2"
+clap = { version = "4.0", features = ["derive", "color", "wrap_help"] }
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 url = { version = "2.3", features = ["serde"] }

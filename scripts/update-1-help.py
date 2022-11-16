@@ -48,6 +48,12 @@ with open(helpfile, "w") as f:
     if error:
         print(error)
 
+bashCmd = ["sed", "-i" , "s,"+"\x1B"+"\[[0-9;]*[a-zA-Z],,g" , helpfile]
+process = subprocess.Popen(bashCmd,)
+_, error = process.communicate()
+if error:
+    print(error)
+
 bashCmd = ["wc", "-L", helpfile]  # max line length
 process = subprocess.Popen(bashCmd, stdout=subprocess.PIPE)
 output, error = process.communicate()
@@ -65,7 +71,7 @@ with open(filename, "r+") as f:
     text = f.read()
     print(f"Length of {filename} before: {len(text)}")
     text = re.sub(
-        r"```\nUsage:[\s\S]*?```",
+        r"```\nWelcome to[\s\S]*?```",
         "```\n"
         + helptext.translate(
             str.maketrans(

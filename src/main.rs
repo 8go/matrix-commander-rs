@@ -37,8 +37,8 @@
 // #![allow(unused_variables)] // Todo
 // #![allow(unused_imports)] // Todo
 
-use argparse::{ArgumentParser, /* Collect, */ IncrBy, List, Store, StoreOption, StoreTrue};
 use atty::Stream;
+use clap::{ColorChoice, Parser, ValueEnum};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -185,9 +185,10 @@ impl Error {
 }
 
 /// Enumerator used for --login option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Login {
     /// None: no login specified, don't login
+    #[default]
     None,
     /// Password: login with password
     Password,
@@ -195,6 +196,16 @@ enum Login {
     AccessToken,
     /// SSO: login with SSO, single-sign on
     Sso,
+}
+
+/// is_ functions for the enum
+impl Login {
+    pub fn is_password(&self) -> bool {
+        self == &Self::Password
+    }
+    pub fn is_none(&self) -> bool {
+        self == &Self::None
+    }
 }
 
 /// Converting from String to Login for --login option
@@ -221,7 +232,7 @@ impl fmt::Display for Login {
 }
 
 /// Enumerator used for --sync option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Sync {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
@@ -232,7 +243,18 @@ enum Sync {
     Off,
     // partial,
     /// full: the default value
+    #[default]
     Full,
+}
+
+/// is_ functions for the enum
+impl Sync {
+    pub fn is_off(&self) -> bool {
+        self == &Self::Off
+    }
+    pub fn is_full(&self) -> bool {
+        self == &Self::Full
+    }
 }
 
 /// Converting from String to Sync for --sync option
@@ -257,12 +279,23 @@ impl fmt::Display for Sync {
 }
 
 /// Enumerator used for --verify option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Verify {
     /// None: option not used, no verification done
+    #[default]
     None,
     /// Emoji: verify via emojis
     Emoji,
+}
+
+/// is_ functions for the enum
+impl Verify {
+    pub fn is_none(&self) -> bool {
+        self == &Self::None
+    }
+    pub fn is_emoji(&self) -> bool {
+        self == &Self::Emoji
+    }
 }
 
 /// Converting from String to Verify for --verify option
@@ -287,14 +320,28 @@ impl fmt::Display for Verify {
 }
 
 /// Enumerator used for --logout option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Logout {
-    // None: Log out nowhere, don't do anything, default
+    /// None: Log out nowhere, don't do anything, default
+    #[default]
     None,
     /// Me: Log out from the currently used device
     Me,
     /// All: Log out from all devices of the user
     All,
+}
+
+/// is_ functions for the enum
+impl Logout {
+    pub fn is_none(&self) -> bool {
+        self == &Self::None
+    }
+    pub fn is_me(&self) -> bool {
+        self == &Self::Me
+    }
+    pub fn is_all(&self) -> bool {
+        self == &Self::All
+    }
 }
 
 /// Converting from String to Logout for --logout option
@@ -320,13 +367,14 @@ impl fmt::Display for Logout {
 }
 
 /// Enumerator used for --listen (--tail) option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Listen {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
     // We do not need to know if user used the option or not,
     // we just need to know the value.
     /// Never: Indicates to not listen, default
+    #[default]
     Never,
     /// Once: Indicates to listen once in *all* rooms and then continue
     Once,
@@ -336,6 +384,25 @@ enum Listen {
     Tail,
     /// All: Indicates to get *all* the messages from from the specified romm(s) and then continue
     All,
+}
+
+/// is_ functions for the enum
+impl Listen {
+    pub fn is_never(&self) -> bool {
+        self == &Self::Never
+    }
+    pub fn is_once(&self) -> bool {
+        self == &Self::Once
+    }
+    pub fn is_forever(&self) -> bool {
+        self == &Self::Forever
+    }
+    pub fn is_tail(&self) -> bool {
+        self == &Self::Tail
+    }
+    pub fn is_all(&self) -> bool {
+        self == &Self::All
+    }
 }
 
 /// Converting from String to Listen for --listen option
@@ -363,9 +430,10 @@ impl fmt::Display for Listen {
 }
 
 /// Enumerator used for --log-level option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum LogLevel {
     /// None: not set, default.
+    #[default]
     None,
     /// Error: Indicates to print only errors
     Error,
@@ -379,21 +447,30 @@ enum LogLevel {
     Trace,
 }
 
-/// Converting from String to Listen for --listen option
-impl FromStr for LogLevel {
-    type Err = ();
-    fn from_str(src: &str) -> Result<LogLevel, ()> {
-        return match src.to_lowercase().trim() {
-            "none" => Ok(LogLevel::None),
-            "error" => Ok(LogLevel::Error),
-            "warn" => Ok(LogLevel::Warn),
-            "info" => Ok(LogLevel::Info),
-            "debug" => Ok(LogLevel::Debug),
-            "trace" => Ok(LogLevel::Trace),
-            _ => Err(()),
-        };
+/// is_ functions for the enum
+impl LogLevel {
+    pub fn is_none(&self) -> bool {
+        self == &Self::None
     }
+    // pub fn is_error(&self) -> bool { self == &Self::Error }
 }
+
+// No longer used, as ValueEnum from clap crate provides similar function.
+// /// Converting from String to Listen for --listen option
+// impl FromStr for LogLevel {
+//     type Err = ();
+//     fn from_str(src: &str) -> Result<LogLevel, ()> {
+//         return match src.to_lowercase().trim() {
+//             "none" => Ok(LogLevel::None),
+//             "error" => Ok(LogLevel::Error),
+//             "warn" => Ok(LogLevel::Warn),
+//             "info" => Ok(LogLevel::Info),
+//             "debug" => Ok(LogLevel::Debug),
+//             "trace" => Ok(LogLevel::Trace),
+//             _ => Err(()),
+//         };
+//     }
+// }
 
 /// Creates .to_string() for Listen for --listen option
 impl fmt::Display for LogLevel {
@@ -405,13 +482,14 @@ impl fmt::Display for LogLevel {
 }
 
 /// Enumerator used for --output option
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Output {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
     // We do not need to know if user used the option or not,
     // we just need to know the value.
     /// Text: Indicates to print human readable text, default
+    #[default]
     Text,
     /// Json: Indicates to print output in Json format
     Json,
@@ -419,6 +497,14 @@ enum Output {
     JsonMax,
     /// Json Spec: Indicates to to print output in Json format, but only data that is according to Matrix Specifications
     JsonSpec,
+}
+
+/// is_ functions for the enum
+impl Output {
+    pub fn is_text(&self) -> bool {
+        self == &Self::Text
+    }
+    // pub fn is_json_spec(&self) -> bool { self == &Self::JsonSpec }
 }
 
 /// Converting from String to Listen for --listen option
@@ -444,48 +530,586 @@ impl fmt::Display for Output {
     }
 }
 
-/// A public struct with private fields to keep the command line arguments from
-/// library `argparse`.
-#[derive(Clone, Debug)]
+// A public struct with private fields to keep the command line arguments from
+// library `clap`.
+/// Welcome to "matrix-commander-rs", a Matrix CLI client. ───
+/// On the first run use --login to log in, to authenticate.
+/// On the second run we suggest to use --verify to get verified.
+/// Emoji verification is built-in and can be used
+/// to verify devices.
+/// Or combine both --login and --verify in the first run.
+/// On further runs "matrix-commander-rs" implements a simple Matrix CLI
+/// client that can send messages or files, listen to messages,
+/// operate on rooms, etc.  ───  ───
+/// This project is currently only a vision.
+/// The Python package "matrix-commander" exists.
+/// The vision is to have a compatible program in Rust. I cannot
+/// do it myself, but I can coordinate and merge your pull requests.
+/// Have a look at the repo "https://github.com/8go/matrix-commander-rs/".
+/// Please help! Please contribute code to make this vision a reality,
+/// and to one day have a feature-rich "matrix-commander-rs" crate.
+/// Safe!
+#[derive(Clone, Debug, Parser)]
+#[command(author, version, next_line_help = true,
+    bin_name = get_prog_without_ext(),
+    color = ColorChoice::Always,
+    term_width = 79,
+    after_help = "",
+    disable_version_flag = true,
+)]
 pub struct Args {
+    /// Please contribute.
+    #[arg(long, default_value_t = false)]
     contribute: bool,
+
+    /// Print version number.
+    #[arg(short, long, default_value_t = false)]
     version: bool,
-    debug: usize,
+
+    /// Overwrite the default log level. If not used, then the default
+    /// log level set with environment variable 'RUST_LOG' will be used.
+    /// If used, log level will be set to 'DEBUG' and debugging information
+    /// will be printed.
+    /// '-d' is a shortcut for '--log-level DEBUG'.
+    /// See also '--log-level'. '-d' takes precedence over '--log-level'.
+    /// Additionally, have a look also at the option '--verbose'.
+    #[arg(short, long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
+    debug: u8,
+
+    /// Set the log level by overwriting the default log level.
+    /// If not used, then the default
+    /// log level set with environment variable 'RUST_LOG' will be used.
+    /// See also '--debug' and '--verbose'.
+    // Possible values are
+    // '{trace}', '{debug}', '{info}', '{warn}', and '{error}'.
+    #[arg(long, value_enum, default_value_t = LogLevel::default(), ignore_case = true, )]
     log_level: LogLevel,
-    verbose: usize,
+
+    /// Set the verbosity level. If not used, then verbosity will be
+    /// set to low. If used once, verbosity will be high.
+    /// If used more than once, verbosity will be very high.
+    /// Verbosity only affects the debug information.
+    /// So, if '--debug' is not used then '--verbose' will be ignored.
+    #[arg(long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
+    verbose: u8,
+
+    /// Login to and authenticate with the Matrix homeserver.
+    /// This requires exactly one argument, the login method.
+    /// Currently two choices are offered: 'password' and 'SSO'.
+    /// Provide one of these methods.
+    /// If you have chosen 'password',
+    /// you will authenticate through your account password. You can
+    /// optionally provide these additional arguments:
+    /// --homeserver to specify the Matrix homeserver,
+    /// --user-login to specify the log in user id,
+    /// --password to specify the password,
+    /// --device to specify a device name,
+    /// --room-default to specify a default room for sending/listening.
+    /// If you have chosen 'SSO',
+    /// you will authenticate through Single Sign-On. A web-browser will
+    /// be started and you authenticate on the webpage. You can
+    /// optionally provide these additional arguments:
+    /// --homeserver to specify the Matrix homeserver,
+    /// --user-login to specify the log in user id,
+    /// --device to specify a device name,
+    /// --room-default to specify a default room for sending/listening.
+    /// See all the extra arguments for further explanations. -----
+    /// SSO (Single Sign-On) starts a web
+    /// browser and connects the user to a web page on the
+    /// server for login. SSO will only work if the server
+    /// supports it and if there is access to a browser. So, don't use SSO
+    /// on headless homeservers where there is no
+    /// browser installed or accessible.
+    #[arg(long, value_enum, default_value_t = Login::default(), ignore_case = true, )]
     login: Login,
+
+    /// Perform verification. By default, no
+    /// verification is performed.
+    /// Verification is currently only offered via Emojis.
+    /// Hence, specify '--verify emoji'.
+    /// If verification is desired, run this program in the
+    /// foreground (not as a service) and without a pipe.
+    /// While verification is optional it is highly recommended, and it
+    /// is recommended to be done right after (or together with) the
+    /// --login action. Verification is always interactive, i.e. it
+    /// required keyboard input.
+    /// Verification questions
+    /// will be printed on stdout and the user has to respond
+    /// via the keyboard to accept or reject verification.
+    /// Once verification is complete, the program may be
+    /// run as a service. Verification is best done as follows:
+    /// Perform a cross-device verification, that means, perform a
+    /// verification between two devices of the *same* user. For that,
+    /// open (e.g.) Element in a browser, make sure Element is using the
+    /// same user account as the "matrix-commander-rs" user (specified with
+    /// --user-login at --login). Now in the Element webpage go to the room
+    /// that is the "matrix-commander-rs" default room (specified with
+    /// --room-default at --login). OK, in the web-browser you are now the
+    /// same user and in the same room as "matrix-commander-rs".
+    /// Now click the round 'i' 'Room Info' icon, then click 'People',
+    /// click the appropriate user (the "matrix-commander-rs" user),
+    /// click red 'Not Trusted' text
+    /// which indicated an untrusted device, then click the square
+    /// 'Interactively verify by Emoji' button (one of 3 button choices).
+    /// At this point both web-page and "matrix-commander-rs" in terminal
+    /// show a set of emoji icons and names. Compare them visually.
+    /// Confirm on both sides (Yes, They Match, Got it), finally click OK.
+    /// You should see a green shield and also see that the
+    /// "matrix-commander-rs" device is now green and verified in the webpage.
+    /// In the terminal you should see a text message indicating success.
+    /// You should now be verified across all devices and across all users.
+    #[arg(long, value_enum, default_value_t = Verify::default(), ignore_case = true, )]
     verify: Verify,
-    message: Vec<String>,
+
+    /// Logout this or all devices from the Matrix homeserver.
+    /// This requires exactly one argument.
+    /// Two choices are offered: 'me' and 'all'.
+    /// Provide one of these choices.
+    /// If you choose 'me', only the one device "matrix-commander-rs"
+    /// is currently using will be logged out.
+    /// If you choose 'all', all devices of the user used by
+    /// "matrix-commander-rs" will be logged out.
+    /// --logout not only logs the user out from the homeserver
+    /// thereby invalidates the access token, it also removes both
+    /// the 'credentials' file as well as the 'store' directory.
+    /// After a --logout, one must one must perform a new
+    /// --login to use "matrix-commander-rs" again.
+    /// You can perfectly use "matrix-commander-rs"
+    /// without ever logging out. --logout is a cleanup
+    /// if you have decided not to use this (or all) device(s) ever again.
+    #[arg(long, value_enum, default_value_t = Logout::default(), ignore_case = true, )]
     logout: Logout,
+
+    /// Specify a homeserver for use by certain actions.
+    /// It is an optional argument.
+    /// By default --homeserver is ignored and not used.
+    /// It is used by '--login' action.
+    /// If not provided for --login the user will be queried via keyboard.
+    #[arg(long)]
     homeserver: Option<Url>,
+
+    /// Optional argument to specify the user for --login.
+    /// This gives the otion to specify the user id for login.
+    /// For '--login sso' the --user-login is not needed as user id can be
+    /// obtained from server via SSO. For '--login password', if not
+    /// provided it will be queried via keyboard. A full user id like
+    /// '@john:example.com', a partial user name like '@john', and
+    /// a short user name like 'john' can be given.
+    /// --user-login is only used by --login and ignored by all other
+    /// actions.
+    #[arg(long)]
     user_login: Option<String>,
+
+    /// Specify a password for use by certain actions.
+    /// It is an optional argument.
+    /// By default --password is ignored and not used.
+    /// It is used by '--login password' and '--delete-device'
+    /// actions.
+    /// If not provided for --login or --delete-device
+    /// the user will be queried for the password via keyboard interactively.
+    #[arg(long)]
     password: Option<String>,
+
+    /// Specify a device name, for use by certain actions.
+    /// It is an optional argument.
+    /// By default --device is ignored and not used.
+    /// It is used by '--login' action.
+    /// If not provided for --login the user will be queried via keyboard.
+    /// If you want the default value specify ''.
+    /// Multiple devices (with different device id) may have the same device
+    /// name. In short, the same device name can be assigned to multiple
+    /// different devices if desired
+    /// Don't confuse this option with '--devices'.
+    #[arg(long)]
     device: Option<String>,
+
+    /// Optionally specify a room as the
+    /// default room for future actions. If not specified for --login, it
+    /// will be queried via the keyboard. --login stores the specified room
+    /// as default room in your credentials file. This option is only used
+    /// in combination with --login. A default room is needed. Specify a
+    /// valid room either with --room-default or provide it via keyboard.
+    #[arg(long)]
     room_default: Option<String>,
+
+    /// Print the list of devices. All device of this
+    /// account will be printed, one device per line.
+    /// Don't confuse this option with --device.
+    #[arg(long)]
     devices: bool,
+
+    /// Set the timeout of the calls to the Matrix server.
+    /// By default they are set to 60 seconds.
+    /// Specify the timeout in seconds. Use 0 for infinite timeout.
+    #[arg(long)]
     timeout: Option<u64>,
+
+    /// Send one or more messages. Message data must not be binary data, it
+    /// must be text.
+    // If no '-m' is used and no other conflicting
+    // arguments are provided, and information is piped into the program,
+    // then the piped data will be used as message.
+    // Finally, if there are no operations at all in the arguments, then
+    // a message will be read from stdin, i.e. from the keyboard.
+    // This option can be used multiple times to send
+    // multiple messages. If there is data piped
+    // into this program, then first data from the
+    // pipe is published, then messages from this
+    // option are published. Messages will be sent last,
+    // i.e. after objects like images, audio, files, events, etc.
+    /// Input piped via stdin can additionally be specified with the
+    /// special character '-'.
+    /// If you want to feed a text message into the program
+    /// via a pipe, via stdin, then specify the special
+    /// character '-'.
+    /// If your message is literally a single letter '-' then use an
+    /// escaped '\-' or a quoted "\-".
+    /// Depending on your shell, '-' might need to be escaped.
+    /// If this is the case for your shell, use the escaped '\-'
+    /// instead of '-' and '\\-' instead of '\-'.
+    /// However, depending on which shell you are using and if you are
+    /// quoting with double quotes or with single quotes, you may have
+    /// to add backslashes to achieve the proper escape sequences.
+    /// If you want to read the message from
+    /// the keyboard use '-' and do not pipe anything into stdin, then
+    /// a message will be requested and read from the keyboard.
+    /// Keyboard input is limited to one line.
+    /// The stdin indicator '-' may appear in any position,
+    /// i.e. -m 'start' '-' 'end'
+    /// will send 3 messages out of which the second one is read from stdin.
+    /// The stdin indicator '-' may appear only once overall in all arguments.
+    #[arg(short, long, num_args(0..), )]
+    message: Vec<String>,
+
+    /// There are 3 message formats for '--message'.
+    /// Plain text, MarkDown, and Code. By default, if no
+    /// command line options are specified, 'plain text'
+    /// will be used. Use '--markdown' or '--code' to set
+    /// the format to MarkDown or Code respectively.
+    /// '--markdown' allows sending of text
+    /// formatted in MarkDown language. '--code' allows
+    /// sending of text as a Code block.
+    #[arg(long)]
     markdown: bool,
+
+    /// There are 3 message formats for '--message'.
+    /// Plain text, MarkDown, and Code. By default, if no
+    /// command line options are specified, 'plain text'
+    /// will be used. Use '--markdown' or '--code' to set
+    /// the format to MarkDown or Code respectively.
+    /// '--markdown' allows sending of text
+    /// formatted in MarkDown language. '--code' allows
+    /// sending of text as a Code block.
+    #[arg(long)]
     code: bool,
+
+    // Optionally specify one or multiple rooms via room ids or
+    // room aliases. --room is used by various send actions and
+    // various listen actions.
+    // The default room is provided
+    // in the credentials file (specified at --login with --room-default).
+    // If a room (or multiple ones)
+    // is (or are) provided in the --room arguments, then it
+    // (or they) will be used
+    // instead of the one from the credentials file.
+    // The user must have access to the specified room
+    // in order to send messages there or listen on the room.
+    // Messages cannot
+    // be sent to arbitrary rooms. When specifying the
+    // room id some shells require the exclamation mark
+    // to be escaped with a backslash.
+    // As an alternative to specifying a room as destination,
+    // one can specify a user as a destination with the '--user'
+    // argument. See '--user' and the term 'DM (direct messaging)'
+    // for details. Specifying a room is always faster and more
+    // efficient than specifying a user. Not all listen operations
+    // allow setting a room. Read more under the --listen options
+    // and similar. Most actions also support room aliases instead of
+    // room ids. Some even short room aliases
+    /// Optionally specify one or multiple rooms by room ids.
+    /// '--room' is used by
+    /// various options like '--message', '--file', some
+    /// variants of '--listen', '--delete-device', etc.
+    /// If no '--room' is
+    /// provided the default room from the credentials file will be
+    /// used.
+    /// If a room is provided in the '--room' argument, then it
+    /// will be used
+    /// instead of the one from the credentials file.
+    /// The user must have access to the specified room
+    /// in order to send messages to it or listen on the room.
+    /// Messages cannot
+    /// be sent to arbitrary rooms. When specifying the
+    /// room id some shells require the exclamation mark
+    /// to be escaped with a backslash.
+    /// Not all listen operations
+    /// allow setting a room. Read more under the --listen options
+    /// and similar.
+    #[arg(short, long, num_args(0..), )]
     room: Vec<String>,
+
+    /// Send one or multiple files (e.g. PDF, DOC, MP4).
+    /// First files are sent,
+    /// then text messages are sent.
+    /// If you want to feed a file into "matrix-commander-rs"
+    /// via a pipe, via stdin, then specify the special
+    /// character '-' as stdin indicator.
+    /// See description of '--message' to see how the stdin indicator
+    /// '-' is handled.
+    /// If you pipe a file into stdin, you can optionally use '--file-name' to
+    /// attach a label and indirectly a MIME type to the piped data.
+    /// E.g. if you pipe in a PNG file, you might want to specify additionally
+    /// '--file-name image.png'. As such, the label 'image' will be given
+    /// to the data and the MIME type 'png' will be attached to it.
+    #[arg(short, long, num_args(0..), )]
     file: Vec<String>,
+
+    /// There are 3 message types for '--message'.
+    /// Text, Notice, and Emote. By default, if no
+    /// command line options are specified, 'Text'
+    /// will be used. Use '--notice' or '--emote' to set
+    /// the type to Notice or Emote respectively.
+    /// '--notice' allows sending of text
+    /// as a notice. '--emote' allows
+    /// sending of text as an emote.
+    #[arg(long)]
     notice: bool,
+
+    /// There are 3 message types for '--message'.
+    /// Text, Notice, and Emote. By default, if no
+    /// command line options are specified, 'Text'
+    /// will be used. Use '--notice' or '--emote' to set
+    /// the type to Notice or Emote respectively.
+    /// '--notice' allows sending of text
+    /// as a notice. '--emote' allows
+    /// sending of text as an emote.
+    #[arg(long)]
     emote: bool,
+
+    /// This option decides on whether the program
+    /// synchronizes the state with the server before a 'send' action.
+    /// Currently two choices are offered: 'full' and 'off'.
+    /// Provide one of these choices.
+    /// The default is 'full'. If you want to use the default,
+    /// then there is no need to use this option.
+    /// If you have chosen 'full',
+    /// the full state, all state events will be synchronized between
+    /// this program and the server before a 'send'.
+    /// If you have chosen 'off',
+    /// synchronization will be skipped entirely before the 'send'
+    /// which will improve performance.
+    #[arg(long, value_enum, default_value_t = Sync::default(), ignore_case = true, )]
     sync: Sync,
+
+    /// The '--listen' option takes one argument. There are
+    /// several choices: 'never', 'once', 'forever', 'tail',
+    /// and 'all'. By default, --listen is set to 'never'. So,
+    /// by default no listening will be done. Set it to
+    /// 'forever' to listen for and print incoming messages to
+    /// stdout. '--listen forever' will listen to all messages
+    /// on all rooms forever. To stop listening 'forever', use
+    /// Control-C on the keyboard or send a signal to the
+    /// process or service.
+    // The PID for signaling can be found
+    // in a PID file in directory "/home/user/.run".
+    /// '--listen once' will get all the messages from all rooms
+    /// that are currently queued up. So, with 'once' the
+    /// program will start, print waiting messages (if any)
+    /// and then stop. The timeout for 'once' is set to 10
+    /// seconds. So, be patient, it might take up to that
+    /// amount of time. 'tail' reads and prints the last N
+    /// messages from the specified rooms, then quits. The
+    /// number N can be set with the '--tail' option. With
+    /// 'tail' some messages read might be old, i.e. already
+    /// read before, some might be new, i.e. never read
+    /// before. It prints the messages and then the program
+    /// stops. Messages are sorted, last-first. Look at '--tail'
+    /// as that option is related to '--listen tail'. The option
+    /// 'all' gets all messages available, old and new. Unlike
+    /// 'once' and 'forever' that listen in ALL rooms, 'tail'
+    /// and 'all' listen only to the room specified in the
+    /// credentials file or the --room options.
+    #[arg(short, long, value_enum, default_value_t = Listen::default(), ignore_case = true, )]
     listen: Listen,
+
+    /// The '--tail' option reads and prints up to the last N
+    /// messages from the specified rooms, then quits. It
+    /// takes one argument, an integer, which we call N here.
+    /// If there are fewer than N messages in a room, it reads
+    /// and prints up to N messages. It gets the last N
+    /// messages in reverse order. It print the newest message
+    /// first, and the oldest message last. If '--listen-self'
+    /// is not set it will print less than N messages in many
+    /// cases because N messages are obtained, but some of
+    /// them are discarded by default if they are from the
+    /// user itself. Look at '--listen' as this option is
+    /// related to '--tail'.
+    #[arg(long, default_value_t = 0u64)]
     tail: u64,
+
+    /// If set and listening, then program will listen to and
+    /// print also the messages sent by its own user. By
+    /// default messages from oneself are not printed.
+    #[arg(short = 'y', long)]
     listen_self: bool,
+
+    /// Print the user id used by "matrix-commander-rs" (itself).
+    /// One can get this information also by looking at the
+    /// credentials file.
+    #[arg(long)]
     whoami: bool,
+
+    /// This option decides on how the output is presented.
+    /// Currently offered choices are: 'text', 'json', 'json-max',
+    /// and 'json-spec'. Provide one of these choices.
+    /// The default is 'text'. If you want to use the default,
+    /// then there is no need to use this option. If you have
+    /// chosen 'text', the output will be formatted with the
+    /// intention to be consumed by humans, i.e. readable
+    /// text. If you have chosen 'json', the output will be
+    /// formatted as JSON. The content of the JSON object
+    /// matches the data provided by the matrix-nio SDK. In
+    /// some occassions the output is enhanced by having a few
+    /// extra data items added for convenience. In most cases
+    /// the output will be processed by other programs rather
+    /// than read by humans. Option 'json-max' is practically
+    /// the same as 'json', but yet another additional field
+    /// is added. The data item 'transport_response' which
+    /// gives information on how the data was obtained and
+    /// transported is also being added. For '--listen' a few
+    /// more fields are added. In most cases the output will
+    /// be processed by other programs rather than read by
+    /// humans. Option 'json-spec' only prints information
+    /// that adheres 1-to-1 to the Matrix Specification.
+    /// Currently only the events on '--listen' and '--tail'
+    /// provide data exactly as in the Matrix Specification.
+    /// If no data is available that corresponds exactly with
+    /// the Matrix Specification, no data will be printed. In
+    /// short, currently '--json-spec' only provides outputs
+    /// for '--listen' and '--tail'.
+    // All other arguments like
+    // '--get-room-info' will print no output.
+    #[arg(short, long, value_enum, default_value_t = Output::default(), ignore_case = true, )]
     output: Output,
+
+    /// Get the room information such as room display name,
+    /// room alias, room creator, etc. for one or multiple
+    /// specified rooms. The included room 'display name' is
+    /// also referred to as 'room name' or incorrectly even as
+    /// room title. If one or more rooms are given, the room
+    /// information of these rooms will be fetched. If no
+    /// room is specified, the room information for the
+    /// pre-configured default room configured is
+    /// fetched.
+    // Rooms can be given via room id (e.g.
+    // '\!SomeRoomId:matrix.example.com'), canonical (full)
+    // room alias (e.g. '#SomeRoomAlias:matrix.example.com'),
+    // or short alias (e.g. 'SomeRoomAlias' or
+    // '#SomeRoomAlias').
+    /// As response room id, room display
+    /// name, room canonical alias, room topic, room creator,
+    /// and room encryption are printed. One line per room
+    /// will be printed.
+    // Since either room id or room alias
+    // are accepted as input and both room id and room alias
+    // are given as output, one can hence use this option to
+    // map from room id to room alias as well as vice versa
+    // from room alias to room id.
+    // Do not confuse this option
+    // with the options '--get-display-name' and
+    // '--set-display-name', which get/set the user display name,
+    // not the room display name.
+    #[arg(long, num_args(0..), )]
     get_room_info: Vec<String>,
+
+    /// Specify one or multiple file names for some actions.
+    /// This is an optional argument. Use this option in
+    /// combination with options like '--file'.
+    // or '--download'
+    /// to specify
+    /// one or multiple file names. Ignored if used by itself
+    /// without an appropriate corresponding action.
+    #[arg(long, num_args(0..), )]
     file_name: Vec<PathBuf>,
+
+    /// Create one or multiple rooms. One or multiple roo
+    /// aliases can be specified. For each alias specified a
+    /// room will be created. For each created room one line
+    /// with room id, alias, name and topic will be printed
+    /// to stdout. If
+    /// you are not interested in an alias, provide an empty
+    /// string like ''. The alias provided must be in canocial
+    /// local form, i.e. if you want a final full alias like
+    /// '#SomeRoomAlias:matrix.example.com' you must provide
+    /// the string 'SomeRoomAlias'. The user must be permitted
+    /// to create rooms. Combine --room-create with --name and
+    /// --topic to add names and topics to the room(s) to be
+    /// created.
+    /// If the output is in JSON format, then the values that
+    /// are not set and hence have default values are not shown
+    /// in the JSON output. E.g. if no topic is given, then
+    /// there will be no topic field in the JSON output.
+    /// Room aliases have to be unique.
+    #[arg(long, num_args(0..), )]
     room_create: Vec<String>,
+
+    /// Leave this room or these rooms. One or multiple room
+    /// aliases can be specified. The room (or multiple ones)
+    /// provided in the arguments will be left.
+    /// You can run both commands '--room-leave' and
+    /// '--room-forget' at the same time
+    #[arg(long, num_args(0..), )]
     room_leave: Vec<String>,
+
+    /// After leaving a room you should (most likely) forget
+    /// the room. Forgetting a room removes the users' room
+    /// history. One or multiple room aliases can be
+    /// specified. The room (or multiple ones) provided in the
+    /// arguments will be forgotten. If all users forget a
+    /// room, the room can eventually be deleted on the
+    /// server. You must leave a room first, before you can
+    /// forget it
+    /// You can run both commands '--room-leave' and
+    /// '--room-forget' at the same time
+    #[arg(long, num_args(0..), )]
     room_forget: Vec<String>,
+
+    /// Specify one or multiple names. This option is only
+    /// meaningful in combination with option --room-create.
+    /// This option --name specifies the names to be used with
+    /// the command --room-create.
+    #[arg(long, num_args(0..), )]
     name: Vec<String>,
+
+    /// Specify one or multiple topics. This option is only
+    /// meaningful in combination with option --room-create.
+    /// This option --topic specifies the topics to be used
+    /// with the command --room-create.
+    #[arg(long, num_args(0..), )]
     topic: Vec<String>,
+
+    /// Print the list of past and current rooms. All rooms that you
+    /// are currently a member of (joined rooms), that you had been a
+    /// member of in the past (left rooms), and rooms that you have
+    /// been invited to (invited rooms) will be printed,
+    /// one room per line. See also '--invited-rooms',
+    /// '--joined-rooms', and '--left-rooms'.
+    #[arg(long)]
     rooms: bool,
+
+    /// Print the list of invited rooms. All rooms that you are
+    /// currently invited to will be printed, one room per line.
+    #[arg(long)]
     invited_rooms: bool,
+
+    /// Print the list of joined rooms. All rooms that you are
+    /// currently a member of will be printed, one room per line.
+    #[arg(long)]
     joined_rooms: bool,
+
+    /// Print the list of left rooms. All rooms that you have
+    /// left in the past will be printed, one room per line.
+    #[arg(long)]
     left_rooms: bool,
 }
 
@@ -500,9 +1124,9 @@ impl Args {
         Args {
             contribute: false,
             version: false,
-            debug: 0usize,
+            debug: 0u8,
             log_level: LogLevel::None,
-            verbose: 0usize,
+            verbose: 0u8,
             login: Login::None,
             verify: Verify::None,
             message: Vec::new(),
@@ -695,7 +1319,7 @@ pub struct GlobalState {
     // self.warn_count = 0  # how many warnings have occurred so far
 }
 
-// implement the Default trait for GlobalState
+/// implement the Default trait for GlobalState
 impl Default for GlobalState {
     fn default() -> Self {
         Self::new()
@@ -1058,13 +1682,14 @@ fn sledstore_exist(gs: &GlobalState) -> bool {
 
 /// Handle the --login CLI argument
 pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
-    if gs.ap.login == Login::None {
+    if gs.ap.login.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if gs.ap.login == Login::Sso || gs.ap.login == Login::AccessToken {
+    if !gs.ap.login.is_password() {
         error!(
-            "Login option '{:?}' currently not supported. Use 'password' for the time being.",
-            gs.ap.login
+            "Login option '{:?}' currently not supported. Use '{:?}' for the time being.",
+            gs.ap.login,
+            Login::Password
         );
         return Err(Error::UnsupportedCliParameter);
     }
@@ -1125,8 +1750,22 @@ pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client, Er
 }
 
 /// Handle the --verify CLI argument
-pub(crate) async fn cli_verify(clientres: &Result<Client, Error>) -> Result<(), Error> {
+pub(crate) async fn cli_verify(
+    clientres: &Result<Client, Error>,
+    gs: &GlobalState,
+) -> Result<(), Error> {
     info!("Verify chosen.");
+    if gs.ap.verify.is_none() {
+        return Err(Error::UnsupportedCliParameter);
+    }
+    if !gs.ap.verify.is_emoji() {
+        error!(
+            "Verify option '{:?}' currently not supported. Use '{:?}' for the time being.",
+            gs.ap.verify,
+            Verify::Emoji
+        );
+        return Err(Error::UnsupportedCliParameter);
+    }
     crate::verify(clientres).await
 }
 
@@ -1152,9 +1791,9 @@ pub(crate) async fn cli_message(
             info!("Skipping '--' text message as these are used to separate arguments.");
             continue;
         };
-        // \- and \\- map to - (stdin pipe)
-        // \\\- maps to text r'-', a 1-letter message
-        let fmsg = if msg == r"\-" || msg == r"\\-" {
+        // - map to - (stdin pipe)
+        // \- maps to text r'-', a 1-letter message
+        let fmsg = if msg == r"-" {
             let mut line = String::new();
             if atty::is(Stream::Stdin) {
                 print!("Message: ");
@@ -1166,7 +1805,7 @@ pub(crate) async fn cli_message(
                 io::stdin().read_to_string(&mut line)?;
             }
             line
-        } else if msg == r"\\\-" {
+        } else if msg == r"\-" {
             "-".to_string()
         } else if msg == r"\-\-" {
             "--".to_string()
@@ -1208,8 +1847,8 @@ pub(crate) async fn cli_file(
     for filename in &gs.ap.file {
         match filename.as_str() {
             "" => info!("Skipping empty file name."),
-            r"\-" | r"\\-" => files.push(PathBuf::from("-".to_string())),
-            r"\\\-" => files.push(PathBuf::from(r"\-".to_string())),
+            r"-" => files.push(PathBuf::from("-".to_string())),
+            r"\-" => files.push(PathBuf::from(r"\-".to_string())),
             _ => files.push(PathBuf::from(filename)),
         }
     }
@@ -1425,13 +2064,14 @@ pub(crate) async fn cli_logout(
     gs: &GlobalState,
 ) -> Result<(), Error> {
     info!("Logout chosen.");
-    if gs.ap.logout == Logout::None {
+    if gs.ap.logout.is_none() {
         return Ok(());
     }
-    if gs.ap.logout == Logout::All {
+    // TODO add `all`
+    if gs.ap.logout.is_all() {
         error!(
             "Logout option '{:?}' currently not supported. Use '{:?}' for the time being.",
-            Logout::All,
+            gs.ap.logout,
             Logout::Me
         );
         return Err(Error::UnsupportedCliParameter);
@@ -1442,778 +2082,23 @@ pub(crate) async fn cli_logout(
 /// We need your code contributions! Please add features and make PRs! :pray: :clap:
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let prog_desc: String;
-    let loglevel_desc: String;
-    let verify_desc: String;
-    let login_desc: String;
-    let logout_desc: String;
-    let sync_desc: String;
-    let whoami_desc: String;
-    let file_desc: String;
-
     let mut gs: GlobalState = GlobalState::new();
-
-    {
-        // this block limits scope of borrows by ap.refer() method
-        let mut ap = ArgumentParser::new();
-        prog_desc = format!(
-            concat!(
-                "Welcome to {prog:?}, a Matrix CLI client. ─── ",
-                "On first run use --login to log in, to authenticate. ",
-                "On second run we suggest to use --verify to get verified. ",
-                "Emoji verification is built-in which can be used ",
-                "to verify devices. ",
-                "Or combine both --login and --verify in the first run. ",
-                "On further runs {prog:?} implements a simple Matrix CLI ",
-                "client that can send messages or files, listen to messages, ",
-                "operate on rooms, ",
-                "etc.  ───  ─── ",
-                "This project is currently only a vision. The Python package {prog:?} ",
-                "exists. The vision is to have a compatible program in Rust. I cannot ",
-                "do it myself, but I can coordinate and merge your pull requests. ",
-                "Have a look at the repo {repo:?}. Please help! Please contribute ",
-                "code to make this vision a reality, and to one day have a functional ",
-                "{prog:?} crate. Safe!",
-            ),
-            prog = get_prog_without_ext(),
-            repo = get_pkg_repository()
-        );
-        ap.set_description(&prog_desc);
-        ap.refer(&mut gs.ap.contribute).add_option(
-            &["--contribute"],
-            StoreTrue,
-            "Please contribute.",
-        );
-        ap.refer(&mut gs.ap.version).add_option(
-            &["-v", "--version"],
-            StoreTrue,
-            "Print version number.",
-        );
-        ap.refer(&mut gs.ap.debug).add_option(
-            &["-d", "--debug"],
-            IncrBy(1usize),
-            concat!(
-                "Overwrite the default log level. If not used, then the default ",
-                "log level set with environment variable 'RUST_LOG' will be used. ",
-                "If used, log level will be set to 'DEBUG' and debugging information ",
-                "will be printed. ",
-                "'-d' is a shortcut for '--log-level DEBUG'. ",
-                "See also '--log-level'. '-d' takes precedence over '--log-level'. ",
-                "Additionally, have a look also at the option '--verbose'. ",
-            ),
-        );
-        loglevel_desc = format!(
-            concat!(
-                "Set the log level by overwriting the default log level. ",
-                "If not used, then the default ",
-                "log level set with environment variable 'RUST_LOG' will be used. ",
-                "Possible values are ",
-                "'{trace}', '{debug}', '{info}', '{warn}', and '{error}'. ",
-                "See also '--debug' and '--verbose'.",
-            ),
-            error = LogLevel::Error,
-            warn = LogLevel::Warn,
-            info = LogLevel::Info,
-            debug = LogLevel::Debug,
-            trace = LogLevel::Trace,
-        );
-        ap.refer(&mut gs.ap.log_level)
-            .add_option(&["--log-level"], Store, &loglevel_desc);
-        ap.refer(&mut gs.ap.verbose).add_option(
-            &["--verbose"],
-            IncrBy(1usize),
-            concat!(
-                "Set the verbosity level. If not used, then verbosity will be ",
-                "set to low. If used once, verbosity will be high. ",
-                "If used more than once, verbosity will be very high. ",
-                "Verbosity only affects the debug information. ",
-                "So, if '--debug' is not used then '--verbose' will be ignored.",
-            ),
-        );
-        login_desc = format!(
-            concat!(
-                "Login to and authenticate with the Matrix homeserver. ",
-                "This requires exactly one argument, the login method. ",
-                "Currently two choices are offered: '{password}' and '{sso}'. ",
-                "Provide one of these methods. ",
-                "If you have chosen '{password}', ",
-                "you will authenticate through your account password. You can ",
-                "optionally provide these additional arguments: ",
-                "--homeserver to specify the Matrix homeserver, ",
-                "--user-login to specify the log in user id, ",
-                "--password to specify the password, ",
-                "--device to specify a device name, ",
-                "--room-default to specify a default room for sending/listening. ",
-                "If you have chosen '{sso}', ",
-                "you will authenticate through Single Sign-On. A web-browser will ",
-                "be started and you authenticate on the webpage. You can ",
-                "optionally provide these additional arguments: ",
-                "--homeserver to specify the Matrix homeserver, ",
-                "--user-login to specify the log in user id, ",
-                "--device to specify a device name, ",
-                "--room-default to specify a default room for sending/listening. ",
-                "See all the extra arguments for further explanations. ----- ",
-                "SSO (Single Sign-On) starts a web ",
-                "browser and connects the user to a web page on the ",
-                "server for login. SSO will only work if the server ",
-                "supports it and if there is access to a browser. So, don't use SSO ",
-                "on headless homeservers where there is no ",
-                "browser installed or accessible.",
-            ),
-            password = Login::Password,
-            sso = Login::Sso,
-        );
-        ap.refer(&mut gs.ap.login)
-            .add_option(&["--login"], Store, &login_desc);
-
-        verify_desc = format!(
-            concat!(
-                "Perform verification. By default, no ",
-                "verification is performed. ",
-                "Verification is currently only offered via Emojis. ",
-                "Hence, specify '--verify {emoji}'. ",
-                "If verification is desired, run this program in the ",
-                "foreground (not as a service) and without a pipe. ",
-                "While verification is optional it is highly recommended, and it ",
-                "is recommended to be done right after (or together with) the ",
-                "--login action. Verification is always interactive, i.e. it ",
-                "required keyboard input. ",
-                "Verification questions ",
-                "will be printed on stdout and the user has to respond ",
-                "via the keyboard to accept or reject verification. ",
-                "Once verification is complete, the program may be ",
-                "run as a service. Verification is best done as follows: ",
-                "Perform a cross-device verification, that means, perform a ",
-                "verification between two devices of the *same* user. For that, ",
-                "open (e.g.) Element in a browser, make sure Element is using the ",
-                "same user account as the {prog} user (specified with ",
-                "--user-login at --login). Now in the Element webpage go to the room ",
-                "that is the {prog} default room (specified with ",
-                "--room-default at --login). OK, in the web-browser you are now the ",
-                "same user and in the same room as {prog}. ",
-                "Now click the round 'i' 'Room Info' icon, then click 'People', ",
-                "click the appropriate user (the {prog} user), ",
-                "click red 'Not Trusted' text ",
-                "which indicated an untrusted device, then click the square ",
-                "'Interactively verify by Emoji' button (one of 3 button choices). ",
-                "At this point both web-page and {prog} in terminal ",
-                "show a set of emoji icons and names. Compare them visually. ",
-                "Confirm on both sides (Yes, They Match, Got it), finally click OK. ",
-                "You should see a green shield and also see that the ",
-                "{prog} device is now green and verified in the webpage. ",
-                "In the terminal you should see a text message indicating success. ",
-                "You should now be verified across all devices and across all users.",
-            ),
-            prog = get_prog_without_ext(),
-            emoji = Verify::Emoji,
-        );
-        ap.refer(&mut gs.ap.verify)
-            .add_option(&["--verify"], Store, &verify_desc);
-
-        logout_desc = format!(
-            concat!(
-                "Logout this or all devices from the Matrix homeserver. ",
-                "This requires exactly one argument. ",
-                "Two choices are offered: '{me}' and '{all}'. ",
-                "Provide one of these choices. ",
-                "If you choose 'me', only the one device {prog} ",
-                "is currently using will be logged out. ",
-                "If you choose 'all', all devices of the user used by ",
-                "{prog} will be logged out. ",
-                "While --logout neither removes the credentials nor the store, the ",
-                "logout action removes the device and makes the access-token stored ",
-                "in the credentials invalid. Hence, after a --logout, one must ",
-                "manually remove creditials and store, and then perform a new ",
-                "--login to use {prog} again. ",
-                "You can perfectly use ",
-                "{prog} without ever logging out. --logout is a cleanup ",
-                "if you have decided not to use this (or all) device(s) ever again.",
-            ),
-            prog = get_prog_without_ext(),
-            me = Logout::Me,
-            all = Logout::All,
-        );
-        ap.refer(&mut gs.ap.logout)
-            .add_option(&["--logout"], Store, &logout_desc);
-
-        ap.refer(&mut gs.ap.homeserver).add_option(
-            &["--homeserver"],
-            StoreOption,
-            concat!(
-                "Specify a homeserver for use by certain actions. ",
-                "It is an optional argument. ",
-                "By default --homeserver is ignored and not used. ",
-                "It is used by '--login' action. ",
-                "If not provided for --login the user will be queried via keyboard.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.user_login).add_option(
-            &["--user-login"], // @john:example.com and @john and john accepted
-            StoreOption,
-            concat!(
-                "Optional argument to specify the user for --login. ",
-                "This gives the otion to specify the user id for login. ",
-                "For '--login sso' the --user-login is not needed as user id can be ",
-                "obtained from server via SSO. For '--login password', if not ",
-                "provided it will be queried via keyboard. A full user id like ",
-                "'@john:example.com', a partial user name like '@john', and ",
-                "a short user name like 'john' can be given. ",
-                "--user-login is only used by --login and ignored by all other ",
-                "actions.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.password).add_option(
-            &["--password"],
-            StoreOption,
-            concat!(
-                "Specify a password for use by certain actions. ",
-                "It is an optional argument. ",
-                "By default --password is ignored and not used. ",
-                "It is used by '--login password' and '--delete-device' ",
-                "actions. ",
-                "If not provided for --login the user will be queried via keyboard.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.device).add_option(
-            &["--device"],
-            StoreOption,
-            concat!(
-                "Specify a device name, for use by certain actions. ",
-                "It is an optional argument. ",
-                "By default --device is ignored and not used. ",
-                "It is used by '--login' action. ",
-                "If not provided for --login the user will be queried via keyboard. ",
-                "If you want the default value specify ''. ",
-                "Multiple devices (with different device id) may have the same device ",
-                "name. In short, the same device name can be assigned to multiple ",
-                "different devices if desired.",
-                "Don't confuse this option with --devices. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.room_default).add_option(
-            &["--room-default"],
-            StoreOption,
-            concat!(
-                "Optionally specify a room as the ",
-                "default room for future actions. If not specified for --login, it ",
-                "will be queried via the keyboard. --login stores the specified room ",
-                "as default room in your credentials file. This option is only used ",
-                "in combination with --login. A default room is needed. Specify a ",
-                "valid room either with --room-default or provide it via keyboard.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.devices).add_option(
-            &["--devices"],
-            StoreTrue,
-            concat!(
-                "Print the list of devices. All device of this ",
-                "account will be printed, one device per line. ",
-                "Don't confuse this option with --device. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.timeout).add_option(
-            &["--timeout"],
-            StoreOption,
-            concat!(
-                "Set the timeout of the calls to the Matrix server. ",
-                "By default they are set to 60 seconds. ",
-                "Specify the timeout in seconds. Use 0 for infinite timeout. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.message).add_option(
-            &["-m", "--message"],
-            List,
-            concat!(
-                "Send one or more messages. Message data must not be binary data, it ",
-                "must be text. ",
-                // If no '-m' is used and no other conflicting ",
-                // "arguments are provided, and information is piped into the program, ",
-                // "then the piped data will be used as message. ",
-                // "Finally, if there are no operations at all in the arguments, then ",
-                // "a message will be read from stdin, i.e. from the keyboard. ",
-                // "This option can be used multiple times to send ",
-                // "multiple messages. If there is data piped ",
-                // "into this program, then first data from the ",
-                // "pipe is published, then messages from this ",
-                // "option are published. Messages will be sent last, ",
-                // "i.e. after objects like images, audio, files, events, etc. ",
-                "Input piped via stdin can additionally be specified with the ",
-                "special character '-'. ",
-                "Since '-' is also a special character for argument parsing, ",
-                "the '-' for stdin pipe has to be escaped twice. In short, ",
-                r"use '\\-' to indicated stdin pipe. ",
-                "If you want to feed a text message into the program ",
-                "via a pipe, via stdin, then specify the special ",
-                r"character '\\-'. ",
-                r"If your message is literally a single letter '-' then use a ",
-                r"triple-escaped '-', i.e. '\\\-'. ",
-                "However, depending on which shell you are using and if you are ",
-                "quoting with double qotes or with single quotes, you may have ",
-                "to add more backslashes to achieve double or triple escape sequences. ",
-                "as message in the argument. If you want to read the message from ",
-                r"the keyboard use '\\-' and do not pipe anything into stdin, then ",
-                "a message will be requested and read from the keyboard. ",
-                "Keyboard input is limited to one line. ",
-                "The stdin indicator '-' may appear in any position, ",
-                r"i.e. -m 'start' '\\-' 'end' ",
-                "will send 3 messages out of which the second one is read from stdin. ",
-                "The stdin indicator '-' may appear only once overall in all arguments. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.markdown).add_option(
-            &["--markdown"],
-            StoreTrue,
-            concat!(
-                "There are 3 message formats for '--message'. ",
-                "Plain text, MarkDown, and Code. By default, if no ",
-                "command line options are specified, 'plain text' ",
-                "will be used. Use '--markdown' or '--code' to set ",
-                "the format to MarkDown or Code respectively. ",
-                "'--markdown' allows sending of text ",
-                "formatted in MarkDown language. '--code' allows ",
-                "sending of text as a Code block.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.code).add_option(
-            &["--code"],
-            StoreTrue,
-            concat!(
-                "There are 3 message formats for '--message'. ",
-                "Plain text, MarkDown, and Code. By default, if no ",
-                "command line options are specified, 'plain text' ",
-                "will be used. Use '--markdown' or '--code' to set ",
-                "the format to MarkDown or Code respectively. ",
-                "'--markdown' allows sending of text ",
-                "formatted in MarkDown language. '--code' allows ",
-                "sending of text as a Code block.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.room).add_option(
-            &["-r", "--room"],
-            List,
-            concat!(
-                // "Optionally specify one or multiple rooms via room ids or ",
-                // "room aliases. --room is used by various send actions and ",
-                // "various listen actions. ",
-                // "The default room is provided ",
-                // "in the credentials file (specified at --login with --room-default). ",
-                // "If a room (or multiple ones) ",
-                // "is (or are) provided in the --room arguments, then it ",
-                // "(or they) will be used ",
-                // "instead of the one from the credentials file. ",
-                // "The user must have access to the specified room ",
-                // "in order to send messages there or listen on the room. ",
-                // "Messages cannot ",
-                // "be sent to arbitrary rooms. When specifying the ",
-                // "room id some shells require the exclamation mark ",
-                // "to be escaped with a backslash. ",
-                // "As an alternative to specifying a room as destination, ",
-                // "one can specify a user as a destination with the '--user' ",
-                // "argument. See '--user' and the term 'DM (direct messaging)' ",
-                // "for details. Specifying a room is always faster and more ",
-                // "efficient than specifying a user. Not all listen operations ",
-                // "allow setting a room. Read more under the --listen options ",
-                // "and similar. Most actions also support room aliases instead of ",
-                // "room ids. Some even short room aliases.",
-                "Optionally specify one or multiple rooms by room ids. ",
-                "'--room' is used by ",
-                "by various options like '--message', '--file', and some ",
-                "variants of '--listen'. ",
-                "If no '--room' is ",
-                "provided the default room from the credentials file will be ",
-                "used. ",
-                "If a room is provided in the '--room' argument, then it ",
-                "will be used ",
-                "instead of the one from the credentials file. ",
-                "The user must have access to the specified room ",
-                "in order to send messages to it or listen on the room. ",
-                "Messages cannot ",
-                "be sent to arbitrary rooms. When specifying the ",
-                "room id some shells require the exclamation mark ",
-                "to be escaped with a backslash. ",
-                "Not all listen operations ",
-                "allow setting a room. Read more under the --listen options ",
-                "and similar. ",
-            ),
-        );
-
-        file_desc = format!(
-            concat!(
-                "Send one or multiple files (e.g. PDF, DOC, MP4). ",
-                "First files are sent, ",
-                "then text messages are sent. ",
-                "If you want to feed a file into {prog:?} ",
-                "via a pipe, via stdin, then specify the special ",
-                "character '-' as stdin indicator. ",
-                "See description of '--message' to see how the stdin indicator ",
-                "'-' is handled. ",
-                "If you pipe a file into stdin, you can optionally use '--file-name' to ",
-                "attach a label and indirectly a MIME type to the piped data. ",
-                "E.g. if you pipe in a PNG file, you might want to specify additionally ",
-                "'--file-name image.png'. As such the label 'image' will be given ",
-                "to the data and the MIME type 'png' will be attached to it. "
-            ),
-            prog = get_prog_without_ext()
-        );
-
-        ap.refer(&mut gs.ap.file)
-            .add_option(&["-f", "--file"], List, &file_desc);
-
-        ap.refer(&mut gs.ap.notice).add_option(
-            &["--notice"],
-            StoreTrue,
-            concat!(
-                "There are 3 message types for '--message'. ",
-                "Text, Notice, and Emote. By default, if no ",
-                "command line options are specified, 'Text' ",
-                "will be used. Use '--notice' or '--emote' to set ",
-                "the type to Notice or Emote respectively. ",
-                "'--notice' allows sending of text ",
-                "as a notice. '--emote' allows ",
-                "sending of text as an emote.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.emote).add_option(
-            &["--emote"],
-            StoreTrue,
-            concat!(
-                "There are 3 message types for '--message'. ",
-                "Text, Notice, and Emote. By default, if no ",
-                "command line options are specified, 'Text' ",
-                "will be used. Use '--notice' or '--emote' to set ",
-                "the type to Notice or Emote respectively. ",
-                "'--notice' allows sending of text ",
-                "as a notice. '--emote' allows ",
-                "sending of text as an emote.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.room_create).add_option(
-            &["--room-create"],
-            List,
-            concat!(
-                "Create one or multiple rooms. One or multiple room",
-                "aliases can be specified. For each alias specified a ",
-                "room will be created. For each created room one line ",
-                "with room id, alias, name and topic will be printed ",
-                "to stdout. If ",
-                "you are not interested in an alias, provide an empty ",
-                "string like ''. The alias provided must be in canocial ",
-                "local form, i.e. if you want a final full alias like ",
-                "'#SomeRoomAlias:matrix.example.com' you must provide ",
-                "the string 'SomeRoomAlias'. The user must be permitted ",
-                "to create rooms. Combine --room-create with --name and ",
-                "--topic to add names and topics to the room(s) to be ",
-                "created. ",
-                "If the output is in JSON format, then the values that ",
-                "are not set and hence have default values are not shown ",
-                "in the JSON output. E.g. if no topic is given, then ",
-                "there will be no topic field in the JSON output. ",
-                "Room aliases have to be unique. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.room_leave).add_option(
-            &["--room-leave"],
-            List,
-            concat!(
-                "Leave this room or these rooms. One or multiple room ",
-                "aliases can be specified. The room (or multiple ones) ",
-                "provided in the arguments will be left. ",
-                "You can run both commands '--room-leave' and ",
-                "'--room-forget' at the same time.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.room_forget).add_option(
-            &["--room-forget"],
-            List,
-            concat!(
-                "After leaving a room you should (most likely) forget ",
-                r"the room. Forgetting a room removes the users\' room ",
-                "history. One or multiple room aliases can be ",
-                "specified. The room (or multiple ones) provided in the ",
-                "arguments will be forgotten. If all users forget a ",
-                "room, the room can eventually be deleted on the ",
-                "server. You must leave a room first, before you can ",
-                "forget it.",
-                "You can run both commands '--room-leave' and ",
-                "'--room-forget' at the same time.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.name).add_option(
-            &["--name"],
-            List,
-            concat!(
-                "Specify one or multiple names. This option is only ",
-                "meaningful in combination with option --room-create. ",
-                "This option --name specifies the names to be used with ",
-                "the command --room-create. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.topic).add_option(
-            &["--topic"],
-            List,
-            concat!(
-                "TOPIC [TOPIC ...] ",
-                "Specify one or multiple topics. This option is only ",
-                "meaningful in combination with option --room-create. ",
-                "This option --topic specifies the topics to be used ",
-                "with the command --room-create. ",
-            ),
-        );
-
-        sync_desc = format!(
-            concat!(
-                "This option decides on whether the program ",
-                "synchronizes the state with the server before a 'send' action. ",
-                "Currently two choices are offered: '{full}' and '{off}'. ",
-                "Provide one of these choices. ",
-                "The default is '{full}'. If you want to use the default, ",
-                "then there is no need to use this option. ",
-                "If you have chosen '{full}', ",
-                "the full state, all state events will be synchronized between ",
-                "this program and the server before a 'send'. ",
-                "If you have chosen '{off}', ",
-                "synchronization will be skipped entirely before the 'send' ",
-                "which will improve performance.",
-            ),
-            full = Sync::Full,
-            off = Sync::Off
-        );
-        ap.refer(&mut gs.ap.sync)
-            .add_option(&["--sync"], Store, &sync_desc);
-
-        ap.refer(&mut gs.ap.listen).add_option(
-            &["--listen"],
-            Store,
-            concat!(
-                "The '--listen' option takes one argument. There are ",
-                "several choices: 'never', 'once', 'forever', 'tail', ",
-                "and 'all'. By default, --listen is set to 'never'. So, ",
-                "by default no listening will be done. Set it to ",
-                "'forever' to listen for and print incoming messages to ",
-                "stdout. '--listen forever' will listen to all messages ",
-                "on all rooms forever. To stop listening 'forever', use ",
-                "Control-C on the keyboard or send a signal to the ",
-                "process or service. ",
-                // The PID for signaling can be found ",
-                // "in a PID file in directory "/home/user/.run". "-- ",
-                "'--listen once' will get all the messages from all rooms ",
-                "that are currently queued up. So, with 'once' the ",
-                "program will start, print waiting messages (if any) ",
-                "and then stop. The timeout for 'once' is set to 10 ",
-                "seconds. So, be patient, it might take up to that ",
-                "amount of time. 'tail' reads and prints the last N ",
-                "messages from the specified rooms, then quits. The ",
-                "number N can be set with the '--tail' option. With ",
-                "'tail' some messages read might be old, i.e. already ",
-                "read before, some might be new, i.e. never read ",
-                "before. It prints the messages and then the program ",
-                "stops. Messages are sorted, last-first. Look at '--tail' ",
-                "as that option is related to '--listen tail'. The option ",
-                "'all' gets all messages available, old and new. Unlike ",
-                "'once' and 'forever' that listen in ALL rooms, 'tail' ",
-                "and 'all' listen only to the room specified in the ",
-                "credentials file or the --room options. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.tail).add_option(
-            &["--tail"],
-            Store,
-            concat!(
-                "The '--tail' option reads and prints up to the last N ",
-                "messages from the specified rooms, then quits. It ",
-                "takes one argument, an integer, which we call N here. ",
-                "If there are fewer than N messages in a room, it reads ",
-                "and prints up to N messages. It gets the last N ",
-                "messages in reverse order. It print the newest message ",
-                "first, and the oldest message last. If '--listen-self' ",
-                "is not set it will print less than N messages in many ",
-                "cases because N messages are obtained, but some of ",
-                "them are discarded by default if they are from the ",
-                "user itself. Look at '--listen' as this option is ",
-                "related to '--tail'. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.listen_self).add_option(
-            &["-y", "--listen-self"],
-            StoreTrue,
-            concat!(
-                "If set and listening, then program will listen to and ",
-                "print also the messages sent by its own user. By ",
-                "default messages from oneself are not printed. ",
-            ),
-        );
-
-        whoami_desc = format!(
-            concat!(
-                "Print the user id used by {prog} (itself). ",
-                "One can get this information also by looking at the ",
-                "credentials file. ",
-            ),
-            prog = get_prog_without_ext(),
-        );
-
-        ap.refer(&mut gs.ap.whoami)
-            .add_option(&["--whoami"], StoreTrue, &whoami_desc);
-
-        ap.refer(&mut gs.ap.output).add_option(
-            &["--output"],
-            Store,
-            concat!(
-                "This option decides on how the output is presented. ",
-                "Currently offered choices are: 'text', 'json', 'json-max', ",
-                "and 'json-spec'. Provide one of these choices. ",
-                "The default is 'text'. If you want to use the default, ",
-                "then there is no need to use this option. If you have ",
-                "chosen 'text', the output will be formatted with the ",
-                "intention to be consumed by humans, i.e. readable ",
-                "text. If you have chosen 'json', the output will be ",
-                "formatted as JSON. The content of the JSON object ",
-                "matches the data provided by the matrix-nio SDK. In ",
-                "some occassions the output is enhanced by having a few ",
-                "extra data items added for convenience. In most cases ",
-                "the output will be processed by other programs rather ",
-                "than read by humans. Option 'json-max' is practically ",
-                "the same as 'json', but yet another additional field ",
-                "is added. The data item 'transport_response' which ",
-                "gives information on how the data was obtained and ",
-                "transported is also being added. For '--listen' a few ",
-                "more fields are added. In most cases the output will ",
-                "be processed by other programs rather than read by ",
-                "humans. Option 'json-spec' only prints information ",
-                "that adheres 1-to-1 to the Matrix Specification. ",
-                "Currently only the events on '--listen' and '--tail' ",
-                "provide data exactly as in the Matrix Specification. ",
-                "If no data is available that corresponds exactly with ",
-                "the Matrix Specification, no data will be printed. In ",
-                "short, currently '--json-spec' only provides outputs ",
-                "for '--listen' and '--tail'. ",
-                // "All other arguments like ",
-                // "'--get-room-info' will print no output. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.get_room_info).add_option(
-            &["--get-room-info"],
-            List,
-            concat!(
-                "Get the room information such as room display name, ",
-                "room alias, room creator, etc. for one or multiple ",
-                "specified rooms. The included room 'display name' is ",
-                "also referred to as 'room name' or incorrectly even as ",
-                "room title. If one or more room are given, the room ",
-                "informations of these rooms will be fetched. If no ",
-                "room is specified, the room information for the ",
-                "pre-configured default room configured is ",
-                "fetched. ",
-                "If no room is given, '--' must be used. ",
-                // "Rooms can be given via room id (e.g. ",
-                // "'\!SomeRoomId:matrix.example.com'), canonical (full) ",
-                // "room alias (e.g. '#SomeRoomAlias:matrix.example.com'), ",
-                // "or short alias (e.g. 'SomeRoomAlias' or ",
-                // "'#SomeRoomAlias'). ",
-                "As response room id, room display ",
-                "name, room canonical alias, room topic, room creator, ",
-                "and room encryption are printed. One line per room ",
-                "will be printed. ",
-                // "Since either room id or room alias ",
-                // "are accepted as input and both room id and room alias ",
-                // "are given as output, one can hence use this option to ",
-                // "map from room id to room alias as well as vice versa ",
-                // "from room alias to room id. ",
-                // "Do not confuse this option ",
-                // "with the options '--get-display-name' and ",
-                // "'--set-display-name', which get/set the user display name, ",
-                // "not the room display name. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.file_name).add_option(
-            &["--file-name"],
-            List,
-            concat!(
-                "Specify one or multiple file names for some actions. ",
-                "This is an optional argument. Use this option in ",
-                "combination with options like '--file -' ",
-                // "or '--download' ",
-                "to specify ",
-                "one or multiple file names. Ignored if used by itself ",
-                "without an appropriate corresponding action.",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.rooms).add_option(
-            &["--rooms"],
-            StoreTrue,
-            concat!(
-                "Print the list of past and current rooms. All rooms that you ",
-                "are currently a member of (joined rooms), that you had been a ",
-                "member of in the past (left rooms), and rooms that you have ",
-                "been invited to (invited rooms) will be printed, ",
-                "one room per line. See also '--invited-rooms', ",
-                "'--joined-rooms', and '--left-rooms'. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.invited_rooms).add_option(
-            &["--invited-rooms"],
-            StoreTrue,
-            concat!(
-                "Print the list of invited rooms. All rooms that you are ",
-                "currently invited to will be printed, one room per line. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.joined_rooms).add_option(
-            &["--joined-rooms"],
-            StoreTrue,
-            concat!(
-                "Print the list of joined rooms. All rooms that you are ",
-                "currently a member of will be printed, one room per line. ",
-            ),
-        );
-
-        ap.refer(&mut gs.ap.left_rooms).add_option(
-            &["--left-rooms"],
-            StoreTrue,
-            concat!(
-                "Print the list of left rooms. All rooms that you have ",
-                "left in the past will be printed, one room per line. ",
-            ),
-        );
-
-        ap.parse_args_or_exit();
-    }
+    gs.ap = Args::parse();
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
+    // println!("Original log_level option is {:?}", gs.ap.log_level);
+    // println!("Original RUST_LOG is {:?}", &env_org_rust_log);
     if gs.ap.debug > 0 {
         // -d overwrites --log-level
         gs.ap.log_level = LogLevel::Debug
     }
-    if gs.ap.log_level != LogLevel::None {
-        // overwrite environment variable
-        env::set_var("RUST_LOG", gs.ap.log_level.to_string());
-    } else {
-        gs.ap.log_level = LogLevel::from_str(&env_org_rust_log).unwrap_or(LogLevel::Error);
+    if gs.ap.log_level.is_none() {
+        gs.ap.log_level = LogLevel::from_str(&env_org_rust_log, true).unwrap_or(LogLevel::Error);
     }
+    // overwrite environment variable, important because it might have been empty/unset
+    env::set_var("RUST_LOG", gs.ap.log_level.to_string());
+
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
     tracing_subscriber::fmt::init();
     debug!("Original RUST_LOG env var is {}", env_org_rust_log);
@@ -2277,7 +2162,7 @@ async fn main() -> Result<(), Error> {
     if gs.ap.contribute {
         crate::contribute();
     };
-    let clientres = if gs.ap.login != Login::None {
+    let clientres = if !gs.ap.login.is_none() {
         crate::cli_login(&mut gs).await
     } else {
         crate::cli_restore_login(&mut gs).await
@@ -2298,17 +2183,17 @@ async fn main() -> Result<(), Error> {
     set_rooms(&mut gs); // if no rooms in --room, set rooms to default room from credentials file
     if gs.ap.tail > 0 {
         // overwrite --listen if user has chosen both
-        if gs.ap.listen != Listen::Never && gs.ap.listen != Listen::Tail {
+        if !gs.ap.listen.is_never() && !gs.ap.listen.is_tail() {
             warn!(
-                "2 listening methods were specified. Overwritten with --tail. {:?} {}",
+                "Two contradicting listening methods were specified. Overwritten with --tail. Will use '--listen tail'. {:?} {}",
                 gs.ap.listen, gs.ap.tail
             )
         }
         gs.ap.listen = Listen::Tail
     }
 
-    if gs.ap.verify != Verify::None && clientres.as_ref().is_ok() {
-        match crate::cli_verify(&clientres).await {
+    if !gs.ap.verify.is_none() && clientres.as_ref().is_ok() {
+        match crate::cli_verify(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::verify successful"),
             Err(ref e) => error!("Error: crate::verify reported {}", e),
         };
@@ -2409,7 +2294,7 @@ async fn main() -> Result<(), Error> {
     };
 
     // listen once
-    if gs.ap.listen == Listen::Once && clientres.as_ref().is_ok() {
+    if gs.ap.listen.is_once() && clientres.as_ref().is_ok() {
         match crate::cli_listen_once(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_once successful"),
             Err(ref e) => error!("Error: crate::listen_once reported {}", e),
@@ -2417,7 +2302,7 @@ async fn main() -> Result<(), Error> {
     };
 
     // listen forever
-    if gs.ap.listen == Listen::Forever && clientres.as_ref().is_ok() {
+    if gs.ap.listen.is_forever() && clientres.as_ref().is_ok() {
         match crate::cli_listen_forever(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_forever successful"),
             Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
@@ -2425,7 +2310,7 @@ async fn main() -> Result<(), Error> {
     };
 
     // listen tail
-    if gs.ap.listen == Listen::Tail && clientres.as_ref().is_ok() {
+    if gs.ap.listen.is_tail() && clientres.as_ref().is_ok() {
         match crate::cli_listen_tail(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_tail successful"),
             Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
@@ -2433,14 +2318,14 @@ async fn main() -> Result<(), Error> {
     };
 
     // listen all
-    if gs.ap.listen == Listen::All && clientres.as_ref().is_ok() {
+    if gs.ap.listen.is_all() && clientres.as_ref().is_ok() {
         match crate::cli_listen_all(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::listen_all successful"),
             Err(ref e) => error!("Error: crate::listen_all reported {}", e),
         };
     };
 
-    if gs.ap.logout != Logout::None {
+    if !gs.ap.logout.is_none() {
         match crate::cli_logout(&clientres, &gs).await {
             Ok(ref _n) => debug!("crate::logout successful"),
             Err(ref e) => error!("Error: crate::verify reported {}", e),

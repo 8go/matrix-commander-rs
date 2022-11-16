@@ -152,7 +152,7 @@ async fn handle_redactedsyncroommessageevent(
         debug!("Skipping message from itself because --listen-self is not set.");
         return;
     }
-    if context.output != Output::Text {
+    if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
             Ok(jsonstr) => jsonstr,
@@ -180,7 +180,7 @@ async fn handle_syncroomredactedevent(
         debug!("Skipping message from itself because --listen-self is not set.");
         return;
     }
-    if context.output != Output::Text {
+    if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
             Ok(jsonstr) => jsonstr,
@@ -270,7 +270,7 @@ async fn handle_syncroommessageevent(
         debug!("Skipping message from itself because --listen-self is not set.");
         return;
     }
-    if context.output != Output::Text {
+    if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
             Ok(jsonstr) => jsonstr,
@@ -568,7 +568,7 @@ pub(crate) async fn listen_tail(
             debug!("rawevent = value is {:?}\n", rawevent);
             // rawevent = Ok(MessageLike(RoomMessage(Original(OriginalMessageLikeEvent { content: RoomMessageEventContent {
             // msgtype: Text(TextMessageEventContent { body: "54", formatted: None }), relates_to: Some(_Custom) }, event_id: "$xxx", sender: "@u:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!rrr:some.homeserver.org", unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } }))))
-            if output != Output::Text {
+            if !output.is_text() {
                 println!("{}", anytimelineevent.event.json());
                 continue;
             }

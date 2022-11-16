@@ -194,7 +194,7 @@ pub(crate) async fn logout(client: &Result<Client, Error>, gs: &GlobalState) -> 
     debug!("Logout on client");
     if let Ok(client) = client {
         // is logged in
-        logout_server(client).await?;
+        logout_server(client, gs).await?;
     }
     if credentials_exist(gs) {
         match fs::remove_file(&gs.credentials_file_path) {
@@ -228,14 +228,17 @@ pub(crate) async fn logout(client: &Result<Client, Error>, gs: &GlobalState) -> 
 }
 
 /// Only logs out from server, no local changes.
-pub(crate) async fn logout_server(client: &Client) -> Result<(), Error> {
-    match client.logout().await {
-        Ok(n) => info!("Logout sent to server {:?}", n),
-        Err(e) => error!(
-            "Error: Server logout failed but we remove local device id anyway. {:?}",
-            e
-        ),
+pub(crate) async fn logout_server(client: &Client, gs: &GlobalState) -> Result<(), Error> {
+    if gs.ap.logout.is_me() {
+        match client.logout().await {
+            Ok(n) => info!("Logout sent to server {:?}", n),
+            Err(e) => error!(
+                "Error: Server logout failed but we remove local device id anyway. {:?}",
+                e
+            ),
+        }
     }
+    // TODO: `all`
     Ok(())
 }
 
@@ -243,20 +246,17 @@ pub(crate) async fn logout_server(client: &Client) -> Result<(), Error> {
 /// Utility function to synchronize once.
 pub(crate) async fn sync_once(client: &Client, timeout: u64, stype: Sync) -> Result<(), Error> {
     debug!("value of sync in sync_once() is {:?}", stype);
-    match stype {
-        Sync::Off => {
-            info!("syncing is turned off. No syncing.");
-            Ok(())
-        }
-        Sync::Full => {
-            info!("syncing once, timeout set to {} seconds ...", timeout);
-            client
-                .sync_once(SyncSettings::new().timeout(Duration::new(timeout, 0)))
-                .await?;
-            info!("sync completed");
-            Ok(())
-        }
+    if stype.is_off() {
+        info!("syncing is turned off. No syncing.");
     }
+    if stype.is_full() {
+        info!("syncing once, timeout set to {} seconds ...", timeout);
+        client
+            .sync_once(SyncSettings::new().timeout(Duration::new(timeout, 0)))
+            .await?;
+        info!("sync completed");
+    }
+    Ok(())
 }
 
 /*pub(crate) fn room(&self, room_id: &RoomId) -> Result<room::Room> {
@@ -514,7 +514,16 @@ pub(crate) async fn room_create(
             match client.create_room(request).await {
                 Ok(response) => {
                     debug!("create_room succeeded, result is {:?}.", response);
-                    if output != Output::Text {
+                    if output.is_text() {
+                        println!(
+                            "{}    {}    {}    {}",
+                            response.room_id,
+                            aopt.unwrap_or("None"),
+                            nopt.unwrap_or("None"),
+                            topt.unwrap_or("None")
+                        );
+                    } else {
+                        // all json formats
                         // trait Serialize not implemented for Result
                         let mut jstr: String = "{".to_owned();
                         jstr.push_str(&format!("\"room_id\": \"{}\"", response.room_id));
@@ -529,14 +538,6 @@ pub(crate) async fn room_create(
                         }
                         jstr.push('}');
                         println!("{}", jstr);
-                    } else {
-                        println!(
-                            "{}    {}    {}    {}",
-                            response.room_id,
-                            aopt.unwrap_or("None"),
-                            nopt.unwrap_or("None"),
-                            topt.unwrap_or("None")
-                        );
                     }
                 }
                 Err(ref e) => {
