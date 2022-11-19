@@ -123,7 +123,25 @@ Options:
           verbosity will be very high. Verbosity only affects the debug
           information. So, if '--debug' is not used then '--verbose' will be
           ignored
-      --login <LOGIN>
+  -c, --credentials <PATH TO FILE>
+          Path to a file containing credentials. At login (--login),
+          information about homeserver, user, room id, etc. will be written to
+          a credentials file. By default, this file is "credentials.json". On
+          further runs the credentials file is read to permit logging into the
+          correct Matrix account and sending messages to the preconfigured
+          room. If this option is provided, the provided path to a file will be
+          used as credentials file instead of the default one [default:
+          /home/user/.local/share/matrix-commander-rs/credentials.json]
+  -s, --store <PATH TO DIRECTORY>
+          Path to a directory to be used as "store" for encrypted messaging.
+          Since encryption is always enabled, a store is always needed. If this
+          option is provided, the provided directory name will be used as
+          persistent storage directory instead of the default one. Preferably,
+          for multiple executions of this program use the same store for the
+          same device. The store directory can be shared between multiple
+          different devices and users [default:
+          /home/user/.local/share/matrix-commander-rs/sledstore/]
+      --login <LOGIN METHOD>
           Login to and authenticate with the Matrix homeserver. This requires
           exactly one argument, the login method. Currently two choices are
           offered: 'password' and 'SSO'. Provide one of these methods. If you
@@ -145,7 +163,7 @@ Options:
           browser. So, don't use SSO on headless homeservers where there is no
           browser installed or accessible [default: none] [possible values:
           none, password, access-token, sso]
-      --verify <VERIFY>
+      --verify <VERIFICATION METHOD>
           Perform verification. By default, no verification is performed.
           Verification is currently only offered via Emojis. Hence, specify
           '--verify emoji'. If verification is desired, run this program in the
@@ -176,20 +194,22 @@ Options:
           webpage. In the terminal you should see a text message indicating
           success. You should now be verified across all devices and across all
           users [default: none] [possible values: none, emoji]
-      --logout <LOGOUT>
+      --logout <DEVICE>
           Logout this or all devices from the Matrix homeserver. This requires
           exactly one argument. Two choices are offered: 'me' and 'all'.
           Provide one of these choices. If you choose 'me', only the one device
           "matrix-commander-rs" is currently using will be logged out. If you
           choose 'all', all devices of the user used by "matrix-commander-rs"
-          will be logged out. --logout not only logs the user out from the
+          will be logged out. Using '--logout all' is equivalent to
+          '--delete-device "*" --logout "me"' and requires a password (see
+          --delete-device). --logout not only logs the user out from the
           homeserver thereby invalidates the access token, it also removes both
           the 'credentials' file as well as the 'store' directory. After a
-          --logout, one must one must perform a new --login to use
-          "matrix-commander-rs" again. You can perfectly use
-          "matrix-commander-rs" without ever logging out. --logout is a cleanup
-          if you have decided not to use this (or all) device(s) ever again [default:
-          none] [possible values: none, me, all]
+          --logout, one must perform a new --login to use "matrix-commander-rs"
+          again. You can perfectly use "matrix-commander-rs" without ever
+          logging out. --logout is a cleanup if you have decided not to use
+          this (or all) device(s) ever again [default: none] [possible values:
+          none, me, all]
       --homeserver <HOMESERVER>
           Specify a homeserver for use by certain actions. It is an optional
           argument. By default --homeserver is ignored and not used. It is used
@@ -231,7 +251,7 @@ Options:
       --timeout <TIMEOUT>
           Set the timeout of the calls to the Matrix server. By default they
           are set to 60 seconds. Specify the timeout in seconds. Use 0 for
-          infinite timeout
+          infinite timeout [default: 60]
   -m, --message [<MESSAGE>...]
           Send one or more messages. Message data must not be binary data, it
           must be text. Input piped via stdin can additionally be specified
@@ -299,7 +319,7 @@ Options:
           used. Use '--notice' or '--emote' to set the type to Notice or Emote
           respectively. '--notice' allows sending of text as a notice.
           '--emote' allows sending of text as an emote
-      --sync <SYNC>
+      --sync <SYNC TYPE>
           This option decides on whether the program synchronizes the state
           with the server before a 'send' action. Currently two choices are
           offered: 'full' and 'off'. Provide one of these choices. The default
@@ -309,7 +329,7 @@ Options:
           before a 'send'. If you have chosen 'off', synchronization will be
           skipped entirely before the 'send' which will improve performance [default:
           full] [possible values: off, full]
-  -l, --listen <LISTEN>
+  -l, --listen <LISTEN TYPE>
           The '--listen' option takes one argument. There are several choices:
           'never', 'once', 'forever', 'tail', and 'all'. By default, --listen
           is set to 'never'. So, by default no listening will be done. Set it
@@ -348,7 +368,7 @@ Options:
       --whoami
           Print the user id used by "matrix-commander-rs" (itself). One can get
           this information also by looking at the credentials file
-  -o, --output <OUTPUT>
+  -o, --output <OUTPUT FORMAT>
           This option decides on how the output is presented. Currently offered
           choices are: 'text', 'json', 'json-max', and 'json-spec'. Provide one
           of these choices. The default is 'text'. If you want to use the
@@ -372,22 +392,33 @@ Options:
           data will be printed. In short, currently '--json-spec' only provides
           outputs for '--listen' and '--tail' [default: text] [possible values:
           text, json, json-max, json-spec]
-      --get-room-info [<GET_ROOM_INFO>...]
-          Get the room information such as room display name, room alias, room
-          creator, etc. for one or multiple specified rooms. The included room
-          'display name' is also referred to as 'room name' or incorrectly even
-          as room title. If one or more rooms are given, the room information
-          of these rooms will be fetched. If no room is specified, the room
-          information for the pre-configured default room configured is
-          fetched. As response room id, room display name, room canonical
-          alias, room topic, room creator, and room encryption are printed. One
-          line per room will be printed
       --file-name [<FILE_NAME>...]
           Specify one or multiple file names for some actions. This is an
           optional argument. Use this option in combination with options like
           '--file'. to specify one or multiple file names. Ignored if used by
           itself without an appropriate corresponding action
-      --room-create [<ROOM_CREATE>...]
+      --get-room-info [<ROOM>...]
+          Get the room information such as room display name, room alias, room
+          creator, etc. for one or multiple specified rooms. The included room
+          'display name' is also referred to as 'room name' or incorrectly even
+          as room title. If one or more rooms are given, the room information
+          of these rooms will be fetched. If no room is specified, nothing will
+          be done. If you want the room information for the pre-configured
+          default room specify the shortcut '-'. Rooms can be given via room id
+          (e.g. '\!SomeRoomId:matrix.example.com'), canonical (full) room alias
+          (e.g. '#SomeRoomAlias:matrix.example.com'), or short alias (e.g.
+          'SomeRoomAlias' or '#SomeRoomAlias'). As response room id, room
+          display name, room canonical alias, room topic, room creator, and
+          room encryption are printed. One line per room will be printed. Since
+          either room id or room alias are accepted as input and both room id
+          and room alias are given as output, one can hence use this option to
+          map from room id to room alias as well as vice versa from room alias
+          to room id. Do not confuse this option with the options
+          '--get-display-name' and '--set-display-name', which get/set the user
+          display name, not the room display name. The argument
+          '--room-resolve-alias' can also be used to go the other direction,
+          i.e. to find the room id given a room alias
+      --room-create [<ROOM>...]
           Create one or multiple rooms. One or multiple roo aliases can be
           specified. For each alias specified a room will be created. For each
           created room one line with room id, alias, name and topic will be
@@ -401,12 +432,12 @@ Options:
           values that are not set and hence have default values are not shown
           in the JSON output. E.g. if no topic is given, then there will be no
           topic field in the JSON output. Room aliases have to be unique
-      --room-leave [<ROOM_LEAVE>...]
+      --room-leave [<ROOM>...]
           Leave this room or these rooms. One or multiple room aliases can be
           specified. The room (or multiple ones) provided in the arguments will
           be left. You can run both commands '--room-leave' and '--room-forget'
           at the same time
-      --room-forget [<ROOM_FORGET>...]
+      --room-forget [<ROOM>...]
           After leaving a room you should (most likely) forget the room.
           Forgetting a room removes the users' room history. One or multiple
           room aliases can be specified. The room (or multiple ones) provided
@@ -414,6 +445,20 @@ Options:
           room can eventually be deleted on the server. You must leave a room
           first, before you can forget it You can run both commands
           '--room-leave' and '--room-forget' at the same time
+      --room-resolve-alias [<ALIAS>...]
+          Resolves a room alias to the corresponding room id, or multiple room
+          aliases to their corresponding room ids. Provide one or multiple room
+          aliases. A room alias looks like this:
+          '#someRoomAlias:matrix.example.org'. Short aliases like
+          'someRoomAlias' or '#someRoomAlias' are also accepted. In case of a
+          short alias, it will be automatically prefixed with '#' and the
+          homeserver from the default room of matrix-commander-rs (as found in
+          credentials file) will be automatically appended. Resolving an alias
+          that does not exist results in an error. For each room alias one line
+          will be printed to stdout with the result. It also prints the list of
+          servers that know about the alias(es). The argument '--get-room-info'
+          can be used to go the other direction, i.e. to find the room aliases
+          given a room id
       --name [<NAME>...]
           Specify one or multiple names. This option is only meaningful in
           combination with option --room-create. This option --name specifies
@@ -437,6 +482,34 @@ Options:
       --left-rooms
           Print the list of left rooms. All rooms that you have left in the
           past will be printed, one room per line
+      --delete-device [<DEVICE>...]
+          Delete one or multiple devices. By default devices belonging to
+          itself, i.e. belonging to "matrix-commander-rs", will be deleted. If
+          you want to delete the one device currently used for the connection,
+          i.e. the device used by "matrix-commander-rs", then instead of the
+          full device id you can just specify the shortcut 'me' such as
+          '--delete-device me --password mypassword'. If you want to delete all
+          devices of yourself, i.e. all devices owned by the user that
+          "matrix-commander-rs" is using you can specify that with the shortcut
+          '*'. Most shells require you to escape it or to quote it, ie. use
+          '--delete-device "*" --password mypassword'. Removing your own device
+          (e.g. 'me') or all devices (e.g. '*') will require you to manually
+          remove your credentials file and store directory and to login anew in
+          order to create a new device. If you are using '--delete-device me
+          --password mypassword' consider using '--logout me' instead which is
+          simpler (no password) and also automatically performs the removal of
+          credentials and store. (See --logout.) If the devices belong to a
+          different user, use the --user argument to specify the user, i.e.
+          owner. Only exactly one user can be specified with the optional
+          --user argument. Device deletion requires the user password. It must
+          be specified with the --password argument. If the server uses only
+          HTTP (and not HTTPS), then the password can be visible to attackers.
+          Hence, if the server does not support HTTPS this operation is
+          discouraged. If no --password is specified via the command line, the
+          password is read from keyboard interactively
+  -u, --user [<USER>...]
+          Specify one or multiple users. This option is meaningful in
+          combination with --delete-device
   -h, --help
           Print help information (use `--help` for more detail)
 ```

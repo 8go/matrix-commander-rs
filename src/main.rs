@@ -57,6 +57,7 @@ use matrix_sdk::{
     // instant::Duration,
     // room,
     ruma::{
+        // api::client::search::search_events::v3::OwnedRoomIdOrUserId;
         OwnedDeviceId,
         OwnedUserId,
         // device_id, room_id, session_id, user_id, OwnedRoomId,  RoomId,
@@ -68,8 +69,9 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    devices, file, get_room_info, invited_rooms, joined_rooms, left_rooms, login, logout, message,
-    restore_login, room_create, room_forget, room_leave, rooms, verify,
+    convert_to_full_room_ids, delete_devices_pre, devices, file, get_room_info, invited_rooms,
+    joined_rooms, left_rooms, login, logout, logout_local, message, restore_credentials,
+    restore_login, room_create, room_forget, room_leave, room_resolve_alias, rooms, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -142,6 +144,12 @@ pub enum Error {
     #[error("Forget Room Failed")]
     ForgetRoomFailed,
 
+    #[error("Resolve Room Alias Failed")]
+    ResolveRoomAliasFailed,
+
+    #[error("Delete Device Failed")]
+    DeleteDeviceFailed,
+
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
 
@@ -157,11 +165,20 @@ pub enum Error {
     #[error("Missing Room")]
     MissingRoom,
 
+    #[error("Missing User")]
+    MissingUser,
+
+    #[error("Missing Password")]
+    MissingPassword,
+
     #[error("Missing CLI parameter")]
     MissingCliParameter,
 
     #[error("Not Implemented Yet")]
     NotImplementedYet,
+
+    #[error("No Credentials Found")]
+    NoCredentialsFound,
 
     #[error(transparent)]
     IO(#[from] std::io::Error),
@@ -558,6 +575,12 @@ impl fmt::Display for Output {
     disable_version_flag = true,
 )]
 pub struct Args {
+    // This is an internal field used to store credentials.
+    // The user is not setting this in the CLI.
+    // This field is here to simplify argument passing.
+    #[arg(skip)]
+    creds: Option<Credentials>,
+
     /// Please contribute.
     #[arg(long, default_value_t = false)]
     contribute: bool,
@@ -593,6 +616,40 @@ pub struct Args {
     #[arg(long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
     verbose: u8,
 
+    /// Path to a file containing credentials.
+    /// At login (--login), information about homeserver, user, room
+    /// id, etc. will be written to a credentials file. By
+    /// default, this file is "credentials.json". On further
+    /// runs the credentials file is read to permit logging
+    /// into the correct Matrix account and sending messages
+    /// to the preconfigured room. If this option is provided,
+    /// the provided path to a file will be used as credentials
+    /// file instead of the default one.
+    // e.g. /home/user/.local/share/matrix-commander-rs/credentials.json
+    #[arg(short, long,
+        value_name = "PATH TO FILE",
+        value_parser = clap::value_parser!(PathBuf),
+        default_value_os_t = get_credentials_default_path(),
+        )]
+    credentials: PathBuf,
+
+    /// Path to a directory to be used as "store" for encrypted
+    /// messaging.
+    /// Since encryption is always enabled, a store is always
+    /// needed. If this option is provided, the provided
+    /// directory name will be used as persistent storage
+    /// directory instead of the default one. Preferably, for
+    /// multiple executions of this program use the same store
+    /// for the same device. The store directory can be shared
+    /// between multiple different devices and users.
+    #[arg(short, long,
+        value_name = "PATH TO DIRECTORY",
+        // value_parser = clap::builder::ValueParser::path_buf(),
+        value_parser = clap::value_parser!(PathBuf),
+        default_value_os_t = get_sledstore_default_path(),
+        )]
+    store: PathBuf,
+
     /// Login to and authenticate with the Matrix homeserver.
     /// This requires exactly one argument, the login method.
     /// Currently two choices are offered: 'password' and 'SSO'.
@@ -620,7 +677,9 @@ pub struct Args {
     /// supports it and if there is access to a browser. So, don't use SSO
     /// on headless homeservers where there is no
     /// browser installed or accessible.
-    #[arg(long, value_enum, default_value_t = Login::default(), ignore_case = true, )]
+    #[arg(long, value_enum,
+        value_name = "LOGIN METHOD",
+        default_value_t = Login::default(), ignore_case = true, )]
     login: Login,
 
     /// Perform verification. By default, no
@@ -658,7 +717,9 @@ pub struct Args {
     /// "matrix-commander-rs" device is now green and verified in the webpage.
     /// In the terminal you should see a text message indicating success.
     /// You should now be verified across all devices and across all users.
-    #[arg(long, value_enum, default_value_t = Verify::default(), ignore_case = true, )]
+    #[arg(long, value_enum,
+        value_name = "VERIFICATION METHOD",
+        default_value_t = Verify::default(), ignore_case = true, )]
     verify: Verify,
 
     /// Logout this or all devices from the Matrix homeserver.
@@ -669,15 +730,20 @@ pub struct Args {
     /// is currently using will be logged out.
     /// If you choose 'all', all devices of the user used by
     /// "matrix-commander-rs" will be logged out.
+    /// Using '--logout all' is equivalent to
+    /// '--delete-device "*" --logout "me"' and requires a password
+    ///  (see --delete-device).
     /// --logout not only logs the user out from the homeserver
     /// thereby invalidates the access token, it also removes both
     /// the 'credentials' file as well as the 'store' directory.
-    /// After a --logout, one must one must perform a new
+    /// After a --logout, one must perform a new
     /// --login to use "matrix-commander-rs" again.
     /// You can perfectly use "matrix-commander-rs"
     /// without ever logging out. --logout is a cleanup
     /// if you have decided not to use this (or all) device(s) ever again.
-    #[arg(long, value_enum, default_value_t = Logout::default(), ignore_case = true, )]
+    #[arg(long, value_enum,
+        value_name = "DEVICE",
+        default_value_t = Logout::default(), ignore_case = true, )]
     logout: Logout,
 
     /// Specify a homeserver for use by certain actions.
@@ -741,8 +807,8 @@ pub struct Args {
     /// Set the timeout of the calls to the Matrix server.
     /// By default they are set to 60 seconds.
     /// Specify the timeout in seconds. Use 0 for infinite timeout.
-    #[arg(long)]
-    timeout: Option<u64>,
+    #[arg(long, default_value_t = TIMEOUT_DEFAULT)]
+    timeout: u64,
 
     /// Send one or more messages. Message data must not be binary data, it
     /// must be text.
@@ -898,7 +964,9 @@ pub struct Args {
     /// If you have chosen 'off',
     /// synchronization will be skipped entirely before the 'send'
     /// which will improve performance.
-    #[arg(long, value_enum, default_value_t = Sync::default(), ignore_case = true, )]
+    #[arg(long, value_enum,
+        value_name = "SYNC TYPE",
+        default_value_t = Sync::default(), ignore_case = true, )]
     sync: Sync,
 
     /// The '--listen' option takes one argument. There are
@@ -929,7 +997,9 @@ pub struct Args {
     /// 'once' and 'forever' that listen in ALL rooms, 'tail'
     /// and 'all' listen only to the room specified in the
     /// credentials file or the --room options.
-    #[arg(short, long, value_enum, default_value_t = Listen::default(), ignore_case = true, )]
+    #[arg(short, long, value_enum,
+        value_name = "LISTEN TYPE",
+        default_value_t = Listen::default(), ignore_case = true, )]
     listen: Listen,
 
     /// The '--tail' option reads and prints up to the last N
@@ -989,38 +1059,10 @@ pub struct Args {
     /// for '--listen' and '--tail'.
     // All other arguments like
     // '--get-room-info' will print no output.
-    #[arg(short, long, value_enum, default_value_t = Output::default(), ignore_case = true, )]
+    #[arg(short, long, value_enum,
+        value_name = "OUTPUT FORMAT",
+        default_value_t = Output::default(), ignore_case = true, )]
     output: Output,
-
-    /// Get the room information such as room display name,
-    /// room alias, room creator, etc. for one or multiple
-    /// specified rooms. The included room 'display name' is
-    /// also referred to as 'room name' or incorrectly even as
-    /// room title. If one or more rooms are given, the room
-    /// information of these rooms will be fetched. If no
-    /// room is specified, the room information for the
-    /// pre-configured default room configured is
-    /// fetched.
-    // Rooms can be given via room id (e.g.
-    // '\!SomeRoomId:matrix.example.com'), canonical (full)
-    // room alias (e.g. '#SomeRoomAlias:matrix.example.com'),
-    // or short alias (e.g. 'SomeRoomAlias' or
-    // '#SomeRoomAlias').
-    /// As response room id, room display
-    /// name, room canonical alias, room topic, room creator,
-    /// and room encryption are printed. One line per room
-    /// will be printed.
-    // Since either room id or room alias
-    // are accepted as input and both room id and room alias
-    // are given as output, one can hence use this option to
-    // map from room id to room alias as well as vice versa
-    // from room alias to room id.
-    // Do not confuse this option
-    // with the options '--get-display-name' and
-    // '--set-display-name', which get/set the user display name,
-    // not the room display name.
-    #[arg(long, num_args(0..), )]
-    get_room_info: Vec<String>,
 
     /// Specify one or multiple file names for some actions.
     /// This is an optional argument. Use this option in
@@ -1031,6 +1073,40 @@ pub struct Args {
     /// without an appropriate corresponding action.
     #[arg(long, num_args(0..), )]
     file_name: Vec<PathBuf>,
+
+    /// Get the room information such as room display name,
+    /// room alias, room creator, etc. for one or multiple
+    /// specified rooms. The included room 'display name' is
+    /// also referred to as 'room name' or incorrectly even as
+    /// room title. If one or more rooms are given, the room
+    /// information of these rooms will be fetched. If no
+    /// room is specified, nothing will be done.
+    /// If you want the room information for the
+    /// pre-configured default room specify the shortcut '-'.
+    /// Rooms can be given via room id (e.g.
+    /// '\!SomeRoomId:matrix.example.com'), canonical (full)
+    /// room alias (e.g. '#SomeRoomAlias:matrix.example.com'),
+    /// or short alias (e.g. 'SomeRoomAlias' or
+    /// '#SomeRoomAlias').
+    /// As response room id, room display
+    /// name, room canonical alias, room topic, room creator,
+    /// and room encryption are printed. One line per room
+    /// will be printed.
+    /// Since either room id or room alias
+    /// are accepted as input and both room id and room alias
+    /// are given as output, one can hence use this option to
+    /// map from room id to room alias as well as vice versa
+    /// from room alias to room id.
+    /// Do not confuse this option
+    /// with the options '--get-display-name' and
+    /// '--set-display-name', which get/set the user display name,
+    /// not the room display name.
+    /// The argument '--room-resolve-alias' can also be used
+    /// to go the other direction, i.e. to find the room id
+    /// given a room alias.
+    #[arg(long, num_args(0..), value_name = "ROOM", 
+        alias = "room-get-info")]
+    get_room_info: Vec<String>,
 
     /// Create one or multiple rooms. One or multiple roo
     /// aliases can be specified. For each alias specified a
@@ -1050,7 +1126,7 @@ pub struct Args {
     /// in the JSON output. E.g. if no topic is given, then
     /// there will be no topic field in the JSON output.
     /// Room aliases have to be unique.
-    #[arg(long, num_args(0..), )]
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_create: Vec<String>,
 
     /// Leave this room or these rooms. One or multiple room
@@ -1058,7 +1134,7 @@ pub struct Args {
     /// provided in the arguments will be left.
     /// You can run both commands '--room-leave' and
     /// '--room-forget' at the same time
-    #[arg(long, num_args(0..), )]
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_leave: Vec<String>,
 
     /// After leaving a room you should (most likely) forget
@@ -1071,8 +1147,27 @@ pub struct Args {
     /// forget it
     /// You can run both commands '--room-leave' and
     /// '--room-forget' at the same time
-    #[arg(long, num_args(0..), )]
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_forget: Vec<String>,
+
+    /// Resolves a room alias to the corresponding room id, or
+    /// multiple room aliases to their corresponding room ids.
+    /// Provide one or multiple room aliases. A room alias
+    /// looks like this: '#someRoomAlias:matrix.example.org'.
+    /// Short aliases like 'someRoomAlias' or '#someRoomAlias'
+    /// are also accepted. In case of a short alias, it will
+    /// be automatically prefixed with '#' and the homeserver
+    /// from the default room of matrix-commander-rs (as found in
+    /// credentials file) will be automatically appended.
+    /// Resolving an alias that does not exist results in an
+    /// error. For each room alias one line will be printed to
+    /// stdout with the result. It also prints the list of
+    /// servers that know about the alias(es).
+    /// The argument '--get-room-info' can be used to go the
+    /// other direction, i.e. to find the room aliases
+    /// given a room id.
+    #[arg(long, num_args(0..), value_name = "ALIAS", )]
+    room_resolve_alias: Vec<String>,
 
     /// Specify one or multiple names. This option is only
     /// meaningful in combination with option --room-create.
@@ -1111,6 +1206,88 @@ pub struct Args {
     /// left in the past will be printed, one room per line.
     #[arg(long)]
     left_rooms: bool,
+
+    /// Delete one or multiple devices. By default devices
+    /// belonging to itself, i.e. belonging to
+    /// "matrix-commander-rs", will be deleted.
+    /// If you want to delete the one device
+    /// currently used for the connection, i.e. the device
+    /// used by "matrix-commander-rs", then instead of the
+    /// full device id you can just specify the shortcut 'me'
+    /// such as '--delete-device me --password mypassword'.
+    /// If you want to delete all devices of yourself, i.e.
+    /// all devices owned by the user that
+    /// "matrix-commander-rs" is using you can specify
+    /// that with the shortcut '*'. Most shells require you
+    /// to escape it or to quote it, ie. use
+    /// '--delete-device "*" --password mypassword'.
+    /// Removing your own device (e.g. 'me') or all devices
+    /// (e.g. '*') will require you to manually remove your
+    /// credentials file and store directory and to login
+    /// anew in order to create a new device.
+    /// If you are using
+    /// '--delete-device me --password mypassword' consider
+    /// using '--logout me' instead which is simpler
+    /// (no password) and also automatically performs the
+    /// removal of credentials and store. (See --logout.)
+    /// If the devices belong to a different user, use the --user
+    /// argument to specify the user, i.e. owner. Only exactly
+    /// one user can be specified with the optional --user
+    /// argument. Device deletion requires the user password.
+    /// It must be specified with the --password argument. If
+    /// the server uses only HTTP (and not HTTPS), then the
+    /// password can be visible to attackers. Hence, if the
+    /// server does not support HTTPS this operation is
+    /// discouraged.
+    /// If no --password is specified via the command line,
+    /// the password is read from keyboard interactively.
+    #[arg(long, num_args(0..),
+        value_name = "DEVICE", )]
+    delete_device: Vec<String>,
+
+    /// Specify one or multiple users. This option is
+    /// meaningful in combination with
+    // a) room actions like
+    // --room-invite, --room-ban, --room-unban, etc. and b)
+    // send actions like -m, -i, -f, etc. c) some listen
+    // actions --listen, as well as
+    // d) actions like
+    /// --delete-device.
+    // In case of a) this option --user specifies the
+    // users to be used with room commands (like invite, ban,
+    // etc.). In case of b) the option --user can be used as
+    // an alternative to specifying a room as destination for
+    // text (-m), images (-i), etc. For send actions '--user'
+    // is providing the functionality of 'DM (direct
+    // messaging)'. For c) this option allows an alternative
+    // to specifying a room as destination for some --listen
+    // actions. For d) this gives the option to delete the
+    // device of a different user. ----- What is a DM?
+    // matrix-commander tries to find a room that contains
+    // only the sender and the receiver, hence DM. These
+    // rooms have nothing special other the fact that they
+    // only have 2 members and them being the sender and
+    // recipient respectively. If such a room is found, the
+    // first one found will be used as destination. If no
+    // such room is found, the send fails and the user should
+    // do a --room-create and --room-invite first. If
+    // multiple such rooms exist, one of them will be used
+    // (arbitrarily). For sending and listening, specifying a
+    // room directly is always faster and more efficient than
+    // specifying a user. So, if you know the room, it is
+    // preferred to use --room instead of --user. For b) and
+    // c) --user can be specified in 3 ways: 1) full user id
+    // as in '@john:example.org', 2) partial user id as in
+    // '@john' when the user is on the same homeserver
+    // (example.org will be automatically appended), or 3) a
+    // display name as in 'john'. Be careful, when using
+    // display names as they might not be unique, and you
+    // could be sending to the wrong person. To see possible
+    // display names use the --joined-members '*' option
+    // which will show you the display names in the middle
+    // column.
+    #[arg(short, long, num_args(0..), )]
+    user: Vec<String>,
 }
 
 impl Default for Args {
@@ -1122,11 +1299,14 @@ impl Default for Args {
 impl Args {
     pub fn new() -> Args {
         Args {
+            creds: None,
             contribute: false,
             version: false,
             debug: 0u8,
             log_level: LogLevel::None,
             verbose: 0u8,
+            credentials: get_credentials_default_path(),
+            store: get_sledstore_default_path(),
             login: Login::None,
             verify: Verify::None,
             message: Vec::new(),
@@ -1137,7 +1317,7 @@ impl Args {
             device: None,
             room_default: None,
             devices: false,
-            timeout: Some(TIMEOUT_DEFAULT),
+            timeout: TIMEOUT_DEFAULT,
             markdown: false,
             code: false,
             room: Vec::new(),
@@ -1155,12 +1335,15 @@ impl Args {
             room_create: Vec::new(),
             room_leave: Vec::new(),
             room_forget: Vec::new(),
+            room_resolve_alias: Vec::new(),
             name: Vec::new(),
             topic: Vec::new(),
             rooms: false,
             invited_rooms: false,
             joined_rooms: false,
             left_rooms: false,
+            delete_device: Vec::new(),
+            user: Vec::new(),
         }
     }
 }
@@ -1169,7 +1352,7 @@ impl Args {
 /// and written to the credentials.json file for permanent storage and
 /// future access.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Credentials {
+pub struct Credentials {
     homeserver: Url,
     user_id: OwnedUserId,
     access_token: String,
@@ -1290,55 +1473,57 @@ impl From<Credentials> for Session {
     // assert_eq!(session.device_id.as_str(), "MYDEVICEID");
 }
 
-/// A public struct with a private fields to keep the global state
-#[derive(Clone)]
-pub struct GlobalState {
-    // self.log: logging.Logger = None  # logger object
-    ap: Args, // parsed arguments
-    // # to which logic (message, image, audio, file, event) is
-    // # stdin pipe assigned?
-    // self.stdin_use: str = "none"
-    // # 1) ssl None means default SSL context will be used.
-    // # 2) ssl False means SSL certificate validation will be skipped
-    // # 3) ssl a valid SSLContext means that the specified context will be
-    // #    used. This is useful to using local SSL certificate.
-    // self.ssl: Union[None, SSLContext, bool] = None
-    //client: AsyncClient,
-    // client: Option<String>,
-    credentials_file_path: PathBuf,
-    sledstore_dir_path: PathBuf,
-    // Session info and a bit more
-    credentials: Option<Credentials>,
-    // self.send_action = False  # argv contains send action
-    // self.listen_action = False  # argv contains listen action
-    // self.room_action = False  # argv contains room action
-    // self.set_action = False  # argv contains set action
-    // self.get_action = False  # argv contains get action
-    // self.setget_action = False  # argv contains set or get action
-    // self.err_count = 0  # how many errors have occurred so far
-    // self.warn_count = 0  # how many warnings have occurred so far
-}
+// GlobalState is no longer used. I moved credentials into Args.creds
+// in order to simplify.
+// /// A public struct with a private fields to keep the global state
+// #[derive(Clone)]
+// pub struct GlobalState {
+//     // self.log: logging.Logger = None  # logger object
+//     ap: Args, // parsed arguments
+//     // # to which logic (message, image, audio, file, event) is
+//     // # stdin pipe assigned?
+//     // self.stdin_use: str = "none"
+//     // # 1) ssl None means default SSL context will be used.
+//     // # 2) ssl False means SSL certificate validation will be skipped
+//     // # 3) ssl a valid SSLContext means that the specified context will be
+//     // #    used. This is useful to using local SSL certificate.
+//     // self.ssl: Union[None, SSLContext, bool] = None
+//     //client: AsyncClient,
+//     // client: Option<String>,
+//     //
+//     // credentials_file_path was moved to Args.credentials
+//     // credentials_file_path: PathBuf,
+//     //
+//     // sledstore_dir_path was moved to Args.store
+//     // sledstore_dir_path: PathBuf,
+//     //
+//     // Session info and a bit more
+//     credentials: Credentials,
+//     //
+//     // self.send_action = False  # argv contains send action
+//     // self.listen_action = False  # argv contains listen action
+//     // self.room_action = False  # argv contains room action
+//     // self.set_action = False  # argv contains set action
+//     // self.get_action = False  # argv contains get action
+//     // self.setget_action = False  # argv contains set or get action
+//     // self.err_count = 0  # how many errors have occurred so far
+//     // self.warn_count = 0  # how many warnings have occurred so far
+// }
 
-/// implement the Default trait for GlobalState
-impl Default for GlobalState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// // /// implement the Default trait for GlobalState
+// // impl Default for GlobalState {
+// //     fn default() -> Self {
+// //         Self::new()
+// //     }
+// // }
 
-/// Implementation of the GlobalState struct.
-impl GlobalState {
-    /// Default constructor of GlobalState
-    pub fn new() -> GlobalState {
-        GlobalState {
-            ap: Args::new(),
-            // e.g. /home/user/.local/share/matrix-commander/credentials.json
-            credentials_file_path: get_credentials_default_path(),
-            sledstore_dir_path: get_sledstore_default_path(),
-            credentials: None, // Session info and a bit more
-        }
-    }
-}
+// /// Implementation of the GlobalState struct.
+// impl GlobalState {
+//     /// Default constructor of GlobalState
+//     pub fn new(ap: Args, credentials: Credentials) -> GlobalState {
+//         GlobalState { ap, credentials }
+//     }
+// }
 
 /// Gets the *default* path (including file name) of the credentials file
 /// The default path might not be the actual path as it can be overwritten with command line
@@ -1355,12 +1540,39 @@ fn get_credentials_default_path() -> PathBuf {
     dp
 }
 
+// Removed the Option, so it is always set by clap. Fn no longer needed.
+// /// A credentials file is either specified with --credentials or the static default path is used
+// /// On error return None.
+// fn set_credentials(ap: &mut Args) {
+//     debug!("set_credentials()");
+//     let dcredentials = get_credentials_default_path();
+//     if ap.credentials.is_empty() {
+//         ap.credentials = Some(dcredentials); // since --credentials is empty, use default credentials path
+//     }
+// }
+
 /// Gets the *actual* path (including file name) of the credentials file
 /// The default path might not be the actual path as it can be overwritten with command line
 /// options.
-#[allow(dead_code)]
-fn get_credentials_actual_path(gs: &GlobalState) -> &PathBuf {
-    &gs.credentials_file_path
+fn get_credentials_actual_path(ap: &Args) -> &PathBuf {
+    &ap.credentials
+}
+
+/// Return true if credentials file exists, false otherwise
+fn credentials_exist(ap: &Args) -> bool {
+    let dp = get_credentials_default_path();
+    let ap = get_credentials_actual_path(ap);
+    debug!(
+        "credentials_default_path = {:?}, credentials_actual_path = {:?}",
+        dp, ap
+    );
+    let exists = ap.is_file();
+    if exists {
+        debug!("{:?} exists and is file. Not sure if readable though.", ap);
+    } else {
+        debug!("{:?} does not exist or is not a file.", ap);
+    }
+    exists
 }
 
 /// Gets the *default* path (terminating in a directory) of the sled store directory
@@ -1370,19 +1582,49 @@ fn get_sledstore_default_path() -> PathBuf {
     let dir = ProjectDirs::from_path(PathBuf::from(get_prog_without_ext())).unwrap();
     // fs::create_dir_all(dir.data_dir());
     let dp = dir.data_dir().join(SLEDSTORE_DIR_DEFAULT);
-    debug!(
-        "Data will be put into project directory {:?}.",
-        dir.data_dir()
-    );
-    info!("Sled store directory is {}.", dp.display());
+    debug!("Default project directory is {:?}.", dir.data_dir());
+    info!("Default sled store directory is {}.", dp.display());
     dp
 }
+
+// Removed the Option, so it is always set by clap. Fn no longer needed.
+// /// A store is either specified with --store or the static default path is used
+// /// On error return None.
+// fn set_sledstore(ap: &mut Args) {
+//     debug!("set_sledstore()");
+//     let dstore = get_sledstore_default_path();
+//     if ap.store.is_empty() {
+//         ap.store = Some(dstore); // since --store is empty, use default store path
+//     }
+// }
 
 /// Gets the *actual* path (including file name) of the sled store directory
 /// The default path might not be the actual path as it can be overwritten with command line
 /// options.
-fn get_sledstore_actual_path(gs: &GlobalState) -> &PathBuf {
-    &gs.sledstore_dir_path
+/// set_sledstore() must be called before this function is ever called.
+fn get_sledstore_actual_path(ap: &Args) -> &PathBuf {
+    &ap.store
+}
+
+/// Return true if sledstore dir exists, false otherwise
+#[allow(dead_code)]
+fn sledstore_exist(ap: &Args) -> bool {
+    let dp = get_sledstore_default_path();
+    let ap = get_sledstore_actual_path(ap);
+    debug!(
+        "sledstore_default_path = {:?}, sledstore_actual_path = {:?}",
+        dp, ap
+    );
+    let exists = ap.is_dir();
+    if exists {
+        debug!(
+            "{:?} exists and is directory. Not sure if readable though.",
+            ap
+        );
+    } else {
+        debug!("{:?} does not exist or is not a directory.", ap);
+    }
+    exists
 }
 
 /// Gets version number, static if available, otherwise default.
@@ -1409,11 +1651,6 @@ fn get_pkg_repository() -> &'static str {
 fn get_prog_without_ext() -> &'static str {
     get_bin_name() // with -rs suffix
                    // get_pkg_name() // without -rs suffix
-}
-
-/// Gets timeout, argument-defined if available, otherwise default.
-fn get_timeout(gs: &GlobalState) -> u64 {
-    gs.ap.timeout.unwrap_or(TIMEOUT_DEFAULT)
 }
 
 /// Prints the version information
@@ -1452,10 +1689,10 @@ pub fn contribute() {
     println!("{} crate. Safe!", get_prog_without_ext());
 }
 
-/// If necessary reads homeserver name for login and puts it into the GlobalState.
+/// If necessary reads homeserver name for login and puts it into the Args.
 /// If already set via --homeserver option, then it does nothing.
-fn get_homeserver(gs: &mut GlobalState) {
-    while gs.ap.homeserver.is_none() {
+fn get_homeserver(ap: &mut Args) {
+    while ap.homeserver.is_none() {
         print!("Enter your Matrix homeserver (e.g. https://some.homeserver.org): ");
         std::io::stdout()
             .flush()
@@ -1472,24 +1709,24 @@ fn get_homeserver(gs: &mut GlobalState) {
             }
             // Todo: check format, e.g. starts with http, etc.
             _ => {
-                gs.ap.homeserver = Url::parse(input.trim()).ok();
-                if gs.ap.homeserver.is_none() {
+                ap.homeserver = Url::parse(input.trim()).ok();
+                if ap.homeserver.is_none() {
                     error!(concat!(
                         "The syntax is incorrect. homeserver must be a URL! ",
                         "Start with 'http://' or 'https://'."
                     ));
                 } else {
-                    debug!("homeserver is {:?}", gs.ap.homeserver);
+                    debug!("homeserver is {:?}", ap.homeserver);
                 }
             }
         }
     }
 }
 
-/// If necessary reads user name for login and puts it into the GlobalState.
+/// If necessary reads user name for login and puts it into the Args.
 /// If already set via --user-login option, then it does nothing.
-fn get_user_login(gs: &mut GlobalState) {
-    while gs.ap.user_login.is_none() {
+fn get_user_login(ap: &mut Args) {
+    while ap.user_login.is_none() {
         print!("Enter your full Matrix username (e.g. @john:some.homeserver.org): ");
         std::io::stdout()
             .flush()
@@ -1506,18 +1743,18 @@ fn get_user_login(gs: &mut GlobalState) {
             }
             // Todo: check format, e.g. starts with letter, has @, has :, etc.
             _ => {
-                gs.ap.user_login = Some(input.trim().to_string());
+                ap.user_login = Some(input.trim().to_string());
                 debug!("user_login is {}", input);
             }
         }
     }
 }
 
-/// If necessary reads password for login and puts it into the GlobalState.
+/// If necessary reads password for login and puts it into the Args.
 /// If already set via --password option, then it does nothing.
-fn get_password(gs: &mut GlobalState) {
-    while gs.ap.password.is_none() {
-        print!("Enter your Matrix password: ");
+fn get_password(ap: &mut Args) {
+    while ap.password.is_none() {
+        print!("Enter Matrix password for this user: ");
         std::io::stdout()
             .flush()
             .expect("error: could not flush stdout");
@@ -1533,17 +1770,17 @@ fn get_password(gs: &mut GlobalState) {
             }
             // Todo: check format, e.g. starts with letter, has @, has :, etc.
             _ => {
-                gs.ap.password = Some(input.trim().to_string());
+                ap.password = Some(input.trim().to_string());
                 debug!("password is {}", input);
             }
         }
     }
 }
 
-/// If necessary reads device for login and puts it into the GlobalState.
+/// If necessary reads device for login and puts it into the Args.
 /// If already set via --device option, then it does nothing.
-fn get_device(gs: &mut GlobalState) {
-    while gs.ap.device.is_none() {
+fn get_device(ap: &mut Args) {
+    while ap.device.is_none() {
         print!(
             concat!(
                 "Enter your desired name for the Matrix device ",
@@ -1566,17 +1803,17 @@ fn get_device(gs: &mut GlobalState) {
             }
             // Todo: check format, e.g. starts with letter, has @, has :, etc.
             _ => {
-                gs.ap.device = Some(input.trim().to_string());
+                ap.device = Some(input.trim().to_string());
                 debug!("device is {}", input);
             }
         }
     }
 }
 
-/// If necessary reads room_default for login and puts it into the GlobalState.
+/// If necessary reads room_default for login and puts it into the Args.
 /// If already set via --room_default option, then it does nothing.
-fn get_room_default(gs: &mut GlobalState) {
-    while gs.ap.room_default.is_none() {
+fn get_room_default(ap: &mut Args) {
+    while ap.room_default.is_none() {
         print!(concat!(
             "Enter name of one of your Matrix rooms that you want to use as default room  ",
             "(e.g. !someRoomId:some.homeserver.org): "
@@ -1596,7 +1833,7 @@ fn get_room_default(gs: &mut GlobalState) {
             }
             // Todo: check format, e.g. starts with letter, has @, has :, etc.
             _ => {
-                gs.ap.room_default = Some(input.trim().to_string());
+                ap.room_default = Some(input.trim().to_string());
                 debug!("room_default is {}", input);
             }
         }
@@ -1605,105 +1842,96 @@ fn get_room_default(gs: &mut GlobalState) {
 
 /// A room is either specified with --room or the default from credentials file is used
 /// On error return None.
-fn set_rooms(gs: &mut GlobalState) {
-    debug!("set_rooms() shows credentials {:?}", gs.credentials);
-    let droom = get_room_default_from_credentials(gs);
-    if gs.ap.room.is_empty() {
-        if let Some(i) = droom {
-            gs.ap.room.push(i); // since --room is empty, use default room from credentials
-        } else {
-            error!("Error: No room provided. Most likely operations will be skipped later due to no rooms being specified.");
-        }
+fn set_rooms(ap: &mut Args) {
+    debug!("set_rooms()");
+    if ap.room.is_empty() {
+        let droom = get_room_default_from_credentials(ap.creds.as_ref().unwrap());
+        ap.room.push(droom); // since --room is empty, use default room from credentials
     }
 }
 
-/// Before get_rooms() is called the rooms should have been updated with set_rooms() first.
-/// Get the user specified rooms (which might either have been specified with --room or
-/// be the default room from the credentials file).
-/// On error return None.
-fn get_rooms(gs: &GlobalState) -> &Vec<String> {
-    debug!("get_rooms() shows credentials {:?}", gs.credentials);
-    &gs.ap.room
-}
+// /// Before get_rooms() is called the rooms should have been updated with set_rooms() first.
+// /// Get the user specified rooms (which might either have been specified with --room or
+// /// be the default room from the credentials file).
+// /// On error return None.
+// fn get_rooms(ap: &Args) -> &Vec<String> {
+//     debug!("get_rooms()");
+//     &ap.room
+// }
 
 /// Get the default room id from the credentials file.
 /// On error return None.
-fn get_room_default_from_credentials(gs: &GlobalState) -> Option<String> {
-    debug!(
-        "get_room_default_from_credentials() shows credentials {:?}",
-        gs.credentials
-    );
-    match &gs.credentials {
-        Some(inner) => Some(inner.room_default.clone()),
-        None => {
-            error!("Error: cannot get default room from credentials file.");
-            None
-        }
-    } // returning match result
+fn get_room_default_from_credentials(credentials: &Credentials) -> String {
+    credentials.room_default.clone()
 }
 
-/// Return true if credentials file exists, false otherwise
-fn credentials_exist(gs: &GlobalState) -> bool {
-    let dp = get_credentials_default_path();
-    let ap = get_credentials_actual_path(gs);
-    debug!(
-        "credentials_default_path = {:?}, credentials_actual_path = {:?}",
-        dp, ap
-    );
-    let exists = ap.is_file();
-    if exists {
-        debug!("{:?} exists and is file. Not sure if readable though.", ap);
-    } else {
-        debug!("{:?} does not exist or is not a file.", ap);
+/// A user is either specified with --user or the default from credentials file is used
+/// On error return None.
+fn set_users(ap: &mut Args) {
+    debug!("set_users()");
+    if ap.user.is_empty() {
+        let duser = get_user_default_from_credentials(ap.creds.as_ref().unwrap());
+        ap.user.push(duser.to_string()); // since --user is empty, use default user from credentials
     }
-    exists
 }
 
-/// Return true if sledstore dir exists, false otherwise
+/// Before get_users() is called the users should have been updated with set_users() first.
+/// Get the user specified users (which might either have been specified with --user or
+/// be the default user from the credentials file).
+/// On error return None.
 #[allow(dead_code)]
-fn sledstore_exist(gs: &GlobalState) -> bool {
-    let dp = get_sledstore_default_path();
-    let ap = get_sledstore_actual_path(gs);
-    debug!(
-        "sledstore_default_path = {:?}, sledstore_actual_path = {:?}",
-        dp, ap
-    );
-    let exists = ap.is_dir();
-    if exists {
-        debug!(
-            "{:?} exists and is directory. Not sure if readable though.",
-            ap
-        );
-    } else {
-        debug!("{:?} does not exist or is not a directory.", ap);
+fn get_users(ap: &Args) -> &Vec<String> {
+    debug!("get_users()");
+    &ap.user
+}
+
+/// Get the default user id from the credentials file.
+/// On error return None.
+fn get_user_default_from_credentials(credentials: &Credentials) -> OwnedUserId {
+    credentials.user_id.clone()
+}
+
+/// Convert a vector of aliases that can contain short alias forms into
+/// a vector of fully canonical aliases.
+/// john and #john will be converted to #john:matrix.server.org.
+/// vecstr: the vector of aliases
+/// default_host: the default hostname like "matrix.server.org"
+fn convert_to_full_room_aliases(vecstr: &mut Vec<String>, default_host: &str) {
+    vecstr.retain(|x| !x.trim().is_empty());
+    for el in vecstr {
+        el.retain(|c| !c.is_whitespace());
+        if el.starts_with('!') {
+            warn!("A room id was given as alias. {:?}", el);
+            continue;
+        }
+        if !el.starts_with('#') {
+            el.insert(0, '#');
+        }
+        if !el.contains(':') {
+            el.push(':');
+            el.push_str(default_host);
+        }
     }
-    exists
+}
+
+// Replace shortcut "-" with room id of default room
+fn replace_minus_with_default_room(vecstr: &mut Vec<String>, default_room: &str) {
+    // There is no way to distringuish --get-room-info not being in CLI
+    // and --get-room-info being in API without a room.
+    // Hence it is not possible to say "if vector is empty let's use the default room".
+    // The user has to specify something, we used "-".
+    if vecstr.iter().any(|x| x.trim() == "-") {
+        vecstr.push(default_room.to_string());
+    }
+    vecstr.retain(|x| x.trim() != "-");
 }
 
 /// Handle the --login CLI argument
-pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
-    if gs.ap.login.is_none() {
+pub(crate) async fn cli_login(ap: &mut Args) -> Result<(Client, Credentials), Error> {
+    if ap.login.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if !gs.ap.login.is_password() {
-        error!(
-            "Login option '{:?}' currently not supported. Use '{:?}' for the time being.",
-            gs.ap.login,
-            Login::Password
-        );
-        return Err(Error::UnsupportedCliParameter);
-    }
-    // login is Login::Password
-    get_homeserver(gs);
-    get_user_login(gs);
-    get_password(gs);
-    get_device(gs); // human-readable device name
-    get_room_default(gs);
-    info!(
-        "Parameters for login are: {:?} {:?} {:?} {:?} {:?}",
-        gs.ap.homeserver, gs.ap.user_login, gs.ap.password, gs.ap.device, gs.ap.room_default
-    );
-    if credentials_exist(gs) {
+    if credentials_exist(ap) {
         error!(concat!(
             "Credentials file already exists. You have already logged in in ",
             "the past. No login needed. Skipping login. If you really want to log in ",
@@ -1711,78 +1939,73 @@ pub(crate) async fn cli_login(gs: &mut GlobalState) -> Result<Client, Error> {
             "Or just run your command again but without the '--login' option to log in ",
             "via your existing credentials and access token. ",
         ));
-        Err(Error::LoginUnnecessary) // returning
-    } else {
-        let client = crate::login(
-            gs,
-            &gs.ap.homeserver.clone().ok_or(Error::MissingCliParameter)?,
-            &gs.ap.user_login.clone().ok_or(Error::MissingCliParameter)?,
-            &gs.ap.password.clone().ok_or(Error::MissingCliParameter)?,
-            &gs.ap.device.clone().ok_or(Error::MissingCliParameter)?,
-            &gs.ap
-                .room_default
-                .clone()
-                .ok_or(Error::MissingCliParameter)?,
-        )
-        .await?;
-        Ok(client)
+        return Err(Error::LoginUnnecessary);
     }
+    if !ap.login.is_password() {
+        error!(
+            "Login option '{:?}' currently not supported. Use '{:?}' for the time being.",
+            ap.login,
+            Login::Password
+        );
+        return Err(Error::UnsupportedCliParameter);
+    }
+    // login is Login::Password
+    get_homeserver(ap);
+    get_user_login(ap);
+    get_password(ap);
+    get_device(ap); // human-readable device name
+    get_room_default(ap);
+    info!(
+        "Parameters for login are: {:?} {:?} {:?} {:?} {:?}",
+        ap.homeserver, ap.user_login, ap.password, ap.device, ap.room_default
+    );
+    let (client, credentials) = crate::login(
+        ap,
+        &ap.homeserver.clone().ok_or(Error::MissingCliParameter)?,
+        &ap.user_login.clone().ok_or(Error::MissingCliParameter)?,
+        &ap.password.clone().ok_or(Error::MissingCliParameter)?,
+        &ap.device.clone().ok_or(Error::MissingCliParameter)?,
+        &ap.room_default.clone().ok_or(Error::MissingCliParameter)?,
+    )
+    .await?;
+    Ok((client, credentials))
 }
 
 /// Attempt a restore-login iff the --login CLI argument is missing.
 /// In other words try a re-login using the access token from the credentials file.
-pub(crate) async fn cli_restore_login(gs: &mut GlobalState) -> Result<Client, Error> {
+pub(crate) async fn cli_restore_login(
+    credentials: &Credentials,
+    ap: &Args,
+) -> Result<Client, Error> {
     info!("restore_login implicitly chosen.");
-    if !credentials_exist(gs) {
-        error!(concat!(
-            "Credentials file does not exists. Consider doing a '--logout' to clean up, ",
-            "then perform a '--login'."
-        ));
-        Err(Error::NotLoggedIn) // returning
-    } else {
-        let client = crate::restore_login(gs).await?;
-        debug!(
-            "restore_login returned successfully, credentials are {:?}.",
-            gs.credentials
-        );
-        Ok(client)
-    }
+    crate::restore_login(credentials, ap).await
 }
 
 /// Handle the --verify CLI argument
-pub(crate) async fn cli_verify(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Verify chosen.");
-    if gs.ap.verify.is_none() {
+    if ap.verify.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if !gs.ap.verify.is_emoji() {
+    if !ap.verify.is_emoji() {
         error!(
             "Verify option '{:?}' currently not supported. Use '{:?}' for the time being.",
-            gs.ap.verify,
+            ap.verify,
             Verify::Emoji
         );
         return Err(Error::UnsupportedCliParameter);
     }
-    crate::verify(clientres).await
+    crate::verify(client).await
 }
 
 /// Handle the --message CLI argument
-pub(crate) async fn cli_message(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Message chosen.");
-    if gs.ap.message.is_empty() {
+    if ap.message.is_empty() {
         return Ok(()); // nothing to do
     }
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
     let mut fmsgs: Vec<String> = Vec::new(); // formatted msgs
-    for msg in gs.ap.message.iter() {
+    for msg in ap.message.iter() {
         if msg.is_empty() {
             info!("Skipping empty text message.");
             continue;
@@ -1820,31 +2043,25 @@ pub(crate) async fn cli_message(
         return Ok(()); // nothing to do
     }
     message(
-        clientres,
+        client,
         &fmsgs,
-        get_rooms(gs),
-        gs.ap.code,
-        gs.ap.markdown,
-        gs.ap.notice,
-        gs.ap.emote,
+        &ap.room,
+        ap.code,
+        ap.markdown,
+        ap.notice,
+        ap.emote,
     )
     .await // returning
 }
 
 /// Handle the --file CLI argument
-pub(crate) async fn cli_file(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_file(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("File chosen.");
-    if gs.ap.file.is_empty() {
+    if ap.file.is_empty() {
         return Ok(()); // nothing to do
     }
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
     let mut files: Vec<PathBuf> = Vec::new();
-    for filename in &gs.ap.file {
+    for filename in &ap.file {
         match filename.as_str() {
             "" => info!("Skipping empty file name."),
             r"-" => files.push(PathBuf::from("-".to_string())),
@@ -1853,16 +2070,13 @@ pub(crate) async fn cli_file(
         }
     }
     // pb: label to attach to a stdin pipe data in case there is data piped in from stdin
-    let pb: PathBuf = if !gs.ap.file_name.is_empty() {
-        gs.ap.file_name[0].clone()
+    let pb: PathBuf = if !ap.file_name.is_empty() {
+        ap.file_name[0].clone()
     } else {
         PathBuf::from("file")
     };
     file(
-        clientres,
-        &files,
-        get_rooms(gs),
-        None, // label, use default filename
+        client, &files, &ap.room, None, // label, use default filename
         None, // mime, guess it
         &pb,  // lavel for stdin pipe
     )
@@ -1870,103 +2084,61 @@ pub(crate) async fn cli_file(
 }
 
 /// Handle the --listen once CLI argument
-pub(crate) async fn cli_listen_once(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_listen_once(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Listen Once chosen.");
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
-    listen_once(
-        clientres,
-        gs.ap.listen_self,
-        crate::whoami(gs)?,
-        gs.ap.output,
-    )
-    .await // returning
+    listen_once(client, ap.listen_self, crate::whoami(ap), ap.output).await // returning
 }
 
 /// Handle the --listen forever CLI argument
-pub(crate) async fn cli_listen_forever(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_listen_forever(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Listen Forever chosen.");
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
-    listen_forever(
-        clientres,
-        gs.ap.listen_self,
-        crate::whoami(gs)?,
-        gs.ap.output,
-    )
-    .await // returning
+    listen_forever(client, ap.listen_self, crate::whoami(ap), ap.output).await
+    // returning
 }
 
 /// Handle the --listen tail CLI argument
-pub(crate) async fn cli_listen_tail(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_listen_tail(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Listen Tail chosen.");
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
     listen_tail(
-        clientres,
-        get_rooms(gs),
-        gs.ap.tail,
-        gs.ap.listen_self,
-        crate::whoami(gs)?,
-        gs.ap.output,
+        client,
+        &ap.room,
+        ap.tail,
+        ap.listen_self,
+        crate::whoami(ap),
+        ap.output,
     )
     .await // returning
 }
 
 /// Handle the --listen all CLI argument
-pub(crate) async fn cli_listen_all(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_listen_all(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Listen All chosen.");
-    if clientres.as_ref().is_err() {
-        return Ok(()); // nothing to do, this error has already been reported
-    }
     listen_all(
-        clientres,
-        get_rooms(gs),
-        gs.ap.listen_self,
-        crate::whoami(gs)?,
-        gs.ap.output,
+        client,
+        &ap.room,
+        ap.listen_self,
+        crate::whoami(ap),
+        ap.output,
     )
     .await // returning
 }
 
 /// Handle the --devices CLI argument
-pub(crate) async fn cli_devices(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_devices(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Devices chosen.");
-    crate::devices(clientres, gs.ap.output).await // returning
+    crate::devices(client, ap.output).await // returning
 }
 
 /// Utility function, returns user_id of itself
-pub(crate) fn whoami(gs: &GlobalState) -> Result<OwnedUserId, Error> {
-    let whoami = match &gs.credentials {
-        Some(inner) => inner.user_id.clone(),
-        _ => return Err(Error::NotLoggedIn),
-    };
-    Ok(whoami)
+pub(crate) fn whoami(ap: &Args) -> OwnedUserId {
+    ap.creds.as_ref().unwrap().user_id.clone()
 }
 
 /// Handle the --whoami CLI argument
-pub(crate) fn cli_whoami(gs: &GlobalState) -> Result<(), Error> {
+pub(crate) fn cli_whoami(ap: &Args) -> Result<(), Error> {
     info!("Whoami chosen.");
-    let whoami = crate::whoami(gs)?;
-    match gs.ap.output {
+    let whoami = crate::whoami(ap);
+    match ap.output {
         Output::Text => println!("{}", whoami),
         Output::JsonSpec => (),
         _ => println!("{{\"user_id\": \"{}\"}}", whoami),
@@ -1975,129 +2147,106 @@ pub(crate) fn cli_whoami(gs: &GlobalState) -> Result<(), Error> {
 }
 
 /// Handle the --get-room-info CLI argument
-pub(crate) async fn cli_get_room_info(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_get_room_info(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Get-room-info chosen.");
-    let mut vec = gs.ap.get_room_info.clone();
-    if vec.iter().any(|x| x == "--") {
-        vec.push(get_room_default_from_credentials(gs).unwrap());
-    }
-    vec.retain(|x| x != "--");
-    crate::get_room_info(clientres, &vec, gs.ap.output).await
+    // note that get_room_info vector is NOT empty.
+    // If it were empty this function would not be called.
+    crate::get_room_info(client, &ap.get_room_info, ap.output).await
 }
 
 /// Handle the --rooms CLI argument
-pub(crate) async fn cli_rooms(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_rooms(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Rooms chosen.");
-    crate::rooms(clientres, gs.ap.output).await
+    crate::rooms(client, ap.output).await
 }
 
 /// Handle the --invited-rooms CLI argument
-pub(crate) async fn cli_invited_rooms(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_invited_rooms(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Invited-rooms chosen.");
-    crate::invited_rooms(clientres, gs.ap.output).await
+    crate::invited_rooms(client, ap.output).await
 }
 
 /// Handle the --joined-rooms CLI argument
-pub(crate) async fn cli_joined_rooms(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_joined_rooms(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Joined-rooms chosen.");
-    crate::joined_rooms(clientres, gs.ap.output).await
+    crate::joined_rooms(client, ap.output).await
 }
 
 /// Handle the --left-rooms CLI argument
-pub(crate) async fn cli_left_rooms(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_left_rooms(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Left-rooms chosen.");
-    crate::left_rooms(clientres, gs.ap.output).await
+    crate::left_rooms(client, ap.output).await
 }
 
 /// Handle the --room-create CLI argument
-pub(crate) async fn cli_room_create(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_room_create(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-create chosen.");
-    crate::room_create(
-        clientres,
-        &gs.ap.room_create,
-        &gs.ap.name,
-        &gs.ap.topic,
-        gs.ap.output,
-    )
-    .await
+    crate::room_create(client, &ap.room_create, &ap.name, &ap.topic, ap.output).await
 }
 
 /// Handle the --room-leave CLI argument
-pub(crate) async fn cli_room_leave(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_room_leave(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-leave chosen.");
-    crate::room_leave(clientres, &gs.ap.room_leave, gs.ap.output).await
+    crate::room_leave(client, &ap.room_leave, ap.output).await
 }
 
 /// Handle the --room-forget CLI argument
-pub(crate) async fn cli_room_forget(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_room_forget(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-forget chosen.");
-    crate::room_forget(clientres, &gs.ap.room_forget, gs.ap.output).await
+    crate::room_forget(client, &ap.room_forget, ap.output).await
+}
+
+/// Handle the --room-resolve_alias CLI argument
+pub(crate) async fn cli_room_resolve_alias(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-resolve-alias chosen.");
+    crate::room_resolve_alias(client, &ap.room_resolve_alias, ap.output).await
+}
+
+/// Handle the --delete-device CLI argument
+pub(crate) async fn cli_delete_device(client: &Client, ap: &mut Args) -> Result<(), Error> {
+    info!("Delete-device chosen.");
+    crate::delete_devices_pre(client, ap).await
 }
 
 /// Handle the --logout CLI argument
-pub(crate) async fn cli_logout(
-    clientres: &Result<Client, Error>,
-    gs: &GlobalState,
-) -> Result<(), Error> {
+pub(crate) async fn cli_logout(client: &Client, ap: &mut Args) -> Result<(), Error> {
     info!("Logout chosen.");
-    if gs.ap.logout.is_none() {
+    if ap.logout.is_none() {
         return Ok(());
     }
-    // TODO add `all`
-    if gs.ap.logout.is_all() {
-        error!(
-            "Logout option '{:?}' currently not supported. Use '{:?}' for the time being.",
-            gs.ap.logout,
-            Logout::Me
-        );
-        return Err(Error::UnsupportedCliParameter);
+    if ap.logout.is_all() {
+        // delete_device list will be overwritten, but that is okay because
+        // logout is the last function in main.
+        ap.delete_device = vec!["*".to_owned()];
+        match cli_delete_device(client, ap).await {
+            Ok(_) => info!("Logout caused all devices to be deleted."),
+            Err(e) => error!(
+                "Error: Failed to delete all devices, but we remove local device id anyway. {:?}",
+                e
+            ),
+        }
     }
-    crate::logout(clientres, gs).await
+    crate::logout(client, ap).await
 }
 
 /// We need your code contributions! Please add features and make PRs! :pray: :clap:
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let mut gs: GlobalState = GlobalState::new();
-    gs.ap = Args::parse();
+    let mut ap = Args::parse();
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
-    // println!("Original log_level option is {:?}", gs.ap.log_level);
+    // println!("Original log_level option is {:?}", ap.log_level);
     // println!("Original RUST_LOG is {:?}", &env_org_rust_log);
-    if gs.ap.debug > 0 {
+    if ap.debug > 0 {
         // -d overwrites --log-level
-        gs.ap.log_level = LogLevel::Debug
+        ap.log_level = LogLevel::Debug
     }
-    if gs.ap.log_level.is_none() {
-        gs.ap.log_level = LogLevel::from_str(&env_org_rust_log, true).unwrap_or(LogLevel::Error);
+    if ap.log_level.is_none() {
+        ap.log_level = LogLevel::from_str(&env_org_rust_log, true).unwrap_or(LogLevel::Error);
     }
     // overwrite environment variable, important because it might have been empty/unset
-    env::set_var("RUST_LOG", gs.ap.log_level.to_string());
+    env::set_var("RUST_LOG", ap.log_level.to_string());
 
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
     tracing_subscriber::fmt::init();
@@ -2106,7 +2255,7 @@ async fn main() -> Result<(), Error> {
         "Final RUST_LOG env var is {}",
         env::var("RUST_LOG").unwrap_or_default().to_uppercase()
     );
-    debug!("Final log_level option is {:?}", gs.ap.log_level);
+    debug!("Final log_level option is {:?}", ap.log_level);
     if enabled!(Level::TRACE) {
         debug!("Log level is set to TRACE.");
     } else if enabled!(Level::DEBUG) {
@@ -2115,222 +2264,284 @@ async fn main() -> Result<(), Error> {
     debug!("Version is {}", get_version());
     debug!("Package name is {}", get_pkg_name());
     debug!("Repo is {}", get_pkg_repository());
-    debug!("contribute flag is {}", gs.ap.contribute);
-    debug!("version flag is set to {}", gs.ap.version);
-    debug!("debug flag is {}", gs.ap.debug);
-    debug!("log_level option is {:?}", gs.ap.log_level);
-    debug!("verbose option is {}", gs.ap.verbose);
-    debug!("login option is {:?}", gs.ap.login);
-    debug!("verify flag is {:?}", gs.ap.verify);
-    debug!("message option is {:?}", gs.ap.message);
-    debug!("logout option is {:?}", gs.ap.logout);
-    debug!("homeserver option is {:?}", gs.ap.homeserver);
-    debug!("user_login option is {:?}", gs.ap.user_login);
-    debug!("password option is {:?}", gs.ap.password);
-    debug!("device option is {:?}", gs.ap.device);
-    debug!("room_default option is {:?}", gs.ap.room_default);
-    debug!("devices flag is {:?}", gs.ap.devices);
-    debug!("timeout option is {:?}", gs.ap.timeout);
-    debug!("markdown flag is {:?}", gs.ap.markdown);
-    debug!("code flag is {:?}", gs.ap.code);
-    debug!("room option is {:?}", gs.ap.room);
-    debug!("file option is {:?}", gs.ap.file);
-    debug!("notice flag is {:?}", gs.ap.notice);
-    debug!("emote flag is {:?}", gs.ap.emote);
-    debug!("sync option is {:?}", gs.ap.sync);
-    debug!("listen option is {:?}", gs.ap.listen);
-    debug!("tail option is {:?}", gs.ap.tail);
-    debug!("listen_self flag is {:?}", gs.ap.listen_self);
-    debug!("whoami flag is {:?}", gs.ap.whoami);
-    debug!("output option is {:?}", gs.ap.output);
-    debug!("get-room-info option is {:?}", gs.ap.get_room_info);
-    debug!("file-name option is {:?}", gs.ap.file_name);
-    debug!("room-create option is {:?}", gs.ap.room_create);
-    debug!("room-leave option is {:?}", gs.ap.room_leave);
-    debug!("room-forget option is {:?}", gs.ap.room_forget);
-    debug!("name option is {:?}", gs.ap.name);
-    debug!("topic-create option is {:?}", gs.ap.topic);
-    debug!("rooms option is {:?}", gs.ap.rooms);
-    debug!("invited-rooms option is {:?}", gs.ap.invited_rooms);
-    debug!("joined-rooms option is {:?}", gs.ap.joined_rooms);
-    debug!("left-rooms option is {:?}", gs.ap.left_rooms);
+    debug!("contribute flag is {}", ap.contribute);
+    debug!("version flag is set to {}", ap.version);
+    debug!("debug flag is {}", ap.debug);
+    debug!("log-level option is {:?}", ap.log_level);
+    debug!("verbose option is {}", ap.verbose);
+    debug!("credentials option is {:?}", ap.credentials);
+    debug!("store option is {:?}", ap.store);
+    debug!("verbose option is {}", ap.verbose);
+    debug!("login option is {:?}", ap.login);
+    debug!("verify flag is {:?}", ap.verify);
+    debug!("message option is {:?}", ap.message);
+    debug!("logout option is {:?}", ap.logout);
+    debug!("homeserver option is {:?}", ap.homeserver);
+    debug!("user-login option is {:?}", ap.user_login);
+    debug!("password option is {:?}", ap.password);
+    debug!("device option is {:?}", ap.device);
+    debug!("room-default option is {:?}", ap.room_default);
+    debug!("devices flag is {:?}", ap.devices);
+    debug!("timeout option is {:?}", ap.timeout);
+    debug!("markdown flag is {:?}", ap.markdown);
+    debug!("code flag is {:?}", ap.code);
+    debug!("room option is {:?}", ap.room);
+    debug!("file option is {:?}", ap.file);
+    debug!("notice flag is {:?}", ap.notice);
+    debug!("emote flag is {:?}", ap.emote);
+    debug!("sync option is {:?}", ap.sync);
+    debug!("listen option is {:?}", ap.listen);
+    debug!("tail option is {:?}", ap.tail);
+    debug!("listen-self flag is {:?}", ap.listen_self);
+    debug!("whoami flag is {:?}", ap.whoami);
+    debug!("output option is {:?}", ap.output);
+    debug!("get-room-info option is {:?}", ap.get_room_info);
+    debug!("file-name option is {:?}", ap.file_name);
+    debug!("room-create option is {:?}", ap.room_create);
+    debug!("room-leave option is {:?}", ap.room_leave);
+    debug!("room-forget option is {:?}", ap.room_forget);
+    debug!("room-resolve-alias option is {:?}", ap.room_resolve_alias);
+    debug!("name option is {:?}", ap.name);
+    debug!("topic-create option is {:?}", ap.topic);
+    debug!("rooms option is {:?}", ap.rooms);
+    debug!("invited-rooms option is {:?}", ap.invited_rooms);
+    debug!("joined-rooms option is {:?}", ap.joined_rooms);
+    debug!("left-rooms option is {:?}", ap.left_rooms);
+    debug!("delete-device option is {:?}", ap.delete_device);
+    debug!("user option is {:?}", ap.user);
 
-    // Todo : make all option args lower case
-    if gs.ap.version {
+    if ap.version {
         crate::version();
     };
-    if gs.ap.contribute {
+    if ap.contribute {
         crate::contribute();
     };
-    let clientres = if !gs.ap.login.is_none() {
-        crate::cli_login(&mut gs).await
+    let (clientres, credentials) = if !ap.login.is_none() {
+        match crate::cli_login(&mut ap).await {
+            Ok((client, credentials)) => (Ok(client), credentials),
+            Err(ref e) => {
+                error!("Login to server failed or credentials information could not be written to disk. Check your arguments and try --login again. Reported error is: {:?}", e);
+                return Err(Error::LoginFailed);
+            }
+        }
+    } else if let Ok(credentials) = restore_credentials(&ap) {
+        (
+            crate::cli_restore_login(&credentials, &ap).await,
+            credentials,
+        )
     } else {
-        crate::cli_restore_login(&mut gs).await
+        error!("Credentials file does not exists or cannot be read. Consider doing a '--logout' to clean up, then perform a '--login'.");
+        return Err(Error::LoginFailed);
     };
+    ap.creds = Some(credentials);
+
+    // Place all the calls here that work without a server connection
+    // whoami: works even without client (server connection)
+    if ap.whoami {
+        match crate::cli_whoami(&ap) {
+            Ok(ref _n) => debug!("crate::whoami successful"),
+            Err(ref e) => error!("Error: crate::whoami reported {}", e),
+        };
+    };
+
     match clientres {
         Ok(ref _n) => {
-            debug!("A valid client connection has been established.");
+            debug!("A valid client connection has been established with server.");
         }
         Err(ref e) => {
             info!(
                 "Most operations will be skipped because you don't have a valid client connection."
             );
             error!("Error: {}", e);
-            // don't quit yet, e.g. logout can still do stuff;
-            // return Err(Error::LoginFailed);
+            // don't quit yet, don't return Err(Error::LoginFailed);
+            // whoami still works without server connection
+            // whoami already called above
+            // logout can partially be done without server connection
+            if !ap.logout.is_none() {
+                match logout_local(&ap) {
+                    Ok(ref _n) => debug!("crate::logout_local successful"),
+                    Err(ref e) => error!("Error: crate::logout_local reported {}", e),
+                };
+            };
         }
     };
-    set_rooms(&mut gs); // if no rooms in --room, set rooms to default room from credentials file
-    if gs.ap.tail > 0 {
-        // overwrite --listen if user has chosen both
-        if !gs.ap.listen.is_never() && !gs.ap.listen.is_tail() {
-            warn!(
+
+    if let Ok(client) = clientres {
+        // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
+        set_rooms(&mut ap); // if no rooms in --room, set rooms to default room from credentials file
+        set_users(&mut ap); // if no users in --user, set users to default user from credentials file
+        convert_to_full_room_aliases(
+            &mut ap.room_resolve_alias,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        ); // convert short aliases to full aliases
+        replace_minus_with_default_room(
+            &mut ap.get_room_info,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.get_room_info,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full ids
+        ap.get_room_info.retain(|x| !x.trim().is_empty());
+
+        if ap.tail > 0 {
+            // overwrite --listen if user has chosen both
+            if !ap.listen.is_never() && !ap.listen.is_tail() {
+                warn!(
                 "Two contradicting listening methods were specified. Overwritten with --tail. Will use '--listen tail'. {:?} {}",
-                gs.ap.listen, gs.ap.tail
+                ap.listen, ap.tail
             )
+            }
+            ap.listen = Listen::Tail
         }
-        gs.ap.listen = Listen::Tail
+
+        // top-priority actions
+
+        if !ap.verify.is_none() {
+            match crate::cli_verify(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::verify successful"),
+                Err(ref e) => error!("Error: crate::verify reported {}", e),
+            };
+        };
+
+        // get actions
+
+        if ap.devices {
+            match crate::cli_devices(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::devices successful"),
+                Err(ref e) => error!("Error: crate::devices reported {}", e),
+            };
+        };
+
+        if !ap.get_room_info.is_empty() {
+            match crate::cli_get_room_info(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_room_info successful"),
+                Err(ref e) => error!("Error: crate::get_room_info reported {}", e),
+            };
+        };
+
+        if ap.rooms {
+            match crate::cli_rooms(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::rooms successful"),
+                Err(ref e) => error!("Error: crate::rooms reported {}", e),
+            };
+        };
+
+        if ap.invited_rooms {
+            match crate::cli_invited_rooms(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::invited_rooms successful"),
+                Err(ref e) => error!("Error: crate::invited_rooms reported {}", e),
+            };
+        };
+
+        if ap.joined_rooms {
+            match crate::cli_joined_rooms(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::joined_rooms successful"),
+                Err(ref e) => error!("Error: crate::joined_rooms reported {}", e),
+            };
+        };
+
+        if ap.left_rooms {
+            match crate::cli_left_rooms(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::left_rooms successful"),
+                Err(ref e) => error!("Error: crate::left_rooms reported {}", e),
+            };
+        };
+
+        if !ap.room_resolve_alias.is_empty() {
+            match crate::cli_room_resolve_alias(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_resolve_alias successful"),
+                Err(ref e) => error!("Error: crate::room_resolve_alias reported {}", e),
+            };
+        };
+
+        // set actions
+
+        if !ap.room_create.is_empty() {
+            match crate::cli_room_create(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_create successful"),
+                Err(ref e) => error!("Error: crate::room_create reported {}", e),
+            };
+        };
+
+        if !ap.room_leave.is_empty() {
+            match crate::cli_room_leave(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_leave successful"),
+                Err(ref e) => error!("Error: crate::room_leave reported {}", e),
+            };
+        };
+
+        if !ap.room_forget.is_empty() {
+            match crate::cli_room_forget(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_forget successful"),
+                Err(ref e) => error!("Error: crate::room_forget reported {}", e),
+            };
+        };
+
+        if !ap.delete_device.is_empty() {
+            match crate::cli_delete_device(&client, &mut ap).await {
+                Ok(ref _n) => debug!("crate::delete_device successful"),
+                Err(ref e) => error!("Error: crate::delete_device reported {}", e),
+            };
+        };
+
+        // send text message(s)
+        if !ap.message.is_empty() {
+            match crate::cli_message(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::message successful"),
+                Err(ref e) => error!("Error: crate::message reported {}", e),
+            };
+        };
+
+        // send file(s)
+        if !ap.file.is_empty() {
+            match crate::cli_file(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::file successful"),
+                Err(ref e) => error!("Error: crate::file reported {}", e),
+            };
+        };
+
+        // listen once
+        if ap.listen.is_once() {
+            match crate::cli_listen_once(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::listen_once successful"),
+                Err(ref e) => error!("Error: crate::listen_once reported {}", e),
+            };
+        };
+
+        // listen forever
+        if ap.listen.is_forever() {
+            match crate::cli_listen_forever(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::listen_forever successful"),
+                Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
+            };
+        };
+
+        // listen tail
+        if ap.listen.is_tail() {
+            match crate::cli_listen_tail(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::listen_tail successful"),
+                Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
+            };
+        };
+
+        // listen all
+        if ap.listen.is_all() {
+            match crate::cli_listen_all(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::listen_all successful"),
+                Err(ref e) => error!("Error: crate::listen_all reported {}", e),
+            };
+        };
+
+        if !ap.logout.is_none() {
+            match crate::cli_logout(&client, &mut ap).await {
+                Ok(ref _n) => debug!("crate::logout successful"),
+                Err(ref e) => error!("Error: crate::logout reported {}", e),
+            };
+        };
     }
-
-    if !gs.ap.verify.is_none() && clientres.as_ref().is_ok() {
-        match crate::cli_verify(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::verify successful"),
-            Err(ref e) => error!("Error: crate::verify reported {}", e),
-        };
-    };
-
-    // get actions
-
-    if gs.ap.devices && clientres.as_ref().is_ok() {
-        match crate::cli_devices(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::devices successful"),
-            Err(ref e) => error!("Error: crate::devices reported {}", e),
-        };
-    };
-
-    // This might work even without client (server connection)
-    if gs.ap.whoami {
-        match crate::cli_whoami(&gs) {
-            Ok(ref _n) => debug!("crate::whoami successful"),
-            Err(ref e) => error!("Error: crate::whoami reported {}", e),
-        };
-    };
-
-    // If no room specified "--" must be specified
-    // Otherwise it would be impossible to distinguish not using option or not specifying a room in option,
-    // In addition, argparse requires at least 1 room to be given.
-    if !gs.ap.get_room_info.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_get_room_info(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::get_room_info successful"),
-            Err(ref e) => error!("Error: crate::get_room_info reported {}", e),
-        };
-    };
-
-    if gs.ap.rooms && clientres.as_ref().is_ok() {
-        match crate::cli_rooms(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::rooms successful"),
-            Err(ref e) => error!("Error: crate::rooms reported {}", e),
-        };
-    };
-
-    if gs.ap.invited_rooms && clientres.as_ref().is_ok() {
-        match crate::cli_invited_rooms(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::invited_rooms successful"),
-            Err(ref e) => error!("Error: crate::invited_rooms reported {}", e),
-        };
-    };
-
-    if gs.ap.joined_rooms && clientres.as_ref().is_ok() {
-        match crate::cli_joined_rooms(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::joined_rooms successful"),
-            Err(ref e) => error!("Error: crate::joined_rooms reported {}", e),
-        };
-    };
-
-    if gs.ap.left_rooms && clientres.as_ref().is_ok() {
-        match crate::cli_left_rooms(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::left_rooms successful"),
-            Err(ref e) => error!("Error: crate::left_rooms reported {}", e),
-        };
-    };
-
-    // set actions
-
-    if !gs.ap.room_create.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_room_create(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::room_create successful"),
-            Err(ref e) => error!("Error: crate::room_create reported {}", e),
-        };
-    };
-
-    if !gs.ap.room_leave.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_room_leave(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::room_leave successful"),
-            Err(ref e) => error!("Error: crate::room_leave reported {}", e),
-        };
-    };
-
-    if !gs.ap.room_forget.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_room_forget(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::room_forget successful"),
-            Err(ref e) => error!("Error: crate::room_forget reported {}", e),
-        };
-    };
-
-    // send text message(s)
-    if !gs.ap.message.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_message(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::message successful"),
-            Err(ref e) => error!("Error: crate::message reported {}", e),
-        };
-    };
-
-    // send file(s)
-    if !gs.ap.file.is_empty() && clientres.as_ref().is_ok() {
-        match crate::cli_file(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::file successful"),
-            Err(ref e) => error!("Error: crate::file reported {}", e),
-        };
-    };
-
-    // listen once
-    if gs.ap.listen.is_once() && clientres.as_ref().is_ok() {
-        match crate::cli_listen_once(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::listen_once successful"),
-            Err(ref e) => error!("Error: crate::listen_once reported {}", e),
-        };
-    };
-
-    // listen forever
-    if gs.ap.listen.is_forever() && clientres.as_ref().is_ok() {
-        match crate::cli_listen_forever(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::listen_forever successful"),
-            Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
-        };
-    };
-
-    // listen tail
-    if gs.ap.listen.is_tail() && clientres.as_ref().is_ok() {
-        match crate::cli_listen_tail(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::listen_tail successful"),
-            Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
-        };
-    };
-
-    // listen all
-    if gs.ap.listen.is_all() && clientres.as_ref().is_ok() {
-        match crate::cli_listen_all(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::listen_all successful"),
-            Err(ref e) => error!("Error: crate::listen_all reported {}", e),
-        };
-    };
-
-    if !gs.ap.logout.is_none() {
-        match crate::cli_logout(&clientres, &gs).await {
-            Ok(ref _n) => debug!("crate::logout successful"),
-            Err(ref e) => error!("Error: crate::verify reported {}", e),
-        };
-    };
     debug!("Good bye");
     Ok(())
 }

@@ -306,18 +306,11 @@ struct EvHandlerContext {
 
 /// Listen to all rooms once. Then continue.
 pub(crate) async fn listen_once(
-    clientres: &Result<Client, Error>,
+    client: &Client,
     listen_self: bool, // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
-    let client = match clientres {
-        Err(e) => {
-            error!("error: {:?}", e);
-            return Err(Error::InvalidClientConnection);
-        }
-        Ok(client) => client,
-    };
     info!(
         "mclient::listen_once(): listen_self {}, room {}",
         listen_self, "all"
@@ -390,18 +383,11 @@ pub(crate) async fn listen_once(
 
 /// Listen to all rooms forever. Stay in the event loop.
 pub(crate) async fn listen_forever(
-    clientres: &Result<Client, Error>,
+    client: &Client,
     listen_self: bool, // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
-    let client = match clientres {
-        Err(e) => {
-            error!("error: {:?}", e);
-            return Err(Error::InvalidClientConnection);
-        }
-        Ok(client) => client,
-    };
     info!(
         "mclient::listen_forever(): listen_self {}, room {}",
         listen_self, "all"
@@ -475,27 +461,20 @@ fn print_type_of<T>(_: &T) {
 /// Then it returns. Less than N messages might be printed if the messages do not exist.
 /// Running it twice in a row (while no new messages were sent) should deliver the same output, response.
 pub(crate) async fn listen_tail(
-    clientres: &Result<Client, Error>,
+    client: &Client,
     roomnames: &Vec<String>, // roomId
     number: u64,             // number of messages to print, N
     listen_self: bool,       // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
-    let client = match clientres {
-        Err(e) => {
-            error!("error: {:?}", e);
-            return Err(Error::InvalidClientConnection);
-        }
-        Ok(client) => client,
-    };
-    if roomnames.is_empty() {
-        return Err(Error::MissingRoom);
-    }
     info!(
         "mclient::listen_tail(): listen_self {}, roomnames {:?}",
         listen_self, roomnames
     );
+    if roomnames.is_empty() {
+        return Err(Error::MissingRoom);
+    }
 
     // We are *not* using the event manager, no sync()!
 
@@ -662,19 +641,12 @@ pub(crate) async fn listen_tail(
 /// Listens to the room(s) provided as argument, prints any pending relevant messages,
 /// and then continues by returning.
 pub(crate) async fn listen_all(
-    clientres: &Result<Client, Error>,
+    client: &Client,
     roomnames: &Vec<String>, // roomId
     listen_self: bool,       // listen to my own messages?
     whoami: OwnedUserId,
     output: Output,
 ) -> Result<(), Error> {
-    let client = match clientres {
-        Err(e) => {
-            error!("error: {:?}", e);
-            return Err(Error::InvalidClientConnection);
-        }
-        Ok(client) => client,
-    };
     if roomnames.is_empty() {
         return Err(Error::MissingRoom);
     }
