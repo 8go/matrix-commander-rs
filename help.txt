@@ -18,6 +18,12 @@ Options:
           Please contribute
   -v, --version
           Print version number
+      --version-check
+          Check if a newer version exists on crates.io. This connects to
+          https://crates.io and gets the version number of latest stable
+          release. There is no "calling home" on every run, only a "check
+          crates.io" upon request. Your privacy is protected. New release is
+          neither downloaded, nor installed. It just informs you
   -d, --debug...
           Overwrite the default log level. If not used, then the default log
           level set with environment variable 'RUST_LOG' will be used. If used,
@@ -331,8 +337,8 @@ Options:
           display name, not the room display name. The argument
           '--room-resolve-alias' can also be used to go the other direction,
           i.e. to find the room id given a room alias
-      --room-create [<ROOM>...]
-          Create one or multiple rooms. One or multiple roo aliases can be
+      --room-create [<LOCAL ALIAS>...]
+          Create one or multiple rooms. One or multiple room aliases can be
           specified. For each alias specified a room will be created. For each
           created room one line with room id, alias, name and topic will be
           printed to stdout. If you are not interested in an alias, provide an
@@ -358,6 +364,39 @@ Options:
           room can eventually be deleted on the server. You must leave a room
           first, before you can forget it You can run both commands
           '--room-leave' and '--room-forget' at the same time
+      --room-invite [<ROOM>...]
+          Invite one ore more users to join one or more rooms. Specify the
+          user(s) as arguments to --user. Specify the rooms as arguments to
+          this option, i.e. as arguments to --room-invite. The user must have
+          permissions to invite users. Use the shortcut '-' to specify the
+          pre-configured default room of 'matrix-commander-rs' as room
+      --room-join [<ROOM>...]
+          Join this room or these rooms. One or multiple room aliases can be
+          specified. The room (or multiple ones) provided in the arguments will
+          be joined. The user must have permissions to join these rooms. Use
+          the shortcut '-' to specify the pre-configured default room of
+          'matrix-commander-rs' as room. Note, no --user on this feature as the
+          user is always the user of 'matrix-commander-rs'
+      --room-ban [<ROOM>...]
+          Ban one ore more users from one or more rooms. Specify the user(s) as
+          arguments to --user. Specify the rooms as arguments to this option,
+          i.e. as arguments to --room-ban. The user must have permissions to
+          ban users. Use the shortcut '-' to specify the pre-configured default
+          room of 'matrix-commander-rs' as room
+      --room-unban [<ROOM>...]
+          Unban one ore more users from one or more rooms. Specify the user(s)
+          as arguments to --user. Specify the rooms as arguments to this
+          option, i.e. as arguments to --room-unban. The user must have
+          permissions to unban users. Use the shortcut '-' to specify the
+          pre-configured default room of 'matrix-commander-rs' as room. Note,
+          this is currently not implemented in the matrix-sdk API. This feature
+          will currently return an error
+      --room-kick [<ROOM>...]
+          Kick one ore more users from one or more rooms. Specify the user(s)
+          as arguments to --user. Specify the rooms as arguments to this
+          option, i.e. as arguments to --room-kick. The user must have
+          permissions to kick users. Use the shortcut '-' to specify the
+          pre-configured default room of 'matrix-commander-rs' as room
       --room-resolve-alias [<ALIAS>...]
           Resolves a room alias to the corresponding room id, or multiple room
           aliases to their corresponding room ids. Provide one or multiple room
@@ -422,6 +461,11 @@ Options:
           password is read from keyboard interactively
   -u, --user [<USER>...]
           Specify one or multiple users. This option is meaningful in
-          combination with --delete-device
+          combination with a) room actions like --room-invite, --room-ban,
+          --room-unban, etc. and d) actions like --delete-device. In case of a)
+          this option --user specifies the users to be used with room commands
+          (like invite, ban, For d) this gives the option to delete the device
+          of a different user. If --user is not set, it will default to itself,
+          i.e. the user of the "matrix-commander-rs" account
   -h, --help
           Print help information (use `--help` for more detail)

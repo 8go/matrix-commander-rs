@@ -50,6 +50,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
+use update_informer::{registry, Check};
 use url::Url;
 
 use matrix_sdk::{
@@ -71,7 +72,8 @@ mod mclient;
 use crate::mclient::{
     convert_to_full_room_ids, delete_devices_pre, devices, file, get_room_info, invited_rooms,
     joined_rooms, left_rooms, login, logout, logout_local, message, restore_credentials,
-    restore_login, room_create, room_forget, room_leave, room_resolve_alias, rooms, verify,
+    restore_login, room_ban, room_create, room_forget, room_invite, room_join, room_kick,
+    room_leave, room_resolve_alias, room_unban, rooms, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -143,6 +145,21 @@ pub enum Error {
 
     #[error("Forget Room Failed")]
     ForgetRoomFailed,
+
+    #[error("Invite Room Failed")]
+    InviteRoomFailed,
+
+    #[error("Join Room Failed")]
+    JoinRoomFailed,
+
+    #[error("Ban Room Failed")]
+    BanRoomFailed,
+
+    #[error("Unban Room Failed")]
+    UnbanRoomFailed,
+
+    #[error("Kick Room Failed")]
+    KickRoomFailed,
 
     #[error("Resolve Room Alias Failed")]
     ResolveRoomAliasFailed,
@@ -588,6 +605,17 @@ pub struct Args {
     /// Print version number.
     #[arg(short, long, default_value_t = false)]
     version: bool,
+
+    /// Check if a newer version exists on crates.io.
+    /// This connects to https://crates.io and gets the version
+    /// number of latest stable release. There is no "calling home"
+    /// on every run, only a "check crates.io" upon request. Your
+    /// privacy is protected. New release is neither downloaded,
+    /// nor installed. It just informs you.
+    #[arg(long,
+        aliases = ["check_version", "check_update"],
+        default_value_t = false, )]
+    version_check: bool,
 
     /// Overwrite the default log level. If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
@@ -1108,7 +1136,7 @@ pub struct Args {
         alias = "room-get-info")]
     get_room_info: Vec<String>,
 
-    /// Create one or multiple rooms. One or multiple roo
+    /// Create one or multiple rooms. One or multiple room
     /// aliases can be specified. For each alias specified a
     /// room will be created. For each created room one line
     /// with room id, alias, name and topic will be printed
@@ -1126,7 +1154,7 @@ pub struct Args {
     /// in the JSON output. E.g. if no topic is given, then
     /// there will be no topic field in the JSON output.
     /// Room aliases have to be unique.
-    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    #[arg(long, num_args(0..), value_name = "LOCAL ALIAS", )]
     room_create: Vec<String>,
 
     /// Leave this room or these rooms. One or multiple room
@@ -1149,6 +1177,60 @@ pub struct Args {
     /// '--room-forget' at the same time
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_forget: Vec<String>,
+
+    /// Invite one ore more users to join one or more rooms.
+    /// Specify the user(s) as arguments to --user. Specify
+    /// the rooms as arguments to this option, i.e. as
+    /// arguments to --room-invite. The user must have
+    /// permissions to invite users.
+    /// Use the shortcut '-' to specify the pre-configured
+    /// default room of 'matrix-commander-rs' as room.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_invite: Vec<String>,
+
+    /// Join this room or these rooms. One or multiple room
+    /// aliases can be specified. The room (or multiple ones)
+    /// provided in the arguments will be joined. The user
+    /// must have permissions to join these rooms.
+    /// Use the shortcut '-' to specify the pre-configured
+    /// default room of 'matrix-commander-rs' as room.
+    /// Note, no --user on this feature as the user is
+    /// always the user of 'matrix-commander-rs'.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_join: Vec<String>,
+
+    /// Ban one ore more users from one or more rooms. Specify
+    /// the user(s) as arguments to --user. Specify the rooms
+    /// as arguments to this option, i.e. as arguments to
+    /// --room-ban. The user must have permissions to ban
+    /// users.
+    /// Use the shortcut '-' to specify the pre-configured
+    /// default room of 'matrix-commander-rs' as room.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_ban: Vec<String>,
+
+    /// Unban one ore more users from one or more rooms.
+    /// Specify the user(s) as arguments to --user. Specify
+    /// the rooms as arguments to this option, i.e. as
+    /// arguments to --room-unban. The user must have
+    /// permissions to unban users.
+    /// Use the shortcut '-' to specify the pre-configured
+    /// default room of 'matrix-commander-rs' as room.
+    /// Note, this is currently not implemented in the
+    /// matrix-sdk API. This feature will currently return
+    /// an error.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_unban: Vec<String>,
+
+    /// Kick one ore more users from one or more rooms.
+    /// Specify the user(s) as arguments to --user. Specify
+    /// the rooms as arguments to this option, i.e. as
+    /// arguments to --room-kick. The user must have
+    /// permissions to kick users.
+    /// Use the shortcut '-' to specify the pre-configured
+    /// default room of 'matrix-commander-rs' as room.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_kick: Vec<String>,
 
     /// Resolves a room alias to the corresponding room id, or
     /// multiple room aliases to their corresponding room ids.
@@ -1247,22 +1329,26 @@ pub struct Args {
 
     /// Specify one or multiple users. This option is
     /// meaningful in combination with
-    // a) room actions like
-    // --room-invite, --room-ban, --room-unban, etc. and b)
+    /// a) room actions like
+    /// --room-invite, --room-ban, --room-unban, etc. and
+    // b)
     // send actions like -m, -i, -f, etc. c) some listen
     // actions --listen, as well as
-    // d) actions like
+    /// d) actions like
     /// --delete-device.
-    // In case of a) this option --user specifies the
-    // users to be used with room commands (like invite, ban,
-    // etc.). In case of b) the option --user can be used as
+    /// In case of a) this option --user specifies the
+    /// users to be used with room commands (like invite, ban,
+    // etc.).
+    // In case of b) the option --user can be used as
     // an alternative to specifying a room as destination for
     // text (-m), images (-i), etc. For send actions '--user'
     // is providing the functionality of 'DM (direct
     // messaging)'. For c) this option allows an alternative
     // to specifying a room as destination for some --listen
-    // actions. For d) this gives the option to delete the
-    // device of a different user. ----- What is a DM?
+    // actions.
+    /// For d) this gives the option to delete the
+    /// device of a different user.
+    // ----- What is a DM?
     // matrix-commander tries to find a room that contains
     // only the sender and the receiver, hence DM. These
     // rooms have nothing special other the fact that they
@@ -1286,6 +1372,8 @@ pub struct Args {
     // display names use the --joined-members '*' option
     // which will show you the display names in the middle
     // column.
+    /// If --user is not set, it will default to itself,
+    /// i.e. the user of the "matrix-commander-rs" account.
     #[arg(short, long, num_args(0..), )]
     user: Vec<String>,
 }
@@ -1302,6 +1390,7 @@ impl Args {
             creds: None,
             contribute: false,
             version: false,
+            version_check: false,
             debug: 0u8,
             log_level: LogLevel::None,
             verbose: 0u8,
@@ -1335,6 +1424,11 @@ impl Args {
             room_create: Vec::new(),
             room_leave: Vec::new(),
             room_forget: Vec::new(),
+            room_invite: Vec::new(),
+            room_join: Vec::new(),
+            room_ban: Vec::new(),
+            room_unban: Vec::new(),
+            room_kick: Vec::new(),
             room_resolve_alias: Vec::new(),
             name: Vec::new(),
             topic: Vec::new(),
@@ -1673,6 +1767,22 @@ pub fn version() {
     print!("  _|      _|      _|_|_|     / '-----' \\     ");
     println!("please submit PRs to make the vision a reality");
     println!();
+}
+
+/// Prints the installed version and the latest crates.io-available version
+pub fn version_check() {
+    println!("Installed version: v{}", get_version());
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
+    let informer = update_informer::new(registry::Crates, name, version).check_version();
+    match informer {
+        Ok(Some(version)) => println!(
+            "New version is available on https://crates.io/crates/{}: {}",
+            name, version
+        ),
+        Ok(None) => println!("You are up-to-date. You already have the latest version."),
+        Err(ref e) => println!("Could not get latest version. Error reported: {:?}.", e),
+    };
 }
 
 /// Asks the public for help
@@ -2196,6 +2306,36 @@ pub(crate) async fn cli_room_forget(client: &Client, ap: &Args) -> Result<(), Er
     crate::room_forget(client, &ap.room_forget, ap.output).await
 }
 
+/// Handle the --room-invite CLI argument
+pub(crate) async fn cli_room_invite(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-invite chosen.");
+    crate::room_invite(client, &ap.room_invite, &ap.user, ap.output).await
+}
+
+/// Handle the --room-join CLI argument
+pub(crate) async fn cli_room_join(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-join chosen.");
+    crate::room_join(client, &ap.room_join, ap.output).await
+}
+
+/// Handle the --room-ban CLI argument
+pub(crate) async fn cli_room_ban(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-ban chosen.");
+    crate::room_ban(client, &ap.room_ban, &ap.user, ap.output).await
+}
+
+/// Handle the --room-unban CLI argument
+pub(crate) async fn cli_room_unban(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-unban chosen.");
+    crate::room_unban(client, &ap.room_unban, &ap.user, ap.output).await
+}
+
+/// Handle the --room-kick CLI argument
+pub(crate) async fn cli_room_kick(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-kick chosen.");
+    crate::room_kick(client, &ap.room_kick, &ap.user, ap.output).await
+}
+
 /// Handle the --room-resolve_alias CLI argument
 pub(crate) async fn cli_room_resolve_alias(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-resolve-alias chosen.");
@@ -2266,6 +2406,7 @@ async fn main() -> Result<(), Error> {
     debug!("Repo is {}", get_pkg_repository());
     debug!("contribute flag is {}", ap.contribute);
     debug!("version flag is set to {}", ap.version);
+    debug!("version-check flag is set to {}", ap.version_check);
     debug!("debug flag is {}", ap.debug);
     debug!("log-level option is {:?}", ap.log_level);
     debug!("verbose option is {}", ap.verbose);
@@ -2300,6 +2441,11 @@ async fn main() -> Result<(), Error> {
     debug!("room-create option is {:?}", ap.room_create);
     debug!("room-leave option is {:?}", ap.room_leave);
     debug!("room-forget option is {:?}", ap.room_forget);
+    debug!("room-invite option is {:?}", ap.room_invite);
+    debug!("room-join option is {:?}", ap.room_join);
+    debug!("room-ban option is {:?}", ap.room_ban);
+    debug!("room-unban option is {:?}", ap.room_unban);
+    debug!("room-kick option is {:?}", ap.room_kick);
     debug!("room-resolve-alias option is {:?}", ap.room_resolve_alias);
     debug!("name option is {:?}", ap.name);
     debug!("topic-create option is {:?}", ap.topic);
@@ -2312,6 +2458,9 @@ async fn main() -> Result<(), Error> {
 
     if ap.version {
         crate::version();
+    };
+    if ap.version_check {
+        crate::version_check();
     };
     if ap.contribute {
         crate::contribute();
@@ -2370,6 +2519,28 @@ async fn main() -> Result<(), Error> {
         // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
         set_rooms(&mut ap); // if no rooms in --room, set rooms to default room from credentials file
         set_users(&mut ap); // if no users in --user, set users to default user from credentials file
+        replace_minus_with_default_room(
+            &mut ap.room_leave,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_leave,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_leave.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_forget,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_forget,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_forget.retain(|x| !x.trim().is_empty());
         convert_to_full_room_aliases(
             &mut ap.room_resolve_alias,
             ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
@@ -2383,8 +2554,60 @@ async fn main() -> Result<(), Error> {
             &mut ap.get_room_info,
             ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
         )
-        .await; // convert short ids, short aliases and aliases to full ids
+        .await; // convert short ids, short aliases and aliases to full room ids
         ap.get_room_info.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_invite,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_invite,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_invite.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_join,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_join,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_join.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(&mut ap.room_ban, &ap.creds.as_ref().unwrap().room_default); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_ban,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_ban.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_unban,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_unban,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_unban.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_kick,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_kick,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_kick.retain(|x| !x.trim().is_empty());
 
         if ap.tail > 0 {
             // overwrite --listen if user has chosen both
@@ -2477,6 +2700,41 @@ async fn main() -> Result<(), Error> {
             match crate::cli_room_forget(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_forget successful"),
                 Err(ref e) => error!("Error: crate::room_forget reported {}", e),
+            };
+        };
+
+        if !ap.room_invite.is_empty() {
+            match crate::cli_room_invite(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_invite successful"),
+                Err(ref e) => error!("Error: crate::room_invite reported {}", e),
+            };
+        };
+
+        if !ap.room_join.is_empty() {
+            match crate::cli_room_join(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_join successful"),
+                Err(ref e) => error!("Error: crate::room_join reported {}", e),
+            };
+        };
+
+        if !ap.room_ban.is_empty() {
+            match crate::cli_room_ban(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_ban successful"),
+                Err(ref e) => error!("Error: crate::room_ban reported {}", e),
+            };
+        };
+
+        if !ap.room_unban.is_empty() {
+            match crate::cli_room_unban(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_unban successful"),
+                Err(ref e) => error!("Error: crate::room_unban reported {}", e),
+            };
+        };
+
+        if !ap.room_kick.is_empty() {
+            match crate::cli_room_kick(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_kick successful"),
+                Err(ref e) => error!("Error: crate::room_kick reported {}", e),
             };
         };
 

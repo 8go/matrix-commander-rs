@@ -58,16 +58,14 @@ use matrix_sdk::{
         // room_id, session_id, user_id,
         OwnedDeviceId,
         OwnedRoomAliasId,
-        // UserId,
         OwnedRoomId,
-        RoomAliasId,
         // UInt,
-        // OwnedRoomAliasId,
-        // OwnedRoomId,
-        // OwnedUserId,
+        OwnedUserId,
+        RoomAliasId,
         // serde::Raw,
         // events::OriginalMessageLikeEvent,
         RoomId,
+        UserId,
     },
     Client,
 };
@@ -110,7 +108,7 @@ pub(crate) async fn convert_to_full_room_ids(
                     match client.resolve_room_alias(&id).await {
                         Ok(res) => {
                             el.clear();
-                            el.push_str(&res.room_id.to_string());
+                            el.push_str(res.room_id.as_ref());
                         }
                         Err(ref e) => {
                             error!("Error: invalid alias {:?}. resolve_room_alias() returned error {:?}.", el, e);
@@ -580,6 +578,7 @@ pub(crate) async fn room_leave(
                     "Error: invalid room id {:?}. Error reported is {:?}.",
                     room_id, e
                 );
+                err_count += 1;
                 continue;
             }
         });
@@ -591,6 +590,8 @@ pub(crate) async fn room_leave(
             Some(jroom) => match jroom.leave().await {
                 Ok(_) => {
                     info!("Left room {:?} successfully.", id);
+                    // Todo: does this work? Does not seem to work.
+                    jroom.clone_info().mark_as_left();
                 }
                 Err(ref e) => {
                     error!("Error: leave() returned error {:?}.", e);
@@ -621,7 +622,7 @@ pub(crate) async fn room_forget(
 ) -> Result<(), Error> {
     debug!("Forgetting room(s)");
     let mut err_count = 0u32;
-    debug!("All rooms of this user: {:?}.", client.rooms());
+    debug!("All rooms of the default user: {:?}.", client.rooms());
     // convert Vec of strings into a slice of array of OwnedRoomIds
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
@@ -632,6 +633,7 @@ pub(crate) async fn room_forget(
                     "Error: invalid room id {:?}. Error reported is {:?}.",
                     room_id, e
                 );
+                err_count += 1;
                 continue;
             }
         });
@@ -657,6 +659,340 @@ pub(crate) async fn room_forget(
     }
     if err_count != 0 {
         Err(Error::ForgetRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Invite user(s) into room(s).
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_invite(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    user_ids: &[String], // list of user ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!(
+        "Inviting user(s) to room(s): users={:?}, rooms={:?}",
+        user_ids, room_ids
+    );
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    // convert Vec of strings into a slice of array of OwnedUserIds
+    let mut userids: Vec<OwnedUserId> = Vec::new();
+    for user_id in user_ids {
+        userids.push(
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid user id {:?}. Error reported is {:?}.",
+                        user_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() || userids.is_empty() {
+        if roomids.is_empty() {
+            error!("No valid rooms. Cannot invite anyone. Giving up.")
+        } else {
+            error!("No valid users. Cannot invite anyone. Giving up.")
+        }
+        return Err(Error::InviteRoomFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        let jroomopt = client.get_joined_room(id);
+        match jroomopt {
+            Some(jroom) => {
+                for u in &userids {
+                    match jroom.invite_user_by_id(u).await {
+                        Ok(_) => {
+                            info!("Invited user {:?} to room {:?} successfully.", u, id);
+                        }
+                        Err(ref e) => {
+                            error!("Error: failed to invited user {:?} to room {:?}. invite_user_by_id() returned error {:?}.", u, id, e);
+                            err_count += 1;
+                        }
+                    }
+                }
+            }
+            None => {
+                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before inviting others to it.", id);
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::InviteRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Join itself into room(s).
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_join(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!("Joining itself into room(s): rooms={:?}", room_ids);
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() {
+        error!("No valid rooms. Cannot join any room. Giving up.");
+        return Err(Error::JoinRoomFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        match client.join_room_by_id(id).await {
+            Ok(_) => {
+                info!("Joined room {:?} successfully.", id);
+            }
+            Err(ref e) => {
+                error!(
+                    "Error: failed to room {:?}. join_room_by_id() returned error {:?}.",
+                    id, e
+                );
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::JoinRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Ban user(s) from room(s).
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_ban(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    user_ids: &[String], // list of user ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!(
+        "Banning user(s) from room(s): users={:?}, rooms={:?}",
+        user_ids, room_ids
+    );
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    // convert Vec of strings into a slice of array of OwnedUserIds
+    let mut userids: Vec<OwnedUserId> = Vec::new();
+    for user_id in user_ids {
+        userids.push(
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid user id {:?}. Error reported is {:?}.",
+                        user_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() || userids.is_empty() {
+        if roomids.is_empty() {
+            error!("No valid rooms. Cannot ban anyone. Giving up.")
+        } else {
+            error!("No valid users. Cannot ban anyone. Giving up.")
+        }
+        return Err(Error::BanRoomFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        let jroomopt = client.get_joined_room(id);
+        match jroomopt {
+            Some(jroom) => {
+                for u in &userids {
+                    match jroom.ban_user(u, None).await {
+                        Ok(_) => {
+                            info!("Banned user {:?} from room {:?} successfully.", u, id);
+                        }
+                        Err(ref e) => {
+                            error!("Error: failed to ban user {:?} from room {:?}. ban_user() returned error {:?}.", u, id, e);
+                            err_count += 1;
+                        }
+                    }
+                }
+            }
+            None => {
+                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before banning others from it.", id);
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::BanRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Unbanning user(s) from room(s).
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_unban(
+    _client: &Client,
+    room_ids: &[String], // list of room ids
+    user_ids: &[String], // list of user ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!(
+        "Unbaning user(s) from room(s): users={:?}, rooms={:?}",
+        user_ids, room_ids
+    );
+    let mut err_count = 0u32;
+    error!("unban is currently not supported by the matrix-sdk API. Ignoring this unban request.");
+    err_count += 1;
+    if err_count != 0 {
+        Err(Error::UnbanRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Kicking user(s) from room(s).
+/// There is no output to stdout except debug and logging information.
+/// If successful nothing will be output.
+pub(crate) async fn room_kick(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    user_ids: &[String], // list of user ids
+    _output: Output,     // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!(
+        "Kicking user(s) from room(s): users={:?}, rooms={:?}",
+        user_ids, room_ids
+    );
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    // convert Vec of strings into a slice of array of OwnedUserIds
+    let mut userids: Vec<OwnedUserId> = Vec::new();
+    for user_id in user_ids {
+        userids.push(
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid user id {:?}. Error reported is {:?}.",
+                        user_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() || userids.is_empty() {
+        if roomids.is_empty() {
+            error!("No valid rooms. Cannot kick anyone. Giving up.")
+        } else {
+            error!("No valid users. Cannot kick anyone. Giving up.")
+        }
+        return Err(Error::KickRoomFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        let jroomopt = client.get_joined_room(id);
+        match jroomopt {
+            Some(jroom) => {
+                for u in &userids {
+                    match jroom.kick_user(u, None).await {
+                        Ok(_) => {
+                            info!("Kicked user {:?} from room {:?} successfully.", u, id);
+                        }
+                        Err(ref e) => {
+                            error!("Error: failed to kick user {:?} from room {:?}. kick_user() returned error {:?}.", u, id, e);
+                            err_count += 1;
+                        }
+                    }
+                }
+            }
+            None => {
+                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before kicking others from it.", id);
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::KickRoomFailed)
     } else {
         Ok(())
     }

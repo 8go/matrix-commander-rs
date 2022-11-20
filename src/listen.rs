@@ -446,8 +446,14 @@ pub(crate) async fn listen_forever(
     // get the current sync state from server before syncing
     let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
 
-    client.sync(settings).await?;
-    Ok(())
+    match client.sync(settings).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // this does not catch Control-C
+            error!("Event loop reported: {:?}", e);
+            Ok(())
+        }
+    }
 }
 
 #[allow(dead_code)]
