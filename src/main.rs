@@ -50,6 +50,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
+use tracing_subscriber;
 use update_informer::{registry, Check};
 use url::Url;
 
@@ -71,8 +72,9 @@ use matrix_sdk::{
 mod mclient;
 use crate::mclient::{
     convert_to_full_room_ids, delete_devices_pre, devices, file, get_room_info, invited_rooms,
-    joined_rooms, left_rooms, login, logout, logout_local, message, restore_credentials,
-    restore_login, room_ban, room_create, room_forget, room_invite, room_join, room_kick,
+    joined_members, joined_rooms, left_rooms, login, logout, logout_local, message,
+    replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
+    room_forget, room_get_state, room_get_visibility, room_invite, room_join, room_kick,
     room_leave, room_resolve_alias, room_unban, rooms, verify,
 };
 
@@ -163,6 +165,15 @@ pub enum Error {
 
     #[error("Resolve Room Alias Failed")]
     ResolveRoomAliasFailed,
+
+    #[error("Room Get Visibility Failed")]
+    RoomGetVisibilityFailed,
+
+    #[error("Room Get State Failed")]
+    RoomGetStateFailed,
+
+    #[error("JoinedMembersFailed")]
+    JoinedMembersFailed,
 
     #[error("Delete Device Failed")]
     DeleteDeviceFailed,
@@ -1289,6 +1300,45 @@ pub struct Args {
     #[arg(long)]
     left_rooms: bool,
 
+    /// Get the visibility of one or more rooms. Provide one
+    /// or more room ids as arguments. If the shortcut '-' is
+    /// used, then the default room of 'matrix-commander-rs' (as
+    /// found in credentials file) will be used. The shortcut
+    /// '*' represents all the rooms of the user of
+    /// 'matrix-commander-rs'.
+    /// For each room
+    /// the visibility will be printed. Currently, this is
+    /// either the string 'private' or 'public'. As response
+    /// one line per room will be printed.
+    #[arg(long, num_args(0..), alias = "get_room_visibility",
+        value_name = "ROOM", )]
+    room_get_visibility: Vec<String>,
+
+    /// Get the state of one or more rooms. Provide one or
+    /// more room ids as arguments. If the shortcut '-' is
+    /// used, then the default room of 'matrix-commander-rs' (as
+    /// found in credentials file) will be used. The shortcut
+    /// '*' represents all the rooms of the user of
+    /// 'matrix-commander-rs'.
+    /// For each room part of the
+    /// state will be printed. The state is a long list of
+    /// events. As
+    /// response one line per room will be printed to stdout.
+    /// The line can be very long as the list of events can be
+    /// very large. To get output into a human readable form
+    /// pipe output through sed and jq or use the JSON output.
+    #[arg(long, num_args(0..), alias = "get_room_state",
+        value_name = "ROOM", )]
+    room_get_state: Vec<String>,
+
+    /// Print the list of joined members for one or multiple
+    /// rooms. If you want to print the joined members of all
+    /// rooms that you are member of, then use the special
+    /// shortcut character '*'. If you want the members of
+    /// the pre-configured default room, use shortcut '-'.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    joined_members: Vec<String>,
+
     /// Delete one or multiple devices. By default devices
     /// belonging to itself, i.e. belonging to
     /// "matrix-commander-rs", will be deleted.
@@ -1436,6 +1486,9 @@ impl Args {
             invited_rooms: false,
             joined_rooms: false,
             left_rooms: false,
+            room_get_visibility: Vec::new(),
+            room_get_state: Vec::new(),
+            joined_members: Vec::new(),
             delete_device: Vec::new(),
             user: Vec::new(),
         }
@@ -2342,6 +2395,24 @@ pub(crate) async fn cli_room_resolve_alias(client: &Client, ap: &Args) -> Result
     crate::room_resolve_alias(client, &ap.room_resolve_alias, ap.output).await
 }
 
+/// Handle the --room-get-visibility CLI argument
+pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-get-visibility chosen.");
+    crate::room_get_visibility(client, &ap.room_get_visibility, ap.output).await
+}
+
+/// Handle the --room-get-state CLI argument
+pub(crate) async fn cli_room_get_state(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-get-state chosen.");
+    crate::room_get_state(client, &ap.room_get_state, ap.output).await
+}
+
+/// Handle the --joined-members CLI argument
+pub(crate) async fn cli_joined_members(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Joined-members chosen.");
+    crate::joined_members(client, &ap.joined_members, ap.output).await
+}
+
 /// Handle the --delete-device CLI argument
 pub(crate) async fn cli_delete_device(client: &Client, ap: &mut Args) -> Result<(), Error> {
     info!("Delete-device chosen.");
@@ -2389,7 +2460,8 @@ async fn main() -> Result<(), Error> {
     env::set_var("RUST_LOG", ap.log_level.to_string());
 
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
-    tracing_subscriber::fmt::init();
+    // Send *all* output from Debug to Error to stderr
+    tracing_subscriber::fmt().with_writer(io::stderr).init();
     debug!("Original RUST_LOG env var is {}", env_org_rust_log);
     debug!(
         "Final RUST_LOG env var is {}",
@@ -2453,6 +2525,9 @@ async fn main() -> Result<(), Error> {
     debug!("invited-rooms option is {:?}", ap.invited_rooms);
     debug!("joined-rooms option is {:?}", ap.joined_rooms);
     debug!("left-rooms option is {:?}", ap.left_rooms);
+    debug!("room-get-visibility option is {:?}", ap.room_get_visibility);
+    debug!("room-get-state option is {:?}", ap.room_get_state);
+    debug!("joined-members option is {:?}", ap.joined_members);
     debug!("delete-device option is {:?}", ap.delete_device);
     debug!("user option is {:?}", ap.user);
 
@@ -2608,6 +2683,42 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_kick.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_get_visibility,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        replace_star_with_rooms(&client, &mut ap.room_get_visibility); // convert '*' to full list of rooms
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_get_visibility,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_get_visibility.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.room_get_state,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        replace_star_with_rooms(&client, &mut ap.room_get_state); // convert '*' to full list of rooms
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_get_state,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_get_state.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(
+            &mut ap.joined_members,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.joined_members,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.joined_members.retain(|x| !x.trim().is_empty());
 
         if ap.tail > 0 {
             // overwrite --listen if user has chosen both
@@ -2670,6 +2781,27 @@ async fn main() -> Result<(), Error> {
             match crate::cli_left_rooms(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::left_rooms successful"),
                 Err(ref e) => error!("Error: crate::left_rooms reported {}", e),
+            };
+        };
+
+        if !ap.room_get_visibility.is_empty() {
+            match crate::cli_room_get_visibility(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_get_visibility successful"),
+                Err(ref e) => error!("Error: crate::room_get_visibility reported {}", e),
+            };
+        };
+
+        if !ap.room_get_state.is_empty() {
+            match crate::cli_room_get_state(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_get_state successful"),
+                Err(ref e) => error!("Error: crate::room_get_state reported {}", e),
+            };
+        };
+
+        if !ap.joined_members.is_empty() {
+            match crate::cli_joined_members(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::joined_members successful"),
+                Err(ref e) => error!("Error: crate::joined_members reported {}", e),
             };
         };
 

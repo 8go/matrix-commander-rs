@@ -32,15 +32,15 @@ use matrix_sdk::{
     attachment::AttachmentConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
     instant::Duration,
-    // Session,
     room,
-    // room::Room,
-    // ruma::
+    room::{Room, RoomMember},
     ruma::{
         api::client::room::create_room::v3::Request as CreateRoomRequest,
         api::client::uiaa,
         // OwnedRoomOrAliasId, OwnedServerName,
         // device_id,
+        events::room::member::SyncRoomMemberEvent,
+        // events::room::message::SyncRoomMessageEvent,
         events::room::message::{
             EmoteMessageEventContent,
             // FileMessageEventContent,
@@ -54,6 +54,12 @@ use matrix_sdk::{
             // SyncRoomMessageEvent,
             TextMessageEventContent,
         },
+        events::room::name::SyncRoomNameEvent,
+        events::room::power_levels::SyncRoomPowerLevelsEvent,
+        events::room::topic::SyncRoomTopicEvent,
+        // events::OriginalMessageLikeEvent,
+        serde::Raw,
+        // MxcUri,
         // DeviceId,
         // room_id, session_id, user_id,
         OwnedDeviceId,
@@ -62,8 +68,6 @@ use matrix_sdk::{
         // UInt,
         OwnedUserId,
         RoomAliasId,
-        // serde::Raw,
-        // events::OriginalMessageLikeEvent,
         RoomId,
         UserId,
     },
@@ -76,6 +80,19 @@ use crate::{credentials_exist, get_password, Args, Credentials, Error, Listen, O
 // import verification code
 #[path = "emoji_verify.rs"]
 mod emoji_verify;
+
+/// Replace '*' in room id list with all rooms the user knows about (joined, left, invited, etc.)
+pub(crate) fn replace_star_with_rooms(client: &Client, vecstr: &mut Vec<String>) {
+    let blen = vecstr.len();
+    vecstr.retain(|x| x.trim() != "*");
+    let alen = vecstr.len();
+    if blen == alen {
+        return;
+    }
+    for r in client.rooms() {
+        vecstr.push(r.room_id().to_string());
+    }
+}
 
 /// Convert partial room ids, partial room aliases, room aliases to
 /// full room ids.
@@ -398,14 +415,14 @@ pub(crate) fn print_common_room(room: &room::Common, output: Output) {
         Output::JsonSpec => (),
         _ => {
             println!(
-                        "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
-                        room.room_id(),
-                        serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
-                        room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
-                        serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
-                        room.name().unwrap_or_default(),
-                        room.topic().unwrap_or_default(),
-                    );
+                            "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
+                            room.room_id(),
+                            serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+                            room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
+                            serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
+                            room.name().unwrap_or_default(),
+                            room.topic().unwrap_or_default(),
+                        );
         }
     }
 }
@@ -993,6 +1010,310 @@ pub(crate) async fn room_kick(
     }
     if err_count != 0 {
         Err(Error::KickRoomFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Utility function to print visibility of a single room
+fn print_room_visibility(room_id: &OwnedRoomId, room: &Room, output: Output) {
+    match output {
+        Output::Text => {
+            println!(
+                "Room:    {:?}    {:?}",
+                room_id,
+                if room.is_public() {
+                    "public"
+                } else {
+                    "private"
+                },
+            )
+        }
+        Output::JsonSpec => (),
+        _ => {
+            println!(
+                "{{\"room_id\": {:?}, \"public\": {}}}",
+                room_id,
+                room.is_public()
+            );
+        }
+    }
+}
+
+/// Listing visibility (public/private) for all room(s).
+/// There will be one line printed per room.
+pub(crate) async fn room_get_visibility(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    output: Output,      // how to format output
+) -> Result<(), Error> {
+    debug!("Get room visibility for room(s): rooms={:?}", room_ids);
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() {
+        error!("No valid rooms. Cannot list anything. Giving up.");
+        return Err(Error::RoomGetVisibilityFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        match client.get_room(id) {
+            Some(r) => {
+                print_room_visibility(id, &r, output);
+            }
+            None => {
+                error!(
+                    "Error: failed to get room {:?}. get_room() returned error no room.",
+                    id
+                );
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::RoomGetVisibilityFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Utility function to print part of the state of a single room
+async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) -> Result<(), Error> {
+    // There are around 50 events for rooms
+    // See https://docs.rs/ruma/0.7.4/ruma/?search=syncroom
+    // We only do 4 as example to start with.
+    let room_member_evs: Vec<Raw<SyncRoomMemberEvent>> = room.get_state_events_static().await?;
+    let power_levels_ev: Raw<SyncRoomPowerLevelsEvent> = room
+        .get_state_event_static()
+        .await?
+        .ok_or(Error::RoomGetStateFailed)?;
+    let name_ev: Raw<SyncRoomNameEvent> = room
+        .get_state_event_static()
+        .await?
+        .ok_or(Error::RoomGetStateFailed)?;
+    let topic_ev: Raw<SyncRoomTopicEvent> = room
+        .get_state_event_static()
+        .await?
+        .ok_or(Error::RoomGetStateFailed)?;
+    match output {
+        Output::Text => {
+            print!("Room:    {:?},    SyncRoomMemberEvents: [", room_id);
+            let mut first: bool = true;
+            for ev in room_member_evs {
+                if first {
+                    first = false;
+                } else {
+                    print!(", ");
+                }
+                print!("\"{:?}\"", ev.deserialize());
+            }
+            println!(
+                "],    SyncRoomTopicEvent: \"{:?}\",    SyncRoomPowerLevelsEvent: \"{:?}\",    SyncRoomNameEvent: \"{:?}\"",
+                topic_ev.deserialize(),
+                power_levels_ev.deserialize(),
+                name_ev.deserialize()
+            );
+        }
+        // Output::JsonSpec => (), // These events should be spec compliant
+        _ => {
+            print!("{{\"room_id\": {:?}, \"SyncRoomMemberEvents\": [", room_id);
+            let mut first: bool = true;
+            for ev in room_member_evs {
+                if first {
+                    first = false;
+                } else {
+                    print!(", ");
+                }
+                print!(
+                    "{{ {} }}",
+                    serde_json::to_string(&ev.deserialize()?)
+                        .unwrap_or_else(|_| r#""""#.to_string())
+                );
+            }
+            println!(
+                "], \"SyncRoomTopicvent\": {}, \"SyncRoomPowerLevelsEvent\": {}, \"SyncRoomNameEvent\": {}}}",
+                serde_json::to_string(&topic_ev.deserialize()?)
+                    .unwrap_or_else(|_| r#""""#.to_string()),
+                serde_json::to_string(&power_levels_ev.deserialize()?)
+                    .unwrap_or_else(|_| r#""""#.to_string()),
+                serde_json::to_string(&name_ev.deserialize()?)
+                    .unwrap_or_else(|_| r#""""#.to_string()),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Listing partial state for all room(s).
+/// There will be one line printed per room.
+pub(crate) async fn room_get_state(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    output: Output,      // how to format output
+) -> Result<(), Error> {
+    debug!("Get room state for room(s): rooms={:?}", room_ids);
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() {
+        error!("No valid rooms. Cannot list anything. Giving up.");
+        return Err(Error::RoomGetStateFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        match client.get_room(id) {
+            Some(r) => {
+                if print_room_state(id, &r, output).await.is_err() {
+                    error!("Error: failed to get room state for room {:?}.", id);
+                    err_count += 1;
+                };
+            }
+            None => {
+                error!(
+                    "Error: failed to get room {:?}. get_room() returned error no room.",
+                    id
+                );
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::RoomGetStateFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Utility function to print all members of a single room
+fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Output) {
+    match output {
+        Output::Text => {
+            for m in members {
+                println!(
+                    "Room:    {:?}    Member:    {:?}    {:?}    {:?}    {:?}    {:?}    \"{:?}\"",
+                    room_id,
+                    m.user_id(),
+                    m.display_name().as_deref().unwrap_or(""),
+                    m.name(),
+                    m.avatar_url().as_deref().unwrap_or("".into()),
+                    m.power_level(),
+                    m.membership(),
+                )
+            }
+        }
+        Output::JsonSpec => (),
+        _ => {
+            let mut first: bool = true;
+            print!("{{\"room_id\": {:?}, \"members\": [", room_id);
+            for m in members {
+                if first {
+                    first = false;
+                } else {
+                    print!(", ");
+                }
+                print!(
+                    "{{\"user_id\": {:?}, \"display_name\": {:?}, \"name\": {:?}, \"avatar_url\": {:?}, \"power_level\": {:?}, \"membership\": \"{:?}\"}}",
+                    m.user_id(),
+                    m.display_name().as_deref().unwrap_or(""),
+                    m.name(),
+                    m.avatar_url().as_deref().unwrap_or("".into()),
+                    m.power_level(),
+                    m.membership(),
+                );
+            }
+            println!("]}}");
+        }
+    }
+}
+
+/// Listing all joined member(s) for all room(s).
+/// Does not list all members, e.g. does not list invited members, etc.
+/// There will be one line printed per room.
+pub(crate) async fn joined_members(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    output: Output,      // how to format output
+) -> Result<(), Error> {
+    debug!("Joined members for room(s): rooms={:?}", room_ids);
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() {
+        error!("No valid rooms. Cannot kick anyone. Giving up.");
+        return Err(Error::JoinedMembersFailed);
+    }
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        match client.get_room(id) {
+            Some(r) => match r.members().await {
+                Ok(ref m) => {
+                    debug!("Members of room {:?} are {:?}.", id, m);
+                    print_room_members(id, m, output);
+                }
+                Err(ref e) => {
+                    error!(
+                        "Error: failed to get members of room {:?}. members() returned error {:?}.",
+                        id, e
+                    );
+                    err_count += 1;
+                }
+            },
+            None => {
+                error!(
+                    "Error: failed to get room {:?}. get_room() returned error no room.",
+                    id
+                );
+                err_count += 1;
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::JoinedMembersFailed)
     } else {
         Ok(())
     }

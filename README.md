@@ -75,7 +75,11 @@ Safe!
 - create Github workflow so that the crate on `crates.io` gets
   generated automatically on `pull request` or `push`.
 - implement `login` via SSO
-- add features found in the Python version to the Rust version
+- add --proxy (see Python documentation)
+- add --nossl (see Python documentation)
+- add --event (see Python documentation and JSON config file in Pythom repo)
+- add --download-media (see Python documentation)
+- add other features found in the Python version to the Rust version
 - ...
 
 # Contributors :clap:
@@ -521,6 +525,29 @@ Options:
       --left-rooms
           Print the list of left rooms. All rooms that you have left in the
           past will be printed, one room per line
+      --room-get-visibility [<ROOM>...]
+          Get the visibility of one or more rooms. Provide one or more room ids
+          as arguments. If the shortcut '-' is used, then the default room of
+          'matrix-commander-rs' (as found in credentials file) will be used.
+          The shortcut '*' represents all the rooms of the user of
+          'matrix-commander-rs'. For each room the visibility will be printed.
+          Currently, this is either the string 'private' or 'public'. As
+          response one line per room will be printed
+      --room-get-state [<ROOM>...]
+          Get the state of one or more rooms. Provide one or more room ids as
+          arguments. If the shortcut '-' is used, then the default room of
+          'matrix-commander-rs' (as found in credentials file) will be used.
+          The shortcut '*' represents all the rooms of the user of
+          'matrix-commander-rs'. For each room part of the state will be
+          printed. The state is a long list of events. As response one line per
+          room will be printed to stdout. The line can be very long as the list
+          of events can be very large. To get output into a human readable form
+          pipe output through sed and jq or use the JSON output
+      --joined-members [<ROOM>...]
+          Print the list of joined members for one or multiple rooms. If you
+          want to print the joined members of all rooms that you are member of,
+          then use the special shortcut character '*'. If you want the members
+          of the pre-configured default room, use shortcut '-'
       --delete-device [<DEVICE>...]
           Delete one or multiple devices. By default devices belonging to
           itself, i.e. belonging to "matrix-commander-rs", will be deleted. If
