@@ -7,7 +7,10 @@ name: "tagged-release"
 on:
   push:
     tags:
-      - "v*"
+      - "*"
+#      - "v*"
+# v0.1.0 is not a valid semver. 0.1.0 or 0.1.2-beta is a valid semver
+# it complains if workflow_dispatch is used with v0.1.0 and will not release
   workflow_dispatch:
 #  push:
 #    branches: [ "main" ]
