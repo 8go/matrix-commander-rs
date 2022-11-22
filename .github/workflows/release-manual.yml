@@ -1,13 +1,11 @@
 # .github/workflows/release.yml
 
-name: Release
+# do a manual release on the Github website and it will trigger a release event
+# and any release event will trigger this action
+
+name: ManualRelease
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
   release:
     types: [created]
 
