@@ -1,0 +1,77 @@
+# .github/workflow/release-by-label.yml
+
+# automatically perform release when a label is pushed via git
+
+name: "tagged-release"
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+#  push:
+#    branches: [ "main" ]
+#  pull_request:
+#    branches: [ "main" ]
+
+
+jobs:
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: "ubuntu-latest"
+
+
+    steps:
+      - uses: actions/checkout@master
+      
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+      
+      - name: Compile
+        id: compile
+        uses: rust-build/rust-build.action@master
+        with:
+          RUSTTARGET: x86_64-pc-windows-gnu
+          UPLOAD_MODE: none
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Binary
+          path: |
+            ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile.outputs.BUILT_CHECKSUM }}
+            
+      - name: Compile
+        id: compile2
+        uses: rust-build/rust-build.action@master
+        with:
+          RUSTTARGET: x86_64-unknown-linux-musl
+          ARCHIVE_TYPES: tar.gz
+          UPLOAD_MODE: none
+          MINIFY: true
+          EXTRA_FILES: "README.md LICENSE help.txt"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Binary
+          path: |
+            ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
+            
+      - name: Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile.outputs.BUILT_CHECKSUM }}
+            ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
+            README.md
+            LICENSE
+            help.txt
+#          prerelease: true
+#          title: "Development Build"
