@@ -1,4 +1,9 @@
-name: Rust
+# .github/workflow/test.yml
+
+# build the crate and run the test cases
+# like cargo build; cargo test
+
+name: Test
 
 on:
   push:
