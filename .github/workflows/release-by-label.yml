@@ -92,11 +92,17 @@ jobs:
           cp LICENSE matrix-commander-rs/
           cp help.txt matrix-commander-rs/
           tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
+#          tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
+          ls
+          ls -l
+          echo ${TAG_NAME} > tag.txt
+          cat tag.txt
       - uses: actions/upload-artifact@v3
         with:
           name: plain-linux
           path: |
-            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+#            ./matrix-commander-rs_linux.tar.gz
           retention-days: 1
 
   tagged-release:
@@ -173,13 +179,19 @@ jobs:
 
 # https://github.com/softprops/action-gh-release
       - name: Release
+#        run: |
+#          ls
+#          TAG_NAME=$(cat tag.txt)
+#          cat tag.txt
+#          echo $TAG_NAME
         uses: "softprops/action-gh-release@v1"
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
           generate_release_notes: true
           files: |
-            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+#            ./matrix-commander-rs_linux.tar.gz
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
             ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
