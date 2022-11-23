@@ -118,7 +118,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            ./matrix-commander-rs_${{ RELEASE_TAG_NAME }}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
             ./matrix-commander-rs_linux.tar.gz
             README.md
             LICENSE
