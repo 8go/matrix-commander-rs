@@ -92,7 +92,7 @@ jobs:
           cp LICENSE matrix-commander-rs/
           cp help.txt matrix-commander-rs/
           tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
- #         tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
+#          tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
           ls
           ls -l
           echo ${TAG_NAME} > tag.txt
