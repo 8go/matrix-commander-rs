@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"

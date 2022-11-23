@@ -2540,6 +2540,41 @@ async fn main() -> Result<(), Error> {
     if ap.contribute {
         crate::contribute();
     };
+
+    if !(!ap.login.is_none()
+        || !ap.verify.is_none()
+        || ap.devices
+        || !ap.get_room_info.is_empty()
+        || ap.rooms
+        || ap.invited_rooms
+        || ap.joined_rooms
+        || ap.left_rooms
+        || !ap.room_get_visibility.is_empty()
+        || !ap.room_get_state.is_empty()
+        || !ap.joined_members.is_empty()
+        || !ap.room_resolve_alias.is_empty()
+        || !ap.room_create.is_empty()
+        || !ap.room_leave.is_empty()
+        || !ap.room_forget.is_empty()
+        || !ap.room_invite.is_empty()
+        || !ap.room_join.is_empty()
+        || !ap.room_ban.is_empty()
+        || !ap.room_unban.is_empty()
+        || !ap.room_kick.is_empty()
+        || !ap.delete_device.is_empty()
+        || !ap.message.is_empty()
+        || !ap.file.is_empty()
+        || ap.listen.is_once()
+        || ap.listen.is_forever()
+        || ap.listen.is_tail()
+        || ap.tail > 0
+        || ap.listen.is_all()
+        || !ap.logout.is_none())
+    {
+        debug!("There are no more actions to take. No need to connect to server. Quitting.");
+        debug!("Good bye");
+        return Ok(());
+    }
     let (clientres, credentials) = if !ap.login.is_none() {
         match crate::cli_login(&mut ap).await {
             Ok((client, credentials)) => (Ok(client), credentials),

@@ -5,42 +5,283 @@ echo "The script outlines the rough workflow"
 echo ""
 echo "You have written some code? Let's publish it."
 
-git pull
+# https://askubuntu.com/questions/1705/how-can-i-create-a-select-menu-in-a-shell-script
+PS3='Please enter your choice: '
+OPT1="git pull # get the latest from Github"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-echo "Update version number in Cargo.toml."
+PS3='Please enter your choice: '
+OPT1="cargo test         # run this testcase"
+OPT2="tests/test-send.sh # run this testcase"
+OPT3="tests/test-send.sh # run this testcase"
+OPT4="tests/test-send.sh # run this testcase"
+OPT5="tests/test-send.sh # run this testcase"
+OPT6="tests/test-send.sh # run this testcase"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-scripts/update-1-help.py # create helpfile and update README.md accordingly
+PS3='Please enter your choice: '
+OPT1="scripts/update-1-version.sh         # increment MAJOR version number, incompatible"
+OPT2="scripts/update-1-version.sh --minor # increment MINOR version number, new feature"
+OPT3="scripts/update-1-version.sh --patch # increment PATCH version number, bug fix"
+OPT4="cargo clean"
+OPT5="cargo build"
+OPT6="scripts/update-2-help.py            # update help file, puts it also inte README.md"
+OPT7="cargo clippy                        # linting"
+OPT8="cargo fmt                           # beautifying"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPT8" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" )
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-cargo clippy     --color always 2>&1 | less -r # if output is very long
-cargo fmt
+PS3='Please enter your choice: '
+OPT1="git status           # what is the current status"
+OPT2="cargo package --list # show files containing changes"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" )
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-# show files containing changes that were not yet committed into git
-cargo package --list # a bit like `git status`
+PS3='Please enter your choice: '
+OPT1="git commit -a # alternative 1 for commit"
+OPT2="git commit # alternative 2 for commit"
+OPT3="git commit -a -m 'release: v$(cat VERSION)' # alternative 3 for commit; being lazy"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-cargo build
-cargo build --color always 2>&1 | less -r # if output is very long
-# cargo build --examples
-cargo test
-cargo test --color always 2>&1 | less -r # if output is very long
-cargo run
-# cargo run --example example
-# cargo run -- --version # pass some argument
-cargo build --release
-cargo run --release
+PS3='Please enter your choice: '
+OPT1="scripts/update-4-tag.sh # create new annotated tag"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-# generate documentation
-cargo doc
-firefox target/doc/matrix_commander/index.html
+PS3='Please enter your choice: '
+echo "A tag push of major version kicks off the Docker actions workflow on Github."
+echo "A tag push of major version kicks off the PiPy actions workflow on Github."
+echo "Note: a PR does not trigger Github Actions workflows."
+echo "Only pushing a tag kicks off the workflow and only if not a minor version."
+echo "Instead of 2 separate pushes, one can use *annotated* tags and ----follow-tags."
+OPT1="git push --follow-tags # alternative 1; does both push of changes and push of tag"
+OPT2="git push # alternative 2a; 1st push, since there is no tag, no trigger on workflows"
+OPT3="git push origin v'$(cat VERSION)' # alternative 2b; 2nd push, pushing tag"
+OPT4="git push && git push origin v'$(cat VERSION)' # alternative 3; both pushes"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-git status
-git commit -a
-git push
-git log -1 --pretty=%B # details of last commit
-git status
+PS3='Please enter your choice: '
+echo "Watch Actions workflows on Github, if any."
+echo "Now double-check if everything is in order."
+OPT1="git tag --list -n --sort=-refname # list tags"
+OPT2="git log --pretty=oneline -n 7 # now it shows tag in commit hash"
+OPT3="git log -1 --pretty=%B # details of last commit"
+OPT4="git tag --list -n20 $(git describe) # details of last tag"
+OPT5="git status # list status"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
 
-cargo login # provide token
-cargo publish --dry-run
-cargo package --list # show files containing changes
-cargo publish        # push to crates.io and doc.rs
 
-cargo clean # rm ./target directory
+PS3='Please enter your choice: '
+OPT1="cargo login # log into crates.io"
+OPT2="cargo clean"
+OPT3="cargo publish"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
+
+
+echo "Bye"
+
+exit 0
