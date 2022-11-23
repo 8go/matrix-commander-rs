@@ -5,9 +5,11 @@
 name: "tagged-release-linux-only"
 
 on:
-  push:
-    tags:
-      - "v*"
+  # For the time being, disable "push tag" so that only 1 action fires
+  # We don't want both actions to fire, the other action now covers std. Linux as well.
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
