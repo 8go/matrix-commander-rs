@@ -101,19 +101,24 @@ jobs:
         with:
           name: plain-linux
           path: |
-            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
             ./matrix-commander-rs_linux.tar.gz
           retention-days: 1
 
 # https://github.com/softprops/action-gh-release
       - name: Release
+#        run: |
+#          ls
+#          TAG_NAME=$(cat tag.txt)
+#          cat tag.txt
+#          echo $TAG_NAME
         uses: "softprops/action-gh-release@v1"
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
           generate_release_notes: true
           files: |
-            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${{ RELEASE_TAG_NAME }}_linux.tar.gz
             ./matrix-commander-rs_linux.tar.gz
             README.md
             LICENSE
