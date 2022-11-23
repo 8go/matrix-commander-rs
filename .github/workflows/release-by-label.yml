@@ -108,7 +108,9 @@ jobs:
   tagged-release:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
-
+    needs: tagname
+    env:
+      RELEASE_TAG_NAME: ${{ needs.tagname.outputs.tag_name }}
 
     steps:
       - uses: actions/checkout@master
@@ -177,7 +179,7 @@ jobs:
             ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
 
-# https://github.com/softprops/action-gh-release
+      # https://github.com/softprops/action-gh-release
       - name: Release
         #        run: |
         #          ls
