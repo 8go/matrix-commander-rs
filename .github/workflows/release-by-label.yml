@@ -1,24 +1,104 @@
 # .github/workflow/release-by-label.yml
 
-# automatically perform release when a label is pushed via git
+# automatically perform release when a version tag is pushed via git
 
 name: "tagged-release"
 
 on:
   push:
     tags:
-      - "*"
-#      - "v*"
-# v0.1.0 is not a valid semver. 0.1.0 or 0.1.2-beta is a valid semver
-# it complains if workflow_dispatch is used with v0.1.0 and will not release
+      - "v*"
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: nightly
 #  push:
 #    branches: [ "main" ]
 #  pull_request:
 #    branches: [ "main" ]
 
 
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CARGO_TERM_COLOR: always
+
 jobs:
+  tagname:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag }}
+    steps:
+      - if: github.event_name == 'workflow_dispatch'
+        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+
+      - if: github.event_name == 'push'
+        run: |
+          TAG_NAME=${{ github.ref }}
+          echo "TAG_NAME=${TAG_NAME#refs/tags/}" >> $GITHUB_ENV
+      - id: vars
+        shell: bash
+        run: echo "sha_short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - if: env.TAG_NAME == 'nightly'
+        run: echo 'TAG_NAME=nightly-${{ steps.vars.outputs.sha_short }}' >> $GITHUB_ENV
+
+      - id: tag
+        run: echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+  
+  linux:
+    runs-on: ubuntu-latest
+    container: ubuntu:18.04
+    needs: tagname
+    env:
+      RELEASE_TAG_NAME: ${{ needs.tagname.outputs.tag_name }}
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - if: github.event_name == 'workflow_dispatch'
+        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+
+      - if: github.event_name == 'schedule'
+        run: echo 'TAG_NAME=nightly' >> $GITHUB_ENV
+
+      - if: github.event_name == 'push'
+        run: |
+          TAG_NAME=${{ github.ref }}
+          echo "TAG_NAME=${TAG_NAME#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          apt-get -y update
+          apt-get -y install cmake pkg-config libfontconfig-dev libgtk-3-dev
+      
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          profile: minimal
+          
+      - name: Build
+        run: cargo build --profile release --bin matrix-commander-rs
+
+      - name: Gzip
+        run: |
+          mkdir matrix-commander-rs
+          cp ./target/release/matrix-commander-rs matrix-commander-rs/
+          cp README.md matrix-commander-rs/
+          cp LICENSE matrix-commander-rs/
+          cp help.txt matrix-commander-rs/
+          tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
+      - uses: actions/upload-artifact@v3
+        with:
+          name: plain-linux
+          path: |
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+          retention-days: 1
+
   tagged-release:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
@@ -31,7 +111,18 @@ jobs:
 #        run: cargo build --verbose
 #      - name: Run tests
 #        run: cargo test --verbose
-      
+
+      - if: github.event_name == 'workflow_dispatch'
+        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+
+      - if: github.event_name == 'schedule'
+        run: echo 'TAG_NAME=nightly' >> $GITHUB_ENV
+
+      - if: github.event_name == 'push'
+        run: |
+          TAG_NAME=${{ github.ref }}
+          echo "TAG_NAME=${TAG_NAME#refs/tags/}" >> $GITHUB_ENV
+            
       - name: Compile
         id: compile
         uses: rust-build/rust-build.action@master
@@ -53,7 +144,7 @@ jobs:
           RUSTTARGET: x86_64-unknown-linux-musl
 #          ARCHIVE_TYPES: tar.gz
           UPLOAD_MODE: none
-#          MINIFY: true
+          MINIFY: true
           EXTRA_FILES: "README.md LICENSE help.txt"
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -62,6 +153,23 @@ jobs:
           path: |
             ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
+            
+      - name: Compile
+        id: compile3
+        uses: rust-build/rust-build.action@master
+        with:
+          RUSTTARGET: x86_64-apple-darwin
+#          ARCHIVE_TYPES: tar.gz
+          UPLOAD_MODE: none
+          MINIFY: true
+          EXTRA_FILES: "README.md LICENSE help.txt"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Binary
+          path: |
+            ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
 
 # https://github.com/softprops/action-gh-release
       - name: Release
@@ -71,12 +179,17 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
             ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
+            ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
             README.md
             LICENSE
             help.txt
 #          prerelease: true
 #          title: "Development Build"
+
+
