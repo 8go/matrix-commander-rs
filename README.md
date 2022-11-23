@@ -72,8 +72,6 @@ Safe!
 - revise existing code, where is it inefficient?
 - improve the quality of the existing code. Make it more Rust-esque
   while keeping it simple.
-- create Github workflow so that the crate on `crates.io` gets
-  generated automatically on `pull request` or `push`.
 - implement `login` via SSO
 - add --proxy (see Python documentation)
 - add --nossl (see Python documentation)
