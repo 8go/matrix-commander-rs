@@ -32,6 +32,7 @@ use matrix_sdk::{
     attachment::AttachmentConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
     instant::Duration,
+    media::MediaFormat,
     room,
     room::{Room, RoomMember},
     ruma::{
@@ -348,6 +349,26 @@ pub(crate) async fn devices(client: &Client, output: Output) -> Result<(), Error
     Ok(())
 }
 
+/// Write the avatar of the current user to a file.
+pub(crate) async fn get_avatar(
+    client: &Client,
+    file: &PathBuf,
+    _output: Output,
+) -> Result<(), Error> {
+    debug!("Get avatar fromserver");
+    if let Some(avatar) = client.account().get_avatar(MediaFormat::File).await? {
+        match std::fs::write(file, avatar) {
+            Ok(_) => {
+                debug!("Avatar saved successfully");
+                Ok(())
+            }
+            Err(e) => Err(Error::IO(e)),
+        }
+    } else {
+        Err(Error::GetAvatarFailed)
+    }
+}
+
 /// Get room info for a list of rooms.
 /// Includes items such as room id, room display name, room alias, and room topic.
 pub(crate) async fn get_room_info(
@@ -529,6 +550,55 @@ pub(crate) async fn room_create(
             }
             None => None,
         };
+
+        // In Python for a DM room we do this:
+        // if gs.pa.plain:
+        //     encrypt = False
+        //     initial_state = ()
+        // else:
+        //     encrypt = True
+        //     initial_state = [EnableEncryptionBuilder().as_dict()]
+        // gs.log.debug(
+        //     f'Creating DM room with user "{user}", '
+        //     f'room alias "{alias}", '
+        //     f'name "{name}", topic "{topic}" and '
+        //     f'encrypted "{encrypt}".'
+        // )
+        // # nio's room_create does NOT accept "#foo:example.com"
+        // resp = await client.room_create(
+        //     alias=alias,  # desired canonical alias local part, e.g. foo
+        //     visibility=RoomVisibility.private,
+        //     is_direct=True,
+        //     preset=RoomPreset.private_chat,
+        //     invite={user},  # invite the user to the DM
+        //     name=name,  # room name
+        //     topic=topic,  # room topic
+        //     initial_state=initial_state,
+        // )
+
+        // In Python for a normal room we do this:
+        // if gs.pa.plain:
+        //     encrypt = False
+        //     initial_state = ()
+        // else:
+        //     encrypt = True
+        //     initial_state = [EnableEncryptionBuilder().as_dict()]
+        // gs.log.debug(
+        //     f'Creating room with room alias "{alias}", '
+        //     f'name "{name}", topic "{topic}" and '
+        //     f'encrypted "{encrypt}".'
+        // )
+        // # nio's room_create does NOT accept "#foo:example.com"
+        // resp = await client.room_create(
+        //     alias=alias,  # desired canonical alias local part, e.g. foo
+        //     name=name,  # room name
+        //     topic=topic,  # room topic
+        //     initial_state=initial_state,
+        // )
+
+        // if let Some(room) = client.get_joined_room(&room_id) { room.enable_encryption().await? }
+
+        // see: https://docs.rs/ruma/0.7.4/ruma/api/client/room/create_room/v3/struct.Request.html
         let mut request = CreateRoomRequest::new();
         request.name = nopt;
         request.room_alias_name = aopt;

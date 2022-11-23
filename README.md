@@ -581,6 +581,10 @@ Options:
           (like invite, ban, For d) this gives the option to delete the device
           of a different user. If --user is not set, it will default to itself,
           i.e. the user of the "matrix-commander-rs" account
+      --get-avatar <FILE>
+          Get the avatar of itself, i.e. the 'matrix-commander-rs' user
+          account. Spefify a file optionally with path to store the image. E.g.
+          --get-avatar "./avatar.png"
   -h, --help
           Print help information (use `--help` for more detail)
 ```

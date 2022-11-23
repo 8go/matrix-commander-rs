@@ -71,8 +71,8 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_room_ids, delete_devices_pre, devices, file, get_room_info, invited_rooms,
-    joined_members, joined_rooms, left_rooms, login, logout, logout_local, message,
+    convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_room_info,
+    invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local, message,
     replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
     room_forget, room_get_state, room_get_visibility, room_invite, room_join, room_kick,
     room_leave, room_resolve_alias, room_unban, rooms, verify,
@@ -177,6 +177,9 @@ pub enum Error {
 
     #[error("Delete Device Failed")]
     DeleteDeviceFailed,
+
+    #[error("Get Avatar Failed")]
+    GetAvatarFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1426,6 +1429,13 @@ pub struct Args {
     /// i.e. the user of the "matrix-commander-rs" account.
     #[arg(short, long, num_args(0..), )]
     user: Vec<String>,
+
+    /// Get the avatar of itself, i.e. the
+    /// 'matrix-commander-rs' user account. Spefify a
+    /// file optionally with path to store the image.
+    /// E.g. --get-avatar "./avatar.png".
+    #[arg(long, value_name = "FILE")]
+    get_avatar: Option<PathBuf>,
 }
 
 impl Default for Args {
@@ -1491,6 +1501,7 @@ impl Args {
             joined_members: Vec::new(),
             delete_device: Vec::new(),
             user: Vec::new(),
+            get_avatar: None,
         }
     }
 }
@@ -2395,6 +2406,16 @@ pub(crate) async fn cli_room_resolve_alias(client: &Client, ap: &Args) -> Result
     crate::room_resolve_alias(client, &ap.room_resolve_alias, ap.output).await
 }
 
+/// Handle the --get-avatar CLI argument
+pub(crate) async fn cli_get_avatar(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Get-avatar chosen.");
+    if let Some(path) = ap.get_avatar.as_ref() {
+        crate::get_avatar(client, &path, ap.output).await
+    } else {
+        Err(Error::MissingCliParameter)
+    }
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -2461,7 +2482,10 @@ async fn main() -> Result<(), Error> {
 
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
     // Send *all* output from Debug to Error to stderr
-    tracing_subscriber::fmt().with_writer(io::stderr).init();
+    tracing_subscriber::fmt()
+        .with_writer(io::stderr)
+        .with_max_level(Level::from_str(&ap.log_level.to_string()).unwrap_or(Level::ERROR))
+        .init();
     debug!("Original RUST_LOG env var is {}", env_org_rust_log);
     debug!(
         "Final RUST_LOG env var is {}",
@@ -2530,6 +2554,7 @@ async fn main() -> Result<(), Error> {
     debug!("joined-members option is {:?}", ap.joined_members);
     debug!("delete-device option is {:?}", ap.delete_device);
     debug!("user option is {:?}", ap.user);
+    debug!("get-avatar option is {:?}", ap.get_avatar);
 
     if ap.version {
         crate::version();
@@ -2542,6 +2567,7 @@ async fn main() -> Result<(), Error> {
     };
 
     if !(!ap.login.is_none()
+        || ap.whoami
         || !ap.verify.is_none()
         || ap.devices
         || !ap.get_room_info.is_empty()
@@ -2553,6 +2579,7 @@ async fn main() -> Result<(), Error> {
         || !ap.room_get_state.is_empty()
         || !ap.joined_members.is_empty()
         || !ap.room_resolve_alias.is_empty()
+        || !ap.get_avatar.is_none()
         || !ap.room_create.is_empty()
         || !ap.room_leave.is_empty()
         || !ap.room_forget.is_empty()
@@ -2844,6 +2871,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_room_resolve_alias(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_resolve_alias successful"),
                 Err(ref e) => error!("Error: crate::room_resolve_alias reported {}", e),
+            };
+        };
+
+        if !ap.get_avatar.is_none() {
+            match crate::cli_get_avatar(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_avatar successful"),
+                Err(ref e) => error!("Error: crate::get_avatar reported {}", e),
             };
         };
 
