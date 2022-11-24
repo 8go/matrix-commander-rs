@@ -500,5 +500,17 @@ Options:
           path with the image. If the MIME type of the image cannot be
           determined, it will assume 'PNG' as default. E.g. --set-avatar
           "./avatar.jpg". It returns a line with the MRX URI of the new avatar
+      --get-avatar-url
+          Get the MXC URI of the avatar of itself, i.e. the
+          'matrix-commander-rs' user account
+      --set-avatar-url <MAX_URI>
+          Set the avatar MXC URI of the URL to be used as avatar for the
+          'matrix-commander-rs' user account. Spefify a MXC URI. E.g.
+          --set-avatar-url
+          "mxc://matrix.server.org/SomeStrangeStringOfYourMxcUri"
+      --unset-avatar-url
+          Remove the avatar MXC URI to be used as avatar for the
+          'matrix-commander-rs' user account. In other words, remove the avatar
+          of the 'matrix-commander-rs' user
   -h, --help
           Print help information (use `--help` for more detail)

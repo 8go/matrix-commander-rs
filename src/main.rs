@@ -61,8 +61,9 @@ use matrix_sdk::{
     ruma::{
         // api::client::search::search_events::v3::OwnedRoomIdOrUserId;
         OwnedDeviceId,
-        OwnedUserId,
+        OwnedMxcUri,
         // device_id, room_id, session_id, user_id, OwnedRoomId,  RoomId,
+        OwnedUserId,
     },
     Client,
     Session,
@@ -71,11 +72,12 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_room_info,
-    invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local, message,
-    replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
-    room_forget, room_get_state, room_get_visibility, room_invite, room_join, room_kick,
-    room_leave, room_resolve_alias, room_unban, rooms, set_avatar, verify,
+    convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
+    get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms, login, logout,
+    logout_local, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
+    room_create, room_forget, room_get_state, room_get_visibility, room_invite, room_join,
+    room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url,
+    unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -183,6 +185,15 @@ pub enum Error {
 
     #[error("Set Avatar Failed")]
     SetAvatarFailed,
+
+    #[error("Get Avatar URL Failed")]
+    GetAvatarUrlFailed,
+
+    #[error("Set Avatar URL Failed")]
+    SetAvatarUrlFailed,
+
+    #[error("Unset Avatar URL Failed")]
+    UnsetAvatarUrlFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1450,6 +1461,24 @@ pub struct Args {
     /// avatar.
     #[arg(long, alias = "upload-avatar", value_name = "FILE")]
     set_avatar: Option<PathBuf>,
+
+    /// Get the MXC URI of the avatar of itself, i.e. the
+    /// 'matrix-commander-rs' user account.
+    #[arg(long)]
+    get_avatar_url: bool,
+
+    /// Set the avatar MXC URI of the URL to be used as avatar for
+    /// the 'matrix-commander-rs' user account. Spefify a
+    /// MXC URI.
+    /// E.g. --set-avatar-url "mxc://matrix.server.org/SomeStrangeStringOfYourMxcUri".
+    #[arg(long, alias = "upload-avatar-url", value_name = "MAX_URI")]
+    set_avatar_url: Option<OwnedMxcUri>,
+
+    /// Remove the avatar MXC URI to be used as avatar for
+    /// the 'matrix-commander-rs' user account. In other words, remove
+    /// the avatar of the 'matrix-commander-rs' user.
+    #[arg(long, alias = "remove-avatar")]
+    unset_avatar_url: bool,
 }
 
 impl Default for Args {
@@ -1517,6 +1546,9 @@ impl Args {
             user: Vec::new(),
             get_avatar: None,
             set_avatar: None,
+            get_avatar_url: false,
+            set_avatar_url: None,
+            unset_avatar_url: false,
         }
     }
 }
@@ -2441,6 +2473,28 @@ pub(crate) async fn cli_set_avatar(client: &Client, ap: &Args) -> Result<(), Err
     }
 }
 
+/// Handle the --get-avatar-url CLI argument
+pub(crate) async fn cli_get_avatar_url(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Get-avatar-url chosen.");
+    crate::get_avatar_url(client, ap.output).await
+}
+
+/// Handle the --set-avatar_url CLI argument
+pub(crate) async fn cli_set_avatar_url(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Set-avatar-url chosen.");
+    if let Some(mxc_uri) = ap.set_avatar_url.as_ref() {
+        crate::set_avatar_url(client, &mxc_uri, ap.output).await
+    } else {
+        Err(Error::MissingCliParameter)
+    }
+}
+
+/// Handle the --unset-avatar_url CLI argument
+pub(crate) async fn cli_unset_avatar_url(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Unset-avatar-url chosen.");
+    crate::unset_avatar_url(client, ap.output).await
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -2581,6 +2635,9 @@ async fn main() -> Result<(), Error> {
     debug!("user option is {:?}", ap.user);
     debug!("get-avatar option is {:?}", ap.get_avatar);
     debug!("set-avatar option is {:?}", ap.set_avatar);
+    debug!("get-avatar_url flag is {:?}", ap.get_avatar_url);
+    debug!("set-avatar_url option is {:?}", ap.set_avatar_url);
+    debug!("unset-avatar_url flag is {:?}", ap.unset_avatar_url);
 
     if ap.version {
         crate::version();
@@ -2606,6 +2663,7 @@ async fn main() -> Result<(), Error> {
         || !ap.joined_members.is_empty()
         || !ap.room_resolve_alias.is_empty()
         || !ap.get_avatar.is_none()
+        || ap.get_avatar_url
         || !ap.room_create.is_empty()
         || !ap.room_leave.is_empty()
         || !ap.room_forget.is_empty()
@@ -2616,6 +2674,8 @@ async fn main() -> Result<(), Error> {
         || !ap.room_kick.is_empty()
         || !ap.delete_device.is_empty()
         || !ap.set_avatar.is_none()
+        || !ap.set_avatar_url.is_none()
+        || ap.unset_avatar_url
         || !ap.message.is_empty()
         || !ap.file.is_empty()
         || ap.listen.is_once()
@@ -2908,6 +2968,13 @@ async fn main() -> Result<(), Error> {
             };
         };
 
+        if ap.get_avatar_url {
+            match crate::cli_get_avatar_url(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_avatar_url successful"),
+                Err(ref e) => error!("Error: crate::get_avatar_url reported {}", e),
+            };
+        };
+
         // set actions
 
         if !ap.room_create.is_empty() {
@@ -2981,6 +3048,20 @@ async fn main() -> Result<(), Error> {
             match crate::cli_set_avatar(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_avatar successful"),
                 Err(ref e) => error!("Error: crate::set_avatar reported {}", e),
+            };
+        };
+
+        if !ap.set_avatar_url.is_none() {
+            match crate::cli_set_avatar_url(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::set_avatar_url successful"),
+                Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
+            };
+        };
+
+        if ap.unset_avatar_url {
+            match crate::cli_unset_avatar_url(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::set_avatar_url successful"),
+                Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
             };
         };
 

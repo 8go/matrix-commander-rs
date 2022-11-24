@@ -370,6 +370,21 @@ pub(crate) async fn get_avatar(
     }
 }
 
+/// Get the avatar MXC URI of the current user.
+pub(crate) async fn get_avatar_url(client: &Client, output: Output) -> Result<(), Error> {
+    debug!("Get avatar MXC from server");
+    if let Ok(Some(mxc_uri)) = client.account().get_avatar_url().await {
+        debug!(
+            "Avatar MXC URI obtained successfully. MXC_URI is {:?}",
+            mxc_uri
+        );
+        print_mxc_uri("avatar_mxc_uri", mxc_uri, output);
+        Ok(())
+    } else {
+        Err(Error::GetAvatarUrlFailed)
+    }
+}
+
 /// Read the avatar from a file and send it to server to be used as avatar of the current user.
 pub(crate) async fn set_avatar(
     client: &Client,
@@ -400,6 +415,33 @@ pub(crate) async fn set_avatar(
         Ok(())
     } else {
         Err(Error::SetAvatarFailed)
+    }
+}
+
+/// Send new MXC URI to server to be used as avatar of the current user.
+pub(crate) async fn set_avatar_url(
+    client: &Client,
+    mxc_uri: &OwnedMxcUri,
+    _output: Output,
+) -> Result<(), Error> {
+    debug!("Upload avatar MXC URI to server");
+    if let Ok(_) = client.account().set_avatar_url(Some(mxc_uri)).await {
+        debug!("Avatar file uploaded successfully.",);
+        Ok(())
+    } else {
+        Err(Error::SetAvatarUrlFailed)
+    }
+}
+
+/// Remove any MXC URI on server which are used as avatar of the current user.
+/// In other words, remove the avatar from the matrix-commander-rs user.
+pub(crate) async fn unset_avatar_url(client: &Client, _output: Output) -> Result<(), Error> {
+    debug!("Remove avatar MXC URI on server");
+    if let Ok(_) = client.account().set_avatar_url(None).await {
+        debug!("Avatar removed successfully.",);
+        Ok(())
+    } else {
+        Err(Error::UnsetAvatarUrlFailed)
     }
 }
 

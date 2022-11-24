@@ -46,7 +46,16 @@ with open(helpfile, "w") as f:
     process = subprocess.Popen(bashCmd, stdout=f)
     _, error = process.communicate()
     if error:
+        print("Error: Runnung cargo failed. Not enough disk space?")
         print(error)
+        sys.exit(1)
+
+with open(helpfile, "r+") as f:
+    helptext = f.read()
+    if len(helptext) < 10:
+        print(f"Error: file {helpfile} has length {len(helptext)}. Something is wrong. Aborting.")
+        sys.exit(1)
+
 
 bashCmd = ["sed", "-i" , "s,"+"\x1B"+"\[[0-9;]*[a-zA-Z],,g" , helpfile]
 process = subprocess.Popen(bashCmd,)
