@@ -75,7 +75,7 @@ use crate::mclient::{
     invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local, message,
     replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
     room_forget, room_get_state, room_get_visibility, room_invite, room_join, room_kick,
-    room_leave, room_resolve_alias, room_unban, rooms, verify,
+    room_leave, room_resolve_alias, room_unban, rooms, set_avatar, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -180,6 +180,9 @@ pub enum Error {
 
     #[error("Get Avatar Failed")]
     GetAvatarFailed,
+
+    #[error("Set Avatar Failed")]
+    SetAvatarFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1436,6 +1439,17 @@ pub struct Args {
     /// E.g. --get-avatar "./avatar.png".
     #[arg(long, value_name = "FILE")]
     get_avatar: Option<PathBuf>,
+
+    /// Set, i.e. upload, an image to be used as avatar for
+    /// 'matrix-commander-rs' user account. Spefify a
+    /// file optionally with path with the image. If the MIME
+    /// type of the image cannot be determined, it will
+    /// assume 'PNG' as default.
+    /// E.g. --set-avatar "./avatar.jpg".
+    /// It returns a line with the MRX URI of the new
+    /// avatar.
+    #[arg(long, alias = "upload-avatar", value_name = "FILE")]
+    set_avatar: Option<PathBuf>,
 }
 
 impl Default for Args {
@@ -1502,6 +1516,7 @@ impl Args {
             delete_device: Vec::new(),
             user: Vec::new(),
             get_avatar: None,
+            set_avatar: None,
         }
     }
 }
@@ -2416,6 +2431,16 @@ pub(crate) async fn cli_get_avatar(client: &Client, ap: &Args) -> Result<(), Err
     }
 }
 
+/// Handle the --set-avatar CLI argument
+pub(crate) async fn cli_set_avatar(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Set-avatar chosen.");
+    if let Some(path) = ap.set_avatar.as_ref() {
+        crate::set_avatar(client, &path, ap.output).await
+    } else {
+        Err(Error::MissingCliParameter)
+    }
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -2555,6 +2580,7 @@ async fn main() -> Result<(), Error> {
     debug!("delete-device option is {:?}", ap.delete_device);
     debug!("user option is {:?}", ap.user);
     debug!("get-avatar option is {:?}", ap.get_avatar);
+    debug!("set-avatar option is {:?}", ap.set_avatar);
 
     if ap.version {
         crate::version();
@@ -2589,6 +2615,7 @@ async fn main() -> Result<(), Error> {
         || !ap.room_unban.is_empty()
         || !ap.room_kick.is_empty()
         || !ap.delete_device.is_empty()
+        || !ap.set_avatar.is_none()
         || !ap.message.is_empty()
         || !ap.file.is_empty()
         || ap.listen.is_once()
@@ -2891,6 +2918,8 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_leave.is_empty() {
+            error!("There seems to be a bug in the matrix-sdk library and hence this is not working properly at the moment.");
+            error!("If you know the matrix-sdk library please help fix this bug.");
             match crate::cli_room_leave(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_leave successful"),
                 Err(ref e) => error!("Error: crate::room_leave reported {}", e),
@@ -2898,6 +2927,8 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_forget.is_empty() {
+            error!("There seems to be a bug in the matrix-sdk library and hence this is not working properly at the moment.");
+            error!("If you know the matrix-sdk library please help fix this bug.");
             match crate::cli_room_forget(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_forget successful"),
                 Err(ref e) => error!("Error: crate::room_forget reported {}", e),
@@ -2943,6 +2974,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_delete_device(&client, &mut ap).await {
                 Ok(ref _n) => debug!("crate::delete_device successful"),
                 Err(ref e) => error!("Error: crate::delete_device reported {}", e),
+            };
+        };
+
+        if !ap.set_avatar.is_none() {
+            match crate::cli_set_avatar(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::set_avatar successful"),
+                Err(ref e) => error!("Error: crate::set_avatar reported {}", e),
             };
         };
 

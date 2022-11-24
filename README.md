@@ -583,6 +583,12 @@ Options:
           Get the avatar of itself, i.e. the 'matrix-commander-rs' user
           account. Spefify a file optionally with path to store the image. E.g.
           --get-avatar "./avatar.png"
+      --set-avatar <FILE>
+          Set, i.e. upload, an image to be used as avatar for
+          'matrix-commander-rs' user account. Spefify a file optionally with
+          path with the image. If the MIME type of the image cannot be
+          determined, it will assume 'PNG' as default. E.g. --set-avatar
+          "./avatar.jpg". It returns a line with the MRX URI of the new avatar
   -h, --help
           Print help information (use `--help` for more detail)
 ```

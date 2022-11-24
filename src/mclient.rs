@@ -64,6 +64,7 @@ use matrix_sdk::{
         // DeviceId,
         // room_id, session_id, user_id,
         OwnedDeviceId,
+        OwnedMxcUri,
         OwnedRoomAliasId,
         OwnedRoomId,
         // UInt,
@@ -352,12 +353,12 @@ pub(crate) async fn devices(client: &Client, output: Output) -> Result<(), Error
 /// Write the avatar of the current user to a file.
 pub(crate) async fn get_avatar(
     client: &Client,
-    file: &PathBuf,
+    path: &PathBuf,
     _output: Output,
 ) -> Result<(), Error> {
-    debug!("Get avatar fromserver");
-    if let Some(avatar) = client.account().get_avatar(MediaFormat::File).await? {
-        match std::fs::write(file, avatar) {
+    debug!("Get avatar from server");
+    if let Ok(Some(avatar)) = client.account().get_avatar(MediaFormat::File).await {
+        match std::fs::write(path, avatar) {
             Ok(_) => {
                 debug!("Avatar saved successfully");
                 Ok(())
@@ -366,6 +367,39 @@ pub(crate) async fn get_avatar(
         }
     } else {
         Err(Error::GetAvatarFailed)
+    }
+}
+
+/// Read the avatar from a file and send it to server to be used as avatar of the current user.
+pub(crate) async fn set_avatar(
+    client: &Client,
+    path: &PathBuf,
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Upload avatar to server");
+    let image = match fs::read(path) {
+        Ok(image) => {
+            debug!("Avatar file read successfully");
+            image
+        }
+        Err(e) => return Err(Error::IO(e)),
+    };
+    if let Ok(mxc_uri) = client
+        .account()
+        .upload_avatar(
+            &mime_guess::from_path(path).first_or(mime::IMAGE_PNG),
+            &image,
+        )
+        .await
+    {
+        debug!(
+            "Avatar file uploaded successfully. MXC_URI is {:?}",
+            mxc_uri
+        );
+        print_mxc_uri("avatar_mxc_uri", mxc_uri, output);
+        Ok(())
+    } else {
+        Err(Error::SetAvatarFailed)
     }
 }
 
@@ -416,6 +450,18 @@ pub(crate) async fn get_room_info(
         };
     }
     Ok(())
+}
+
+/// Utility function to print a MXC URI
+pub(crate) fn print_mxc_uri(json_label: &str, mxc_uri: OwnedMxcUri, output: Output) {
+    debug!("mxc uri: {:?}", mxc_uri);
+    match output {
+        Output::Text => println!("{}:    {}", json_label, mxc_uri,),
+        Output::JsonSpec => (),
+        _ => {
+            println!("{{\"{}\": {:?}}}", json_label, mxc_uri,);
+        }
+    }
 }
 
 /// Utility function to print Common room info

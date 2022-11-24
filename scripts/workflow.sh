@@ -258,7 +258,7 @@ OPT2="cargo clean"
 OPT3="cargo publish"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
     if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
     if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
