@@ -171,6 +171,8 @@ jobs:
       - name: Final-check
         run: |
           ls -l
+          echo "content of output directory"
+          ls -l output
           TAG_NAME=$(cat tag.txt)
           cat tag.txt
           echo "tag name: $TAG_NAME"
@@ -185,14 +187,14 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+            README.md
+            LICENSE
+            help.txt
             matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
+            matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
             ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
             ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
-            README.md
-            LICENSE
-            help.txt
