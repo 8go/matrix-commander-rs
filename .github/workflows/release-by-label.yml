@@ -178,6 +178,17 @@ jobs:
           echo "tag name: $TAG_NAME"
           echo "release tag: $RELEASE_TAG_NAME"
           echo "env release tag: " ${{ env.RELEASE_TAG_NAME }}
+          which rename
+          rename -h
+          cd output
+          mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip 
+          mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip.sha256sum 
+          mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip 
+          mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip.sha256sum 
+          mv matrix-commander-rs_null_x86_64-apple-darwin.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip
+          mv matrix-commander-rs_null_x86_64-apple-darwin.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip.sha256sum 
+          cd ..
+          ls * output/*
 
       # https://github.com/softprops/action-gh-release
       - name: Release
@@ -192,9 +203,16 @@ jobs:
             help.txt
             matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
-            ${{ steps.compile.outputs.BUILT_ARCHIVE }}
-            ${{ steps.compile.outputs.BUILT_CHECKSUM }}
-            ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
-            ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
-            ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
-            ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip.sha256sum 
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip 
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip.sha256sum 
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip
+            output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip.sha256sum 
+
+# ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+# ${{ steps.compile.outputs.BUILT_CHECKSUM }}
+# ${{ steps.compile2.outputs.BUILT_ARCHIVE }}
+# ${{ steps.compile2.outputs.BUILT_CHECKSUM }}
+# ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
+# ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
