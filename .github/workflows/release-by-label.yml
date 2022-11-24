@@ -93,6 +93,9 @@ jobs:
           cp help.txt matrix-commander-rs/
           tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
           # tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
+          sha256sum ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz > ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
+          echo "SHA256 checksum is: "
+          cat ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
           ls
           ls -l
           echo ${TAG_NAME} > tag.txt
@@ -102,6 +105,7 @@ jobs:
           name: plain-linux
           path: |
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             # ./matrix-commander-rs_linux.tar.gz
           retention-days: 1
 
@@ -193,6 +197,7 @@ jobs:
           generate_release_notes: true
           files: |
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             # ./matrix-commander-rs_linux.tar.gz
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
