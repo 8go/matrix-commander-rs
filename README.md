@@ -609,6 +609,10 @@ Options:
       --set-display-name <NAME>
           Set the display name of the 'matrix-commander-rs' user account.
           Spefify a name
+      --get-profile
+          Get the profile of itself, i.e. of the 'matrix-commander-rs' user
+          account. This is getting both display name and avatar MXC URI in a
+          call
   -h, --help
           Print help information (use `--help` for more detail)
 ```

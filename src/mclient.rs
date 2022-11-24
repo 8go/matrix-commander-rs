@@ -475,6 +475,24 @@ pub(crate) async fn set_display_name(
     }
 }
 
+/// Get profile of the current user.
+pub(crate) async fn get_profile(client: &Client, output: Output) -> Result<(), Error> {
+    debug!("Get profile from server");
+    if let Ok(profile) = client.account().get_profile().await {
+        debug!("Profile successfully. Profile {:?}", profile);
+        print_two_strings(
+            "display_name",
+            profile.displayname,
+            "avatar_url",
+            profile.avatar_url.map(|mxc| mxc.to_string()),
+            output,
+        );
+        Ok(())
+    } else {
+        Err(Error::GetProfileFailed)
+    }
+}
+
 /// Get room info for a list of rooms.
 /// Includes items such as room id, room display name, room alias, and room topic.
 pub(crate) async fn get_room_info(
@@ -544,6 +562,67 @@ pub(crate) fn print_one_string(json_label: &str, value: String, output: Output) 
         Output::JsonSpec => (),
         _ => {
             println!("{{\"{}\": {:?}}}", json_label, value,);
+        }
+    }
+}
+
+// Todo: convert the 2 function print-one-string and print-two-string into a single function print-option-string-vector
+// Todo: remove the print_mxc_uri fn and use print_string-vector instead with uri-to-str conversion first.
+
+/// Utility function to print two strings
+pub(crate) fn print_two_strings(
+    json_label1: &str,
+    value1: Option<String>,
+    json_label2: &str,
+    value2: Option<String>,
+    output: Output,
+) {
+    debug!(
+        "{}: {:?}, {}: {:?}",
+        json_label1, value1, json_label2, value2
+    );
+    let mut val1 = ("\"").to_string();
+    match value1 {
+        Some(s) => {
+            val1.push_str(&s);
+            val1.push('"');
+        }
+        _ => {
+            val1.clear();
+            val1.push_str("null");
+        }
+    }
+    let mut val2 = ("\"").to_string();
+    match value2 {
+        Some(s) => {
+            val2.push_str(&s);
+            val2.push('"');
+        }
+        _ => {
+            val2.clear();
+            val2.push_str("null");
+        }
+    }
+    match output {
+        Output::Text => println!(
+            "{}:    {}    {}:    {}",
+            json_label1,
+            val1.strip_suffix("\"")
+                .unwrap_or("")
+                .strip_prefix("\"")
+                .unwrap_or(""),
+            json_label2,
+            val2.strip_suffix("\"")
+                .unwrap_or("")
+                .strip_prefix("\"")
+                .unwrap_or(""),
+        ),
+        Output::JsonSpec => (),
+        _ => {
+            println!(
+                "{{\"{}\": {}, \"{}\": {}}}",
+                json_label1, val1, json_label2, val2,
+            );
         }
     }
 }

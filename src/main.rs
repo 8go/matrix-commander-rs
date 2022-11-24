@@ -73,8 +73,8 @@ use matrix_sdk::{
 mod mclient;
 use crate::mclient::{
     convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
-    get_display_name, get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms,
-    login, logout, logout_local, message, replace_star_with_rooms, restore_credentials,
+    get_display_name, get_profile, get_room_info, invited_rooms, joined_members, joined_rooms,
+    left_rooms, login, logout, logout_local, message, replace_star_with_rooms, restore_credentials,
     restore_login, room_ban, room_create, room_forget, room_get_state, room_get_visibility,
     room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
     set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
@@ -200,6 +200,9 @@ pub enum Error {
 
     #[error("Set Displayname Failed")]
     SetDisplaynameFailed,
+
+    #[error("Get Profile Failed")]
+    GetProfileFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1496,6 +1499,12 @@ pub struct Args {
     /// name.
     #[arg(long, value_name = "NAME")]
     set_display_name: Option<String>,
+
+    /// Get the profile of itself, i.e. of the
+    /// 'matrix-commander-rs' user account. This is
+    /// getting both display name and avatar MXC URI in a call.
+    #[arg(long)]
+    get_profile: bool,
 }
 
 impl Default for Args {
@@ -1568,6 +1577,7 @@ impl Args {
             unset_avatar_url: false,
             get_display_name: false,
             set_display_name: None,
+            get_profile: false,
         }
     }
 }
@@ -2530,6 +2540,12 @@ pub(crate) async fn cli_set_display_name(client: &Client, ap: &Args) -> Result<(
     }
 }
 
+/// Handle the --get-profile CLI argument
+pub(crate) async fn cli_get_profile(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Get-profile chosen.");
+    crate::get_profile(client, ap.output).await
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -2675,6 +2691,7 @@ async fn main() -> Result<(), Error> {
     debug!("unset-avatar_url flag is {:?}", ap.unset_avatar_url);
     debug!("get-display-name option is {:?}", ap.get_display_name);
     debug!("set-display-name option is {:?}", ap.set_display_name);
+    debug!("get-profile option is {:?}", ap.get_profile);
 
     if ap.version {
         crate::version();
@@ -2702,6 +2719,7 @@ async fn main() -> Result<(), Error> {
         || !ap.get_avatar.is_none()
         || ap.get_avatar_url
         || ap.get_display_name
+        || ap.get_profile
         || !ap.room_create.is_empty()
         || !ap.room_leave.is_empty()
         || !ap.room_forget.is_empty()
@@ -3018,6 +3036,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_get_display_name(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::get_display_name successful"),
                 Err(ref e) => error!("Error: crate::get_display_name reported {}", e),
+            };
+        };
+
+        if ap.get_profile {
+            match crate::cli_get_profile(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_profile successful"),
+                Err(ref e) => error!("Error: crate::get_profile reported {}", e),
             };
         };
 
