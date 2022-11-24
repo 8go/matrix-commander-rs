@@ -66,7 +66,7 @@ select opt in "${options[@]}"; do
 done
 
 PS3='Please enter your choice: '
-OPT1="scripts/update-1-version.sh         # increment MAJOR version number, incompatible"
+OPT1="scripts/update-1-version.sh --mayor # increment MAJOR version number, incompatible"
 OPT2="scripts/update-1-version.sh --minor # increment MINOR version number, new feature"
 OPT3="scripts/update-1-version.sh --patch # increment PATCH version number, bug fix"
 OPT4="cargo clean"

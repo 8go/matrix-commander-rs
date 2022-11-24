@@ -41,6 +41,8 @@ Safe!
 - Getting and printing old messages 
 - Listing devices
 - Creating, leaving and forgetting rooms
+- Kicking, banning, etc. on rooms
+- Getting, setting and removing user avatar
 - Getting room info
 - Logout and removal of device
 - Things like argument parsing, logging, output in JSON format, etc.
@@ -601,6 +603,12 @@ Options:
           Remove the avatar MXC URI to be used as avatar for the
           'matrix-commander-rs' user account. In other words, remove the avatar
           of the 'matrix-commander-rs' user
+      --get-display-name
+          Get the display name of itself, i.e. of the 'matrix-commander-rs'
+          user account
+      --set-display-name <NAME>
+          Set the display name of the 'matrix-commander-rs' user account.
+          Spefify a name
   -h, --help
           Print help information (use `--help` for more detail)
 ```

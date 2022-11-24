@@ -52,7 +52,7 @@ with open(helpfile, "w") as f:
 
 with open(helpfile, "r+") as f:
     helptext = f.read()
-    if len(helptext) < 10:
+    if len(helptext) < 100:
         print(f"Error: file {helpfile} has length {len(helptext)}. Something is wrong. Aborting.")
         sys.exit(1)
 

@@ -445,6 +445,36 @@ pub(crate) async fn unset_avatar_url(client: &Client, _output: Output) -> Result
     }
 }
 
+/// Get display name of the current user.
+pub(crate) async fn get_display_name(client: &Client, output: Output) -> Result<(), Error> {
+    debug!("Get display name from server");
+    if let Ok(Some(name)) = client.account().get_display_name().await {
+        debug!(
+            "Display name obtained successfully. Display name is {:?}",
+            name
+        );
+        print_one_string("display_name", name, output);
+        Ok(())
+    } else {
+        Err(Error::GetDisplaynameFailed)
+    }
+}
+
+/// Set display name of the current user.
+pub(crate) async fn set_display_name(
+    client: &Client,
+    name: &String,
+    _output: Output,
+) -> Result<(), Error> {
+    debug!("Set display name of current user");
+    if let Ok(_) = client.account().set_display_name(Some(name)).await {
+        debug!("Display name set successfully.",);
+        Ok(())
+    } else {
+        Err(Error::SetDisplaynameFailed)
+    }
+}
+
 /// Get room info for a list of rooms.
 /// Includes items such as room id, room display name, room alias, and room topic.
 pub(crate) async fn get_room_info(
@@ -496,12 +526,24 @@ pub(crate) async fn get_room_info(
 
 /// Utility function to print a MXC URI
 pub(crate) fn print_mxc_uri(json_label: &str, mxc_uri: OwnedMxcUri, output: Output) {
-    debug!("mxc uri: {:?}", mxc_uri);
+    debug!("{}: {:?}", json_label, mxc_uri);
     match output {
         Output::Text => println!("{}:    {}", json_label, mxc_uri,),
         Output::JsonSpec => (),
         _ => {
             println!("{{\"{}\": {:?}}}", json_label, mxc_uri,);
+        }
+    }
+}
+
+/// Utility function to print one string
+pub(crate) fn print_one_string(json_label: &str, value: String, output: Output) {
+    debug!("{}: {:?}", json_label, value);
+    match output {
+        Output::Text => println!("{}:    {}", json_label, value,),
+        Output::JsonSpec => (),
+        _ => {
+            println!("{{\"{}\": {:?}}}", json_label, value,);
         }
     }
 }

@@ -73,11 +73,11 @@ use matrix_sdk::{
 mod mclient;
 use crate::mclient::{
     convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
-    get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms, login, logout,
-    logout_local, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
-    room_create, room_forget, room_get_state, room_get_visibility, room_invite, room_join,
-    room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url,
-    unset_avatar_url, verify,
+    get_display_name, get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms,
+    login, logout, logout_local, message, replace_star_with_rooms, restore_credentials,
+    restore_login, room_ban, room_create, room_forget, room_get_state, room_get_visibility,
+    room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
+    set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -194,6 +194,12 @@ pub enum Error {
 
     #[error("Unset Avatar URL Failed")]
     UnsetAvatarUrlFailed,
+
+    #[error("Get Displayname Failed")]
+    GetDisplaynameFailed,
+
+    #[error("Set Displayname Failed")]
+    SetDisplaynameFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1479,6 +1485,17 @@ pub struct Args {
     /// the avatar of the 'matrix-commander-rs' user.
     #[arg(long, alias = "remove-avatar")]
     unset_avatar_url: bool,
+
+    /// Get the display name of itself, i.e. of the
+    /// 'matrix-commander-rs' user account.
+    #[arg(long)]
+    get_display_name: bool,
+
+    /// Set the display name of
+    /// the 'matrix-commander-rs' user account. Spefify a
+    /// name.
+    #[arg(long, value_name = "NAME")]
+    set_display_name: Option<String>,
 }
 
 impl Default for Args {
@@ -1549,6 +1566,8 @@ impl Args {
             get_avatar_url: false,
             set_avatar_url: None,
             unset_avatar_url: false,
+            get_display_name: false,
+            set_display_name: None,
         }
     }
 }
@@ -2495,6 +2514,22 @@ pub(crate) async fn cli_unset_avatar_url(client: &Client, ap: &Args) -> Result<(
     crate::unset_avatar_url(client, ap.output).await
 }
 
+/// Handle the --get-display-name CLI argument
+pub(crate) async fn cli_get_display_name(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Get-display-name chosen.");
+    crate::get_display_name(client, ap.output).await
+}
+
+/// Handle the --set-display-name CLI argument
+pub(crate) async fn cli_set_display_name(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Set-display-name chosen.");
+    if let Some(name) = ap.set_display_name.as_ref() {
+        crate::set_display_name(client, &name, ap.output).await
+    } else {
+        Err(Error::MissingCliParameter)
+    }
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -2638,6 +2673,8 @@ async fn main() -> Result<(), Error> {
     debug!("get-avatar_url flag is {:?}", ap.get_avatar_url);
     debug!("set-avatar_url option is {:?}", ap.set_avatar_url);
     debug!("unset-avatar_url flag is {:?}", ap.unset_avatar_url);
+    debug!("get-display-name option is {:?}", ap.get_display_name);
+    debug!("set-display-name option is {:?}", ap.set_display_name);
 
     if ap.version {
         crate::version();
@@ -2664,6 +2701,7 @@ async fn main() -> Result<(), Error> {
         || !ap.room_resolve_alias.is_empty()
         || !ap.get_avatar.is_none()
         || ap.get_avatar_url
+        || ap.get_display_name
         || !ap.room_create.is_empty()
         || !ap.room_leave.is_empty()
         || !ap.room_forget.is_empty()
@@ -2676,6 +2714,7 @@ async fn main() -> Result<(), Error> {
         || !ap.set_avatar.is_none()
         || !ap.set_avatar_url.is_none()
         || ap.unset_avatar_url
+        || !ap.set_display_name.is_none()
         || !ap.message.is_empty()
         || !ap.file.is_empty()
         || ap.listen.is_once()
@@ -2975,6 +3014,13 @@ async fn main() -> Result<(), Error> {
             };
         };
 
+        if ap.get_display_name {
+            match crate::cli_get_display_name(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_display_name successful"),
+                Err(ref e) => error!("Error: crate::get_display_name reported {}", e),
+            };
+        };
+
         // set actions
 
         if !ap.room_create.is_empty() {
@@ -3062,6 +3108,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_unset_avatar_url(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_avatar_url successful"),
                 Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
+            };
+        };
+
+        if !ap.set_display_name.is_none() {
+            match crate::cli_set_display_name(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::set_display_name successful"),
+                Err(ref e) => error!("Error: crate::set_display_name reported {}", e),
             };
         };
 
