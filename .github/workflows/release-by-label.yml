@@ -101,17 +101,20 @@ jobs:
           ls -l
           echo ${TAG_NAME} > tag.txt
           cat tag.txt
-      - uses: actions/upload-artifact@v3
+
+      - name: Upload artifact Linux
+        uses: actions/upload-artifact@v3
         with:
-          name: plain-linux
+          name: Binary
           path: |
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
-            # ./matrix-commander-rs_linux.tar.gz
           retention-days: 1
 
-      - uses: actions/checkout@master
-      
+      #   this overwrites all files in the workspace, so files from before will be lost.
+      # - uses: actions/checkout@master
+      #
+      # This would compile and run test cases, but we have a separate Github action for that
       #      - name: Build
       #        run: cargo build --verbose
       #      - name: Run tests
@@ -165,13 +168,17 @@ jobs:
             ${{ steps.compile3.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile3.outputs.BUILT_CHECKSUM }}
 
+      - name: Final-check
+        run: |
+          ls -l
+          TAG_NAME=$(cat tag.txt)
+          cat tag.txt
+          echo "tag name: $TAG_NAME"
+          echo "release tag: $RELEASE_TAG_NAME"
+          echo "env release tag: " ${{ env.RELEASE_TAG_NAME }}
+
       # https://github.com/softprops/action-gh-release
       - name: Release
-        #        run: |
-        #          ls
-        #          TAG_NAME=$(cat tag.txt)
-        #          cat tag.txt
-        #          echo $TAG_NAME
         uses: "softprops/action-gh-release@v1"
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
@@ -189,5 +196,3 @@ jobs:
             README.md
             LICENSE
             help.txt
-
-
