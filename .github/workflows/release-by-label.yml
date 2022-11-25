@@ -178,9 +178,9 @@ jobs:
           echo "tag name: $TAG_NAME"
           echo "release tag: $RELEASE_TAG_NAME"
           echo "env release tag: " ${{ env.RELEASE_TAG_NAME }}
-          which rename
-          rename -h
+          echo "rename not installed, will stop if using rename"
           cd output
+          ls
           mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip 
           mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip.sha256sum 
           mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip 
