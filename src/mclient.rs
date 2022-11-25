@@ -37,6 +37,8 @@ use matrix_sdk::{
     room::{Room, RoomMember},
     ruma::{
         api::client::room::create_room::v3::Request as CreateRoomRequest,
+        api::client::room::create_room::v3::RoomPreset,
+        api::client::room::Visibility,
         api::client::uiaa,
         // OwnedRoomOrAliasId, OwnedServerName,
         // device_id,
@@ -82,6 +84,25 @@ use crate::{credentials_exist, get_password, Args, Credentials, Error, Listen, O
 // import verification code
 #[path = "emoji_verify.rs"]
 mod emoji_verify;
+
+/// Convert String to Option with '' being converted to None
+fn to_opt(s: &str) -> Option<&str> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+/// Convert String to String with '' being converted to null and value being converted to quoted value "value"
+/// For printing string in JSON format
+fn to_nul(s: &str) -> String {
+    if s.is_empty() {
+        "null".to_owned()
+    } else {
+        "\"".to_owned() + s + "\""
+    }
+}
 
 /// Replace '*' in room id list with all rooms the user knows about (joined, left, invited, etc.)
 pub(crate) fn replace_star_with_rooms(client: &Client, vecstr: &mut Vec<String>) {
@@ -139,6 +160,84 @@ pub(crate) async fn convert_to_full_room_ids(
                     error!("Error: invalid alias {:?}. Error reported is {:?}.", el, e);
                     el.clear();
                 }
+            }
+        }
+    }
+}
+
+/// Convert partial user ids to full user ids.
+/// john => @john:matrix.server.com
+/// @john => @john:matrix.server.com
+/// @john:matrix.server.com => @john:matrix.server.com
+pub(crate) fn convert_to_full_user_ids(vecstr: &mut Vec<String>, default_host: &str) {
+    vecstr.retain(|x| !x.trim().is_empty());
+    for el in vecstr {
+        el.retain(|c| !c.is_whitespace());
+        if el.starts_with('!') {
+            error!("This user id {:?} starts with an exclamation mark. ! are used for rooms, not users. This will fail later.", el);
+            continue;
+        }
+        if el.starts_with('#') {
+            error!("This user id {:?} starts with a hash tag. # are used for room aliases, not users. This will fail later.", el);
+            continue;
+        }
+        if !el.starts_with('@') {
+            el.insert(0, '@');
+        }
+        if !el.contains(':') {
+            el.push(':');
+            el.push_str(default_host);
+        }
+    }
+}
+
+/// Convert partial room alias ids to full room alias ids.
+/// john => #john:matrix.server.com
+/// #john => #john:matrix.server.com
+/// #john:matrix.server.com => #john:matrix.server.com
+pub(crate) fn convert_to_full_alias_ids(vecstr: &mut Vec<String>, default_host: &str) {
+    vecstr.retain(|x| !x.trim().is_empty());
+    for el in vecstr {
+        el.retain(|c| !c.is_whitespace());
+        if el.starts_with('!') {
+            warn!("This room alias {:?} starts with an exclamation mark. ! are used for rooms ids, not aliases. This might cause problems later.", el);
+            continue;
+        }
+        if el.starts_with('@') {
+            error!("This room alias {:?} starts with an at sign. @ are used for user ids, not aliases. This will fail later.", el);
+            continue;
+        }
+        if !el.starts_with('#') {
+            el.insert(0, '#');
+        }
+        if !el.contains(':') {
+            el.push(':');
+            el.push_str(default_host);
+        }
+    }
+}
+
+/// Convert full room alias ids to local canonical short room alias ids.
+/// #john:matrix.server.com => john
+/// #john => john
+/// john => john
+/// Does NOT remove empty items from vector.
+pub(crate) fn convert_to_short_canonical_alias_ids(vecstr: &mut Vec<String>) {
+    // don't remove empty ones: vecstr.retain(|x| !x.trim().is_empty());
+    // keep '' so we can set the alias to null, e.g. in room_create()
+    for el in vecstr {
+        el.retain(|c| !c.is_whitespace());
+        if el.starts_with('!') {
+            warn!("This room alias {:?} starts with an exclamation mark. ! are used for rooms ids, not aliases. This might cause problems later.", el);
+            continue;
+        }
+        if el.starts_with('#') {
+            el.remove(0);
+        }
+        if el.contains(':') {
+            match el.find(':') {
+                None => (),
+                Some(i) => el.truncate(i),
             }
         }
     }
@@ -715,130 +814,156 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
     print_rooms(client, Some(matrix_sdk::RoomType::Left), output)
 }
 
-/// Create rooms, one for each alias name in the list.
+/// Create rooms, either noemal room or DM room:
+/// For normal room, create one room for each alias name in the list.
+/// For DM room, create one DM room for each user name in the list.
 /// Alias name can be empty, i.e. ''.
 /// If and when available set the room name from the name list.
 /// If and when available set the topic name from the topic list.
 /// As output it lists/prints the newly generated room ids and and the corresponding room aliases.
 pub(crate) async fn room_create(
     client: &Client,
+    is_dm: bool,             //is DM room
+    users: &[String],        // users, only useful for DM rooms
     room_aliases: &[String], // list of simple alias names like 'SomeAlias', not full aliases
-    room_names: &[String],   // list of room names, optional
+    names: &[String],        // list of room names, optional
     room_topics: &[String],  // list of room topics, optional
     output: Output,          // how to format output
 ) -> Result<(), Error> {
     debug!("Creating room(s)");
-    let mut err_count = 0u32;
-    for (i, a) in room_aliases.iter().enumerate() {
-        // a...alias
+    debug!(
+        "Creating room(s): dm {:?}, u {:?}, a {:?}, n {:?}, t {:?}",
+        is_dm, users, room_aliases, names, room_topics
+    );
+    // num...the number of rooms we are going to create
+    let num = if is_dm {
+        users.len()
+    } else {
+        room_aliases.len()
+    };
+    let mut users2 = Vec::new();
+    let mut aliases2 = room_aliases.to_owned();
+    let mut names2 = names.to_owned();
+    let mut topics2 = room_topics.to_owned();
+    if is_dm {
+        aliases2.resize(num, "".to_string());
+        users2.extend_from_slice(users);
+    } else {
+        users2.resize(num, "".to_string());
+    }
+    convert_to_short_canonical_alias_ids(&mut aliases2);
+    names2.resize(num, "".to_string());
+    topics2.resize(num, "".to_string());
+    // all 4 vectors are now at least 'num' long; '' represents None
+    let mut i = 0usize;
+    let mut err_count = 0usize;
+    debug!(
+        "Creating room(s): dm {:?}, u {:?}, a {:?}, n {:?}, t {:?}, num {}",
+        is_dm, users2, aliases2, names2, topics2, num
+    );
+    while i < num {
         debug!(
-            "In position {} we have alias name {}, room name {:?}, room topic {:?}.",
-            i,
-            a,
-            room_names.get(i),
-            room_topics.get(i)
+            "In position {} we have user {:?}, alias name {:?}, room name {:?}, room topic {:?}.",
+            i, users2[i], aliases2[i], names2[i], topics2[i]
         );
-        let aopt = if a.is_empty() { None } else { Some(a.as_str()) };
-        let nopt = match room_names.get(i) {
-            Some(inner) => {
-                if inner.is_empty() {
-                    None
-                } else {
-                    Some(inner.as_str())
-                }
-            }
-            None => None,
-        };
-        let topt = match room_topics.get(i) {
-            Some(inner) => {
-                if inner.is_empty() {
-                    None
-                } else {
-                    Some(inner.as_str())
-                }
-            }
-            None => None,
-        };
-
-        // In Python for a DM room we do this:
-        // if gs.pa.plain:
-        //     encrypt = False
-        //     initial_state = ()
-        // else:
-        //     encrypt = True
-        //     initial_state = [EnableEncryptionBuilder().as_dict()]
-        // gs.log.debug(
-        //     f'Creating DM room with user "{user}", '
-        //     f'room alias "{alias}", '
-        //     f'name "{name}", topic "{topic}" and '
-        //     f'encrypted "{encrypt}".'
-        // )
-        // # nio's room_create does NOT accept "#foo:example.com"
-        // resp = await client.room_create(
-        //     alias=alias,  # desired canonical alias local part, e.g. foo
-        //     visibility=RoomVisibility.private,
-        //     is_direct=True,
-        //     preset=RoomPreset.private_chat,
-        //     invite={user},  # invite the user to the DM
-        //     name=name,  # room name
-        //     topic=topic,  # room topic
-        //     initial_state=initial_state,
-        // )
-
-        // In Python for a normal room we do this:
-        // if gs.pa.plain:
-        //     encrypt = False
-        //     initial_state = ()
-        // else:
-        //     encrypt = True
-        //     initial_state = [EnableEncryptionBuilder().as_dict()]
-        // gs.log.debug(
-        //     f'Creating room with room alias "{alias}", '
-        //     f'name "{name}", topic "{topic}" and '
-        //     f'encrypted "{encrypt}".'
-        // )
-        // # nio's room_create does NOT accept "#foo:example.com"
-        // resp = await client.room_create(
-        //     alias=alias,  # desired canonical alias local part, e.g. foo
-        //     name=name,  # room name
-        //     topic=topic,  # room topic
-        //     initial_state=initial_state,
-        // )
-
-        // if let Some(room) = client.get_joined_room(&room_id) { room.enable_encryption().await? }
 
         // see: https://docs.rs/ruma/0.7.4/ruma/api/client/room/create_room/v3/struct.Request.html
+        // pub struct Request<'a> {
+        //     pub creation_content: Option<Raw<CreationContent>>,
+        //     pub initial_state: &'a [Raw<AnyInitialStateEvent>],
+        //     pub invite: &'a [OwnedUserId],
+        //     pub invite_3pid: &'a [Invite3pid<'a>],
+        //     pub is_direct: bool,
+        //     pub name: Option<&'a str>,
+        //     pub power_level_content_override: Option<Raw<RoomPowerLevelsEventContent>>,
+        //     pub preset: Option<RoomPreset>,
+        //     pub room_alias_name: Option<&'a str>,
+        //     pub room_version: Option<&'a RoomVersionId>,
+        //     pub topic: Option<&'a str>,
+        //     pub visibility: Visibility,  }
         let mut request = CreateRoomRequest::new();
-        request.name = nopt;
-        request.room_alias_name = aopt;
-        request.topic = topt;
+        request.name = to_opt(&names2[i]);
+        request.room_alias_name = to_opt(&aliases2[i]);
+        request.topic = to_opt(&topics2[i]);
+        request.is_direct = is_dm;
+        let usr: OwnedUserId;
+        // defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
+        let vis = Visibility::Private;
+        let mut invites = vec![];
+        if is_dm {
+            usr = match UserId::parse(<std::string::String as AsRef<str>>::as_ref(&users2[i])) {
+                Ok(u) => u,
+                Err(ref e) => {
+                    err_count += 1;
+                    i += 1;
+                    error!("Error: create_room failed, because user for DM is not valid, reported error {:?}.", e);
+                    continue;
+                }
+            };
+            invites.push(usr);
+            request.invite = &invites;
+            request.visibility = vis.clone();
+            request.preset = Some(RoomPreset::PrivateChat);
+        }
         match client.create_room(request).await {
             Ok(response) => {
                 debug!("create_room succeeded, result is {:?}.", response);
                 if output.is_text() {
                     println!(
-                        "{}    {}    {}    {}",
-                        response.room_id,
-                        aopt.unwrap_or("None"),
-                        nopt.unwrap_or("None"),
-                        topt.unwrap_or("None")
+                        "{}    {}    {}    {}    {}    {}    {}",
+                        response.room_id, aliases2[i], names2[i], topics2[i], users2[i], is_dm, vis
                     );
                 } else {
                     // all json formats
                     // trait Serialize not implemented for Result
                     let mut jstr: String = "{".to_owned();
                     jstr.push_str(&format!("\"room_id\": \"{}\"", response.room_id));
-                    if let Some(alias) = aopt {
-                        jstr.push_str(&format!(", \"alias\": \"{}\"", alias))
-                    }
-                    if let Some(name) = nopt {
-                        jstr.push_str(&format!(", \"name\": \"{}\"", name))
-                    }
-                    if let Some(topic) = topt {
-                        jstr.push_str(&format!(", \"topic\": \"{}\"", topic))
-                    }
+                    jstr.push_str(&format!(", \"alias\": {}", to_nul(&aliases2[i])));
+                    jstr.push_str(&format!(", \"name\": {}", to_nul(&names2[i])));
+                    jstr.push_str(&format!(", \"topic\": {}", to_nul(&topics2[i])));
+                    jstr.push_str(&format!(", \"invited\": {}", to_nul(&users2[i])));
+                    jstr.push_str(&format!(", \"direct\": {}", is_dm));
+                    jstr.push_str(&format!(", \"visibility\": \"{}\"", vis));
                     jstr.push('}');
                     println!("{}", jstr);
+                }
+
+                // without sync client will not know that it is in joined rooms list and it will fail, we must sync!
+                client.sync_once(SyncSettings::new()).await?; // ToDo use std sync_once fn
+
+                // Todo: It would be faster and more problematic to enable encryption by using:
+                //     //     initial_state = [EnableEncryptionBuilder().as_dict()]
+                // as done in Python.
+                // Todo: implement --plain
+                // Todo: implement --room-enable-encryption
+                match client.get_joined_room(&response.room_id) {
+                    Some(room) => {
+                        match room.enable_encryption().await {
+                            Ok(_) => {
+                                debug!(
+                                    "enable_encryption succeeded for room {:?}.",
+                                    response.room_id
+                                );
+                            }
+                            Err(ref e) => {
+                                err_count += 1;
+                                error!("enable_encryption failed for room {:?} with reported error {:?}.", response.room_id, e);
+                            }
+                        }
+                    }
+                    None => {
+                        err_count += 1;
+                        error!(
+                            concat!(
+                                "get_joined_room failed for room {:?}, ",
+                                "room created but it could not be encrypted right now. ",
+                                "This is usually an event-not-having arrived-yet issue. ",
+                                "You can fix this by calling --room-enable-encryption '{}' later ",
+                                "in a separate command."
+                            ),
+                            response.room_id, response.room_id
+                        );
+                    }
                 }
             }
             Err(ref e) => {
@@ -846,6 +971,7 @@ pub(crate) async fn room_create(
                 error!("Error: create_room failed, reported error {:?}.", e);
             }
         }
+        i += 1;
     }
     if err_count != 0 {
         Err(Error::CreateRoomFailed)

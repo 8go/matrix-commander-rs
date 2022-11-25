@@ -428,7 +428,7 @@ Options:
           display name, not the room display name. The argument
           '--room-resolve-alias' can also be used to go the other direction,
           i.e. to find the room id given a room alias
-      --room-create [<LOCAL ALIAS>...]
+      --room-create [<LOCAL_ALIAS>...]
           Create one or multiple rooms. One or multiple room aliases can be
           specified. For each alias specified a room will be created. For each
           created room one line with room id, alias, name and topic will be
@@ -442,6 +442,15 @@ Options:
           values that are not set and hence have default values are not shown
           in the JSON output. E.g. if no topic is given, then there will be no
           topic field in the JSON output. Room aliases have to be unique
+      --room-dm-create [<USER>...]
+          Create one or multiple direct messaging (DM) rooms for given users.
+          One or multiple users can be specified. For each user specified a DM
+          room will be created. For each created DM room one line with room id,
+          alias, name and topic will be printed to stdout. The given user(s)
+          will receive an invitation to join the newly created room. The user
+          must be permitted to create rooms. Combine --room-dm-create with
+          --alias, --name and --topic to add aliases, names and topics to the
+          room(s) to be created. Room aliases in --alias have to be unique
       --room-leave [<ROOM>...]
           Leave this room or these rooms. One or multiple room aliases can be
           specified. The room (or multiple ones) provided in the arguments will
@@ -502,6 +511,14 @@ Options:
           servers that know about the alias(es). The argument '--get-room-info'
           can be used to go the other direction, i.e. to find the room aliases
           given a room id
+      --alias [<ALIAS>...]
+          Provide one or more aliases. --alias is currently used in combination
+          with --room-dm-create. It is ignored otherwise. Canonical short alias
+          look like 'SomeRoomAlias'. Short aliases look like '#SomeRoomAlias'.
+          And full aliases look like '#SomeRoomAlias:matrix.example.com'. If
+          you are not interested in an alias, provide an empty string like ''.
+          Remember that aliases must be unique. For --room-dm-create you must
+          provide canonical short alias(es)
       --name [<NAME>...]
           Specify one or multiple names. This option is only meaningful in
           combination with option --room-create. This option --name specifies

@@ -72,12 +72,13 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_room_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
-    get_display_name, get_profile, get_room_info, invited_rooms, joined_members, joined_rooms,
-    left_rooms, login, logout, logout_local, message, replace_star_with_rooms, restore_credentials,
-    restore_login, room_ban, room_create, room_forget, room_get_state, room_get_visibility,
-    room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
-    set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
+    convert_to_full_alias_ids, convert_to_full_room_ids, convert_to_full_user_ids,
+    delete_devices_pre, devices, file, get_avatar, get_avatar_url, get_display_name, get_profile,
+    get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms, login, logout,
+    logout_local, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
+    room_create, room_forget, room_get_state, room_get_visibility, room_invite, room_join,
+    room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url,
+    set_display_name, unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -1191,8 +1192,28 @@ pub struct Args {
     /// in the JSON output. E.g. if no topic is given, then
     /// there will be no topic field in the JSON output.
     /// Room aliases have to be unique.
-    #[arg(long, num_args(0..), value_name = "LOCAL ALIAS", )]
+    #[arg(long, num_args(0..), value_name = "LOCAL_ALIAS", )]
     room_create: Vec<String>,
+
+    /// Create one or multiple direct messaging (DM) rooms
+    /// for given users. One or multiple
+    /// users can be specified. For each user specified a
+    /// DM room will be created. For each created DM room one line
+    /// with room id, alias, name and topic will be printed
+    /// to stdout. The given user(s) will receive an invitation
+    /// to join the newly created room.
+    /// The user must be permitted
+    /// to create rooms. Combine --room-dm-create with --alias,
+    /// --name and
+    /// --topic to add aliases, names and topics to the room(s) to be
+    /// created.
+    // If the output is in JSON format, then the values that
+    // are not set and hence have default values are not shown
+    // in the JSON output. E.g. if no topic is given, then
+    // there will be no topic field in the JSON output.
+    /// Room aliases in --alias have to be unique.
+    #[arg(long, num_args(0..), value_name = "USER", )]
+    room_dm_create: Vec<String>,
 
     /// Leave this room or these rooms. One or multiple room
     /// aliases can be specified. The room (or multiple ones)
@@ -1287,6 +1308,17 @@ pub struct Args {
     /// given a room id.
     #[arg(long, num_args(0..), value_name = "ALIAS", )]
     room_resolve_alias: Vec<String>,
+
+    /// Provide one or more aliases. --alias is currently used in
+    /// combination with --room-dm-create. It is ignored otherwise.
+    /// Canonical short alias look like 'SomeRoomAlias'.
+    /// Short aliases look like '#SomeRoomAlias'. And full aliases
+    /// look like '#SomeRoomAlias:matrix.example.com'.
+    /// If you are not interested in an alias, provide an empty
+    /// string like ''. Remember that aliases must be unique. For
+    /// --room-dm-create you must provide canonical short alias(es).
+    #[arg(long, num_args(0..), value_name = "ALIAS", )]
+    alias: Vec<String>,
 
     /// Specify one or multiple names. This option is only
     /// meaningful in combination with option --room-create.
@@ -1551,6 +1583,7 @@ impl Args {
             get_room_info: Vec::new(),
             file_name: Vec::new(),
             room_create: Vec::new(),
+            room_dm_create: Vec::new(),
             room_leave: Vec::new(),
             room_forget: Vec::new(),
             room_invite: Vec::new(),
@@ -1559,6 +1592,7 @@ impl Args {
             room_unban: Vec::new(),
             room_kick: Vec::new(),
             room_resolve_alias: Vec::new(),
+            alias: Vec::new(),
             name: Vec::new(),
             topic: Vec::new(),
             rooms: false,
@@ -2431,7 +2465,31 @@ pub(crate) async fn cli_left_rooms(client: &Client, ap: &Args) -> Result<(), Err
 /// Handle the --room-create CLI argument
 pub(crate) async fn cli_room_create(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-create chosen.");
-    crate::room_create(client, &ap.room_create, &ap.name, &ap.topic, ap.output).await
+    crate::room_create(
+        client,
+        false,
+        &[],
+        &ap.room_create,
+        &ap.name,
+        &ap.topic,
+        ap.output,
+    )
+    .await
+}
+
+/// Handle the --room-create CLI argument
+pub(crate) async fn cli_room_dm_create(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-dm-create chosen.");
+    crate::room_create(
+        client,
+        true,
+        &ap.room_dm_create,
+        &ap.alias,
+        &ap.name,
+        &ap.topic,
+        ap.output,
+    )
+    .await
 }
 
 /// Handle the --room-leave CLI argument
@@ -2665,6 +2723,7 @@ async fn main() -> Result<(), Error> {
     debug!("get-room-info option is {:?}", ap.get_room_info);
     debug!("file-name option is {:?}", ap.file_name);
     debug!("room-create option is {:?}", ap.room_create);
+    debug!("room-dm-create option is {:?}", ap.room_dm_create);
     debug!("room-leave option is {:?}", ap.room_leave);
     debug!("room-forget option is {:?}", ap.room_forget);
     debug!("room-invite option is {:?}", ap.room_invite);
@@ -2673,6 +2732,7 @@ async fn main() -> Result<(), Error> {
     debug!("room-unban option is {:?}", ap.room_unban);
     debug!("room-kick option is {:?}", ap.room_kick);
     debug!("room-resolve-alias option is {:?}", ap.room_resolve_alias);
+    debug!("alias option is {:?}", ap.alias);
     debug!("name option is {:?}", ap.name);
     debug!("topic-create option is {:?}", ap.topic);
     debug!("rooms option is {:?}", ap.rooms);
@@ -2721,6 +2781,7 @@ async fn main() -> Result<(), Error> {
         || ap.get_display_name
         || ap.get_profile
         || !ap.room_create.is_empty()
+        || !ap.room_dm_create.is_empty()
         || !ap.room_leave.is_empty()
         || !ap.room_forget.is_empty()
         || !ap.room_invite.is_empty()
@@ -2913,6 +2974,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_get_state.retain(|x| !x.trim().is_empty());
+
         replace_minus_with_default_room(
             &mut ap.joined_members,
             &ap.creds.as_ref().unwrap().room_default,
@@ -2925,6 +2987,18 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.joined_members.retain(|x| !x.trim().is_empty());
+
+        convert_to_full_user_ids(
+            &mut ap.room_dm_create,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        );
+        ap.room_dm_create.retain(|x| !x.trim().is_empty());
+
+        convert_to_full_alias_ids(
+            &mut ap.alias,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        );
+        ap.alias.retain(|x| !x.trim().is_empty());
 
         if ap.tail > 0 {
             // overwrite --listen if user has chosen both
@@ -3052,6 +3126,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_room_create(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_create successful"),
                 Err(ref e) => error!("Error: crate::room_create reported {}", e),
+            };
+        };
+
+        if !ap.room_dm_create.is_empty() {
+            match crate::cli_room_dm_create(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_dm_create successful"),
+                Err(ref e) => error!("Error: crate::room_dm_create reported {}", e),
             };
         };
 
