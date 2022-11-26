@@ -73,7 +73,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get -y update
-          apt-get -y install cmake pkg-config libfontconfig-dev libgtk-3-dev libssl-dev libolm-dev
+          apt-get -y install cmake pkg-config libfontconfig-dev libgtk-3-dev libssl-dev libolm-dev rename
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -178,19 +178,25 @@ jobs:
           echo "tag name: $TAG_NAME"
           echo "release tag: $RELEASE_TAG_NAME"
           echo "env release tag: " ${{ env.RELEASE_TAG_NAME }}
-          echo "rename not installed, will stop if using rename"
-          cd output
-          ls
-          mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip 
-          mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip.sha256sum 
-          mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip 
-          mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip.sha256sum 
-          mv matrix-commander-rs_null_x86_64-apple-darwin.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip
-          mv matrix-commander-rs_null_x86_64-apple-darwin.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip.sha256sum 
-          cd ..
+          echo "if rename not installed, will stop action if using rename"
+          echo $(which rename)
+          echo $(rename -h)
+          echo $(rename -v)
+          echo $(rename -V)
+          rename 's/_null_/_${{ env.RELEASE_TAG_NAME }}_/' output/*
+          #cd output
+          #ls
+          #mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip 
+          #mv matrix-commander-rs_null_x86_64-pc-windows-gnu.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip.sha256sum 
+          #mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip 
+          #mv matrix-commander-rs_null_x86_64-unknown-linux-musl.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip.sha256sum 
+          #mv matrix-commander-rs_null_x86_64-apple-darwin.zip matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip
+          #mv matrix-commander-rs_null_x86_64-apple-darwin.zip.sha256sum matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip.sha256sum 
+          #cd ..
           ls * output/*
 
       # https://github.com/softprops/action-gh-release
+      # do wildcards like * work in files?
       - name: Release
         uses: "softprops/action-gh-release@v1"
         with:
@@ -200,7 +206,6 @@ jobs:
           files: |
             README.md
             LICENSE
-            help.txt
             matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
             output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-pc-windows-gnu.zip
@@ -209,6 +214,7 @@ jobs:
             output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-unknown-linux-musl.zip.sha256sum 
             output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip
             output/matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_x86_64-apple-darwin.zip.sha256sum 
+            hel*.txt
 
 # ${{ steps.compile.outputs.BUILT_ARCHIVE }}
 # ${{ steps.compile.outputs.BUILT_CHECKSUM }}
