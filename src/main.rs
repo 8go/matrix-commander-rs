@@ -78,7 +78,7 @@ use crate::mclient::{
     logout_local, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
     room_create, room_forget, room_get_state, room_get_visibility, room_invite, room_join,
     room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url,
-    set_display_name, unset_avatar_url, verify,
+    set_display_name, unset_avatar_url, verify, room_enable_encryption, 
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -168,6 +168,9 @@ pub enum Error {
 
     #[error("Resolve Room Alias Failed")]
     ResolveRoomAliasFailed,
+
+    #[error("Enable Encryption Failed")]
+    EnableEncryptionFailed,
 
     #[error("Room Get Visibility Failed")]
     RoomGetVisibilityFailed,
@@ -1309,6 +1312,15 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ALIAS", )]
     room_resolve_alias: Vec<String>,
 
+    /// Provide one or more room ids. For each room given
+    /// encryption will be enabled. You must be member of the
+    /// room in order to be able to enable encryption. Use
+    /// shortcut '-' to enable encryption in the pre-configured
+    /// default room. Enabling an already enabled room will
+    /// do nothing and cause no error.
+    #[arg(long, num_args(0..), value_name = "ROOM", )]
+    room_enable_encryption: Vec<String>,
+
     /// Provide one or more aliases. --alias is currently used in
     /// combination with --room-dm-create. It is ignored otherwise.
     /// Canonical short alias look like 'SomeRoomAlias'.
@@ -1592,6 +1604,7 @@ impl Args {
             room_unban: Vec::new(),
             room_kick: Vec::new(),
             room_resolve_alias: Vec::new(),
+            room_enable_encryption: Vec::new(),
             alias: Vec::new(),
             name: Vec::new(),
             topic: Vec::new(),
@@ -2540,6 +2553,12 @@ pub(crate) async fn cli_room_resolve_alias(client: &Client, ap: &Args) -> Result
     crate::room_resolve_alias(client, &ap.room_resolve_alias, ap.output).await
 }
 
+/// Handle the --room-enable-encryption CLI argument
+pub(crate) async fn cli_room_enable_encryption(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Room-enable-encryption chosen.");
+    crate::room_enable_encryption(client, &ap.room_enable_encryption, ap.output).await
+}
+
 /// Handle the --get-avatar CLI argument
 pub(crate) async fn cli_get_avatar(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Get-avatar chosen.");
@@ -2732,6 +2751,7 @@ async fn main() -> Result<(), Error> {
     debug!("room-unban option is {:?}", ap.room_unban);
     debug!("room-kick option is {:?}", ap.room_kick);
     debug!("room-resolve-alias option is {:?}", ap.room_resolve_alias);
+    debug!("room-enable-encryption option is {:?}", ap.room_enable_encryption);
     debug!("alias option is {:?}", ap.alias);
     debug!("name option is {:?}", ap.name);
     debug!("topic-create option is {:?}", ap.topic);
@@ -2764,6 +2784,7 @@ async fn main() -> Result<(), Error> {
     };
 
     if !(!ap.login.is_none()
+        // get actions
         || ap.whoami
         || !ap.verify.is_none()
         || ap.devices
@@ -2780,6 +2801,7 @@ async fn main() -> Result<(), Error> {
         || ap.get_avatar_url
         || ap.get_display_name
         || ap.get_profile
+        // set actions
         || !ap.room_create.is_empty()
         || !ap.room_dm_create.is_empty()
         || !ap.room_leave.is_empty()
@@ -2794,6 +2816,8 @@ async fn main() -> Result<(), Error> {
         || !ap.set_avatar_url.is_none()
         || ap.unset_avatar_url
         || !ap.set_display_name.is_none()
+        || !ap.room_enable_encryption.is_empty()
+        // send and listen actions
         || !ap.message.is_empty()
         || !ap.file.is_empty()
         || ap.listen.is_once()
@@ -2883,10 +2907,24 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_forget.retain(|x| !x.trim().is_empty());
+        
         convert_to_full_room_aliases(
             &mut ap.room_resolve_alias,
             ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
         ); // convert short aliases to full aliases
+
+        replace_minus_with_default_room(
+            &mut ap.room_enable_encryption,
+            &ap.creds.as_ref().unwrap().room_default,
+        ); // convert '-' to default room
+        convert_to_full_room_ids(
+            &client,
+            &mut ap.room_enable_encryption,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short ids, short aliases and aliases to full room ids
+        ap.room_enable_encryption.retain(|x| !x.trim().is_empty());
+        
         replace_minus_with_default_room(
             &mut ap.get_room_info,
             &ap.creds.as_ref().unwrap().room_default,
@@ -2898,7 +2936,8 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.get_room_info.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
+
+                replace_minus_with_default_room(
             &mut ap.room_invite,
             &ap.creds.as_ref().unwrap().room_default,
         ); // convert '-' to default room
@@ -3221,6 +3260,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_set_display_name(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_display_name successful"),
                 Err(ref e) => error!("Error: crate::set_display_name reported {}", e),
+            };
+        };
+
+        if !ap.room_enable_encryption.is_empty() {
+            match crate::cli_room_enable_encryption(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::room_enable_encryption successful"),
+                Err(ref e) => error!("Error: crate::room_enable_encryption reported {}", e),
             };
         };
 

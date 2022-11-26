@@ -420,6 +420,12 @@ Options:
           servers that know about the alias(es). The argument '--get-room-info'
           can be used to go the other direction, i.e. to find the room aliases
           given a room id
+      --room-enable-encryption [<ROOM>...]
+          Provide one or more room ids. For each room given encryption will be
+          enabled. You must be member of the room in order to be able to enable
+          encryption. Use shortcut '-' to enable encryption in the
+          pre-configured default room. Enabling an already enabled room will do
+          nothing and cause no error
       --alias [<ALIAS>...]
           Provide one or more aliases. --alias is currently used in combination
           with --room-dm-create. It is ignored otherwise. Canonical short alias

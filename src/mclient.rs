@@ -40,6 +40,7 @@ use matrix_sdk::{
         api::client::room::create_room::v3::RoomPreset,
         api::client::room::Visibility,
         api::client::uiaa,
+        events::room::encryption::RoomEncryptionEventContent,
         // OwnedRoomOrAliasId, OwnedServerName,
         // device_id,
         events::room::member::SyncRoomMemberEvent,
@@ -60,8 +61,12 @@ use matrix_sdk::{
         events::room::name::SyncRoomNameEvent,
         events::room::power_levels::SyncRoomPowerLevelsEvent,
         events::room::topic::SyncRoomTopicEvent,
+        events::AnyInitialStateEvent,
+        events::EmptyStateKey,
+        events::InitialStateEvent,
         // events::OriginalMessageLikeEvent,
         serde::Raw,
+        EventEncryptionAlgorithm,
         // MxcUri,
         // DeviceId,
         // room_id, session_id, user_id,
@@ -131,6 +136,10 @@ pub(crate) async fn convert_to_full_room_ids(
     vecstr.retain(|x| !x.trim().is_empty());
     for el in vecstr {
         el.retain(|c| !c.is_whitespace());
+        if el.starts_with('@') {
+            error!("This room alias or id {:?} starts with an at sign. @ are used for user ids, not room id or room aliases. This will fail later.", el);
+            continue;
+        }
         if !el.starts_with('#') && !el.starts_with('!') {
             el.insert(0, '#');
         }
@@ -881,7 +890,22 @@ pub(crate) async fn room_create(
         //     pub room_version: Option<&'a RoomVersionId>,
         //     pub topic: Option<&'a str>,
         //     pub visibility: Visibility,  }
+        let content = RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
+        let initstateev: InitialStateEvent<RoomEncryptionEventContent>;
+        initstateev = InitialStateEvent {
+            content: content,
+            state_key: EmptyStateKey,
+        };
+        let rawinitstateev = Raw::new(&initstateev)?;
+        // let anyinitstateev: AnyInitialStateEvent =
+        //     matrix_sdk::ruma::events::AnyInitialStateEvent::RoomEncryption(initstateev);
+        // todo: better alternative? let anyinitstateev2: AnyInitialStateEvent = AnyInitialStateEvent::from(initstateev);
+
+        let rawanyinitstateev: Raw<AnyInitialStateEvent> = rawinitstateev.cast();
         let mut request = CreateRoomRequest::new();
+        let initstatevec = vec![rawanyinitstateev];
+        request.initial_state = &initstatevec;
+
         request.name = to_opt(&names2[i]);
         request.room_alias_name = to_opt(&aliases2[i]);
         request.topic = to_opt(&topics2[i]);
@@ -927,44 +951,7 @@ pub(crate) async fn room_create(
                     jstr.push('}');
                     println!("{}", jstr);
                 }
-
-                // without sync client will not know that it is in joined rooms list and it will fail, we must sync!
-                client.sync_once(SyncSettings::new()).await?; // ToDo use std sync_once fn
-
-                // Todo: It would be faster and more problematic to enable encryption by using:
-                //     //     initial_state = [EnableEncryptionBuilder().as_dict()]
-                // as done in Python.
-                // Todo: implement --plain
-                // Todo: implement --room-enable-encryption
-                match client.get_joined_room(&response.room_id) {
-                    Some(room) => {
-                        match room.enable_encryption().await {
-                            Ok(_) => {
-                                debug!(
-                                    "enable_encryption succeeded for room {:?}.",
-                                    response.room_id
-                                );
-                            }
-                            Err(ref e) => {
-                                err_count += 1;
-                                error!("enable_encryption failed for room {:?} with reported error {:?}.", response.room_id, e);
-                            }
-                        }
-                    }
-                    None => {
-                        err_count += 1;
-                        error!(
-                            concat!(
-                                "get_joined_room failed for room {:?}, ",
-                                "room created but it could not be encrypted right now. ",
-                                "This is usually an event-not-having arrived-yet issue. ",
-                                "You can fix this by calling --room-enable-encryption '{}' later ",
-                                "in a separate command."
-                            ),
-                            response.room_id, response.room_id
-                        );
-                    }
-                }
+                // room_enable_encryption(): no longer needed, already done by setting request.initial_state
             }
             Err(ref e) => {
                 err_count += 1;
@@ -1769,6 +1756,67 @@ pub(crate) async fn room_resolve_alias(
     }
     if err_count != 0 {
         Err(Error::ResolveRoomAliasFailed)
+    } else {
+        Ok(())
+    }
+}
+
+/// Enable encryption for given room(s).
+pub(crate) async fn room_enable_encryption(
+    client: &Client,
+    room_ids: &[String], // list of room ids
+    _output: Output,     // how to format output
+) -> Result<(), Error> {
+    debug!("Enable encryption for room(s): rooms={:?}", room_ids);
+    let mut err_count = 0u32;
+    // convert Vec of strings into a slice of array of OwnedRoomIds
+    let mut roomids: Vec<OwnedRoomId> = Vec::new();
+    for room_id in room_ids {
+        roomids.push(
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid room id {:?}. Error reported is {:?}.",
+                        room_id, e
+                    );
+                    err_count += 1;
+                    continue;
+                }
+            },
+        );
+    }
+    if roomids.is_empty() {
+        error!("No valid rooms. Cannot enable encryption anywhere. Giving up.");
+        return Err(Error::EnableEncryptionFailed);
+    }
+    // without sync() client will not know that it is in joined rooms list and it will fail, we must sync!
+    // client.sync_once(SyncSettings::new()).await?; we should have sync-ed before.
+    for (i, id) in roomids.iter().enumerate() {
+        debug!("In position {} we have room id {:?}.", i, id,);
+        match client.get_joined_room(&id) {
+            Some(room) => match room.enable_encryption().await {
+                Ok(_) => {
+                    debug!("enable_encryption succeeded for room {:?}.", id);
+                }
+                Err(ref e) => {
+                    err_count += 1;
+                    error!(
+                        "enable_encryption failed for room {:?} with reported error {:?}.",
+                        id, e
+                    );
+                }
+            },
+            None => {
+                err_count += 1;
+                error!(concat!(
+                    "get_joined_room failed for room {:?}, ",
+                    "Are you member of this room? If you are member of this room try syncing first."), id);
+            }
+        }
+    }
+    if err_count != 0 {
+        Err(Error::EnableEncryptionFailed)
     } else {
         Ok(())
     }
