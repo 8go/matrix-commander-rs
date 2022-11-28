@@ -40,6 +40,7 @@
 use atty::Stream;
 use clap::{ColorChoice, Parser, ValueEnum};
 use directories::ProjectDirs;
+// use mime::Mime;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::{self, Debug};
@@ -75,10 +76,11 @@ use crate::mclient::{
     convert_to_full_alias_ids, convert_to_full_room_ids, convert_to_full_user_ids,
     delete_devices_pre, devices, file, get_avatar, get_avatar_url, get_display_name, get_profile,
     get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms, login, logout,
-    logout_local, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
-    room_create, room_forget, room_get_state, room_get_visibility, room_invite, room_join,
-    room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url,
-    set_display_name, unset_avatar_url, verify, room_enable_encryption, 
+    logout_local, media_download, media_upload, message, replace_star_with_rooms,
+    restore_credentials, restore_login, room_ban, room_create, room_enable_encryption, room_forget,
+    room_get_state, room_get_visibility, room_invite, room_join, room_kick, room_leave,
+    room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url, set_display_name,
+    unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -210,6 +212,12 @@ pub enum Error {
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
+
+    #[error("Media Upload Failed")]
+    MediaUploadFailed,
+
+    #[error("Media Download Failed")]
+    MediaDownloadFailed,
 
     #[error("Invalid Client Connection")]
     InvalidClientConnection,
@@ -685,6 +693,15 @@ pub struct Args {
     #[arg(long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
     verbose: u8,
 
+    /// Disable encryption for a specific action. By default encryption is
+    /// turned on wherever possible. E.g. rooms created will be created
+    /// by default with encryption enabled. To turn encryption off for a
+    /// specific action use --plain. Currently --plain is supported by
+    /// --room-create and --room-dm-create. See also --room-enable-encryption
+    /// which sort of does the opossite for rooms.
+    #[arg(long, default_value_t = false)]
+    plain: bool,
+
     /// Path to a file containing credentials.
     /// At login (--login), information about homeserver, user, room
     /// id, etc. will be written to a credentials file. By
@@ -696,7 +713,7 @@ pub struct Args {
     /// file instead of the default one.
     // e.g. /home/user/.local/share/matrix-commander-rs/credentials.json
     #[arg(short, long,
-        value_name = "PATH TO FILE",
+        value_name = "PATH_TO_FILE",
         value_parser = clap::value_parser!(PathBuf),
         default_value_os_t = get_credentials_default_path(),
         )]
@@ -712,7 +729,7 @@ pub struct Args {
     /// for the same device. The store directory can be shared
     /// between multiple different devices and users.
     #[arg(short, long,
-        value_name = "PATH TO DIRECTORY",
+        value_name = "PATH_TO_DIRECTORY",
         // value_parser = clap::builder::ValueParser::path_buf(),
         value_parser = clap::value_parser!(PathBuf),
         default_value_os_t = get_sledstore_default_path(),
@@ -747,7 +764,7 @@ pub struct Args {
     /// on headless homeservers where there is no
     /// browser installed or accessible.
     #[arg(long, value_enum,
-        value_name = "LOGIN METHOD",
+        value_name = "LOGIN_METHOD",
         default_value_t = Login::default(), ignore_case = true, )]
     login: Login,
 
@@ -787,7 +804,7 @@ pub struct Args {
     /// In the terminal you should see a text message indicating success.
     /// You should now be verified across all devices and across all users.
     #[arg(long, value_enum,
-        value_name = "VERIFICATION METHOD",
+        value_name = "VERIFICATION_METHOD",
         default_value_t = Verify::default(), ignore_case = true, )]
     verify: Verify,
 
@@ -938,48 +955,33 @@ pub struct Args {
     #[arg(long)]
     code: bool,
 
-    // Optionally specify one or multiple rooms via room ids or
-    // room aliases. --room is used by various send actions and
-    // various listen actions.
-    // The default room is provided
-    // in the credentials file (specified at --login with --room-default).
-    // If a room (or multiple ones)
-    // is (or are) provided in the --room arguments, then it
-    // (or they) will be used
-    // instead of the one from the credentials file.
-    // The user must have access to the specified room
-    // in order to send messages there or listen on the room.
-    // Messages cannot
-    // be sent to arbitrary rooms. When specifying the
-    // room id some shells require the exclamation mark
-    // to be escaped with a backslash.
-    // As an alternative to specifying a room as destination,
-    // one can specify a user as a destination with the '--user'
-    // argument. See '--user' and the term 'DM (direct messaging)'
-    // for details. Specifying a room is always faster and more
-    // efficient than specifying a user. Not all listen operations
-    // allow setting a room. Read more under the --listen options
-    // and similar. Most actions also support room aliases instead of
-    // room ids. Some even short room aliases
-    /// Optionally specify one or multiple rooms by room ids.
-    /// '--room' is used by
+    /// Optionally specify one or multiple rooms via room ids or
+    /// room aliases. '--room' is used by
     /// various options like '--message', '--file', some
     /// variants of '--listen', '--delete-device', etc.
-    /// If no '--room' is
-    /// provided the default room from the credentials file will be
-    /// used.
-    /// If a room is provided in the '--room' argument, then it
-    /// will be used
+    /// The default room is provided
+    /// in the credentials file (specified at --login with --room-default).
+    /// If a room (or multiple ones)
+    /// is (or are) provided in the --room arguments, then it
+    /// (or they) will be used
     /// instead of the one from the credentials file.
     /// The user must have access to the specified room
-    /// in order to send messages to it or listen on the room.
+    /// in order to send messages there or listen on the room.
     /// Messages cannot
     /// be sent to arbitrary rooms. When specifying the
     /// room id some shells require the exclamation mark
     /// to be escaped with a backslash.
+    // As an alternative to specifying a room as destination,
+    // one can specify a user as a destination with the '--user'
+    // argument. See '--user' and the term 'DM (direct messaging)'
+    // for details. Specifying a room is always faster and more
+    // efficient than specifying a user.
     /// Not all listen operations
     /// allow setting a room. Read more under the --listen options
-    /// and similar.
+    /// and similar. Most actions also support room aliases or
+    /// local canonical short aliases instead of
+    /// room ids. Using a room id is
+    /// always faster than using a room alias.
     #[arg(short, long, num_args(0..), )]
     room: Vec<String>,
 
@@ -996,9 +998,10 @@ pub struct Args {
     /// E.g. if you pipe in a PNG file, you might want to specify additionally
     /// '--file-name image.png'. As such, the label 'image' will be given
     /// to the data and the MIME type 'png' will be attached to it.
+    /// Furthermore, '-' can only be used once.
     #[arg(short, long, num_args(0..), )]
     file: Vec<String>,
-
+    // Todo: change this Vec<String> to Vec<PathBuf> for --file
     /// There are 3 message types for '--message'.
     /// Text, Notice, and Emote. By default, if no
     /// command line options are specified, 'Text'
@@ -1034,7 +1037,7 @@ pub struct Args {
     /// synchronization will be skipped entirely before the 'send'
     /// which will improve performance.
     #[arg(long, value_enum,
-        value_name = "SYNC TYPE",
+        value_name = "SYNC_TYPE",
         default_value_t = Sync::default(), ignore_case = true, )]
     sync: Sync,
 
@@ -1067,7 +1070,7 @@ pub struct Args {
     /// and 'all' listen only to the room specified in the
     /// credentials file or the --room options.
     #[arg(short, long, value_enum,
-        value_name = "LISTEN TYPE",
+        value_name = "LISTEN_TYPE",
         default_value_t = Listen::default(), ignore_case = true, )]
     listen: Listen,
 
@@ -1129,7 +1132,7 @@ pub struct Args {
     // All other arguments like
     // '--get-room-info' will print no output.
     #[arg(short, long, value_enum,
-        value_name = "OUTPUT FORMAT",
+        value_name = "OUTPUT_FORMAT",
         default_value_t = Output::default(), ignore_case = true, )]
     output: Output,
 
@@ -1549,6 +1552,69 @@ pub struct Args {
     /// getting both display name and avatar MXC URI in a call.
     #[arg(long)]
     get_profile: bool,
+
+    /// Upload one or multiple files (e.g. PDF, DOC, MP4) to the
+    /// homeserver content repository.
+    /// If you want to feed a file for upload into "matrix-commander-rs"
+    /// via a pipe, via stdin, then specify the special
+    /// character '-' as stdin indicator.
+    /// See description of '--message' to see how the stdin indicator
+    /// '-' is handled. Use --mime to optionally specify the MIME type
+    /// of the file. If you give N arguments to --media-upload, you
+    /// can give N arguments to --mime. See --mime.
+    /// If you pipe a file into stdin, the MIME type cannot be guessed.
+    /// It is hence more recommended that you specify a MIME type via
+    /// '--mime' when using '-'.
+    /// Furthermore, '-' can only be used once.
+    /// Upon being stored in the homeserver's content repository, the
+    /// data is assigned a Matrix MXC URI. For each file uploaded
+    /// successfully, a
+    /// single line with the MXC URI will be printed.
+    // Use --plain to disable encryption for the upload.
+    #[arg(long, alias = "upload", value_name = "FILE", num_args(0..), )]
+    media_upload: Vec<PathBuf>,
+
+    /// Download one or multiple files from the homeserver content
+    /// repository. You must provide one or multiple Matrix
+    /// URIs (MXCs) which are strings like this
+    /// 'mxc://example.com/SomeStrangeUriKey'. If found they
+    /// will be downloaded, decrypted, and stored in local
+    /// files. If file names are specified with --file-name
+    /// the downloads will be saved with these file names. If
+    /// --file-name is not specified, then the file name
+    /// 'mxc-<mxc-id>' will be used. If a file name in
+    /// --file-name
+    /// contains the placeholder __mxc_id__, it will be
+    /// replaced with the mxc-id. If a file name is specified
+    /// as empty string in --file-name, then also the name
+    /// 'mxc-<mxc-id>' will be used.
+    // By default, the upload
+    // was encrypted so a decryption dictionary must be
+    // provided to decrypt the data. Specify one or multiple
+    // decryption keys with --key-dict. If --key-dict is not
+    // set, no decryption is attempted; and the data might
+    // be stored in encrypted fashion, or might be plain-text
+    // if the file was uploaded in plain text.
+    // ....if the --upload skipped encryption with --plain. See
+    // tests/test-upload.sh for an example.
+    /// Do not confuse --media-download with --download-media.
+    /// See --download-media.
+    #[arg(long, alias = "download", value_name = "MXC_URI", num_args(0..), )]
+    media_download: Vec<OwnedMxcUri>,
+
+    /// Specify the Mime type of certain input files.
+    /// Specify '' if the Mime type should be guessed
+    /// based on the filename. If input is from stdin
+    /// (i.e. '-' and piped into 'matrix-commander-rs')
+    /// then Mime type cannot be guessed. If not specified,
+    /// and no filename available for guessing it will
+    /// default to 'application/octet-stream'. Some example
+    /// mime types are: 'image/jpeg', 'image/png', 'image/gif',
+    /// 'text/plain', and 'application/pdf'. For a full
+    /// list see 'https://docs.rs/mime/latest/mime/#constants'.
+    // One cannot use Vec<Mime> as type because that prevents '' from being used.
+    #[arg(long, value_name = "MIME_TYPE", num_args(0..), )]
+    mime: Vec<String>,
 }
 
 impl Default for Args {
@@ -1567,6 +1633,7 @@ impl Args {
             debug: 0u8,
             log_level: LogLevel::None,
             verbose: 0u8,
+            plain: false,
             credentials: get_credentials_default_path(),
             store: get_sledstore_default_path(),
             login: Login::None,
@@ -1625,6 +1692,9 @@ impl Args {
             get_display_name: false,
             set_display_name: None,
             get_profile: false,
+            media_upload: Vec::new(),
+            media_download: Vec::new(),
+            mime: Vec::new(),
         }
     }
 }
@@ -2375,9 +2445,21 @@ pub(crate) async fn cli_file(client: &Client, ap: &Args) -> Result<(), Error> {
     file(
         client, &files, &ap.room, None, // label, use default filename
         None, // mime, guess it
-        &pb,  // lavel for stdin pipe
+        &pb,  // label for stdin pipe
     )
     .await // returning
+}
+
+/// Handle the --media-upload CLI argument
+pub(crate) async fn cli_media_upload(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Media upload chosen.");
+    media_upload(client, &ap.media_upload, &ap.mime, ap.output).await // returning
+}
+
+/// Handle the --media-download once CLI argument
+pub(crate) async fn cli_media_download(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Media download chosen.");
+    media_download(client, &ap.media_download, &ap.file_name, ap.output).await // returning
 }
 
 /// Handle the --listen once CLI argument
@@ -2481,6 +2563,7 @@ pub(crate) async fn cli_room_create(client: &Client, ap: &Args) -> Result<(), Er
     crate::room_create(
         client,
         false,
+        !ap.plain,
         &[],
         &ap.room_create,
         &ap.name,
@@ -2496,6 +2579,7 @@ pub(crate) async fn cli_room_dm_create(client: &Client, ap: &Args) -> Result<(),
     crate::room_create(
         client,
         true,
+        !ap.plain,
         &ap.room_dm_create,
         &ap.alias,
         &ap.name,
@@ -2713,9 +2797,9 @@ async fn main() -> Result<(), Error> {
     debug!("debug flag is {}", ap.debug);
     debug!("log-level option is {:?}", ap.log_level);
     debug!("verbose option is {}", ap.verbose);
+    debug!("plain flag is {}", ap.plain);
     debug!("credentials option is {:?}", ap.credentials);
     debug!("store option is {:?}", ap.store);
-    debug!("verbose option is {}", ap.verbose);
     debug!("login option is {:?}", ap.login);
     debug!("verify flag is {:?}", ap.verify);
     debug!("message option is {:?}", ap.message);
@@ -2751,7 +2835,10 @@ async fn main() -> Result<(), Error> {
     debug!("room-unban option is {:?}", ap.room_unban);
     debug!("room-kick option is {:?}", ap.room_kick);
     debug!("room-resolve-alias option is {:?}", ap.room_resolve_alias);
-    debug!("room-enable-encryption option is {:?}", ap.room_enable_encryption);
+    debug!(
+        "room-enable-encryption option is {:?}",
+        ap.room_enable_encryption
+    );
     debug!("alias option is {:?}", ap.alias);
     debug!("name option is {:?}", ap.name);
     debug!("topic-create option is {:?}", ap.topic);
@@ -2772,6 +2859,9 @@ async fn main() -> Result<(), Error> {
     debug!("get-display-name option is {:?}", ap.get_display_name);
     debug!("set-display-name option is {:?}", ap.set_display_name);
     debug!("get-profile option is {:?}", ap.get_profile);
+    debug!("media-upload option is {:?}", ap.media_upload);
+    debug!("media-download option is {:?}", ap.media_download);
+    debug!("mime option is {:?}", ap.mime);
 
     if ap.version {
         crate::version();
@@ -2801,6 +2891,7 @@ async fn main() -> Result<(), Error> {
         || ap.get_avatar_url
         || ap.get_display_name
         || ap.get_profile
+        || !ap.media_download.is_empty()
         // set actions
         || !ap.room_create.is_empty()
         || !ap.room_dm_create.is_empty()
@@ -2817,6 +2908,7 @@ async fn main() -> Result<(), Error> {
         || ap.unset_avatar_url
         || !ap.set_display_name.is_none()
         || !ap.room_enable_encryption.is_empty()
+        || !ap.media_upload.is_empty()
         // send and listen actions
         || !ap.message.is_empty()
         || !ap.file.is_empty()
@@ -2907,7 +2999,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_forget.retain(|x| !x.trim().is_empty());
-        
+
         convert_to_full_room_aliases(
             &mut ap.room_resolve_alias,
             ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
@@ -2924,7 +3016,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_enable_encryption.retain(|x| !x.trim().is_empty());
-        
+
         replace_minus_with_default_room(
             &mut ap.get_room_info,
             &ap.creds.as_ref().unwrap().room_default,
@@ -2937,7 +3029,7 @@ async fn main() -> Result<(), Error> {
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.get_room_info.retain(|x| !x.trim().is_empty());
 
-                replace_minus_with_default_room(
+        replace_minus_with_default_room(
             &mut ap.room_invite,
             &ap.creds.as_ref().unwrap().room_default,
         ); // convert '-' to default room
@@ -3159,6 +3251,13 @@ async fn main() -> Result<(), Error> {
             };
         };
 
+        if !ap.media_download.is_empty() {
+            match crate::cli_media_download(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::media_download successful"),
+                Err(ref e) => error!("Error: crate::media_download reported {}", e),
+            };
+        };
+
         // set actions
 
         if !ap.room_create.is_empty() {
@@ -3267,6 +3366,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_room_enable_encryption(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_enable_encryption successful"),
                 Err(ref e) => error!("Error: crate::room_enable_encryption reported {}", e),
+            };
+        };
+
+        if !ap.media_upload.is_empty() {
+            match crate::cli_media_upload(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::media_upload successful"),
+                Err(ref e) => error!("Error: crate::media_upload reported {}", e),
             };
         };
 

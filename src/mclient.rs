@@ -11,12 +11,13 @@
 //! It excludes receiving and listening (see listen.rs).
 
 use atty::Stream;
+// use json::stringify;
+use mime::Mime;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 // use std::env;
 use std::fs;
-// use std::fs::File;
-// use std::io::{self, Write};
+use std::fs::File;
 // use std::ops::Deref;
 // use std::path::Path;
 use std::path::PathBuf;
@@ -25,14 +26,13 @@ use tracing::{debug, error, info, warn};
 // use directories::ProjectDirs;
 // use serde::{Deserialize, Serialize};
 //use serde_json::Result;
-use mime::Mime;
 use url::Url;
 
 use matrix_sdk::{
     attachment::AttachmentConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
     instant::Duration,
-    media::MediaFormat,
+    media::{MediaFormat, MediaRequest},
     room,
     room::{Room, RoomMember},
     ruma::{
@@ -61,6 +61,7 @@ use matrix_sdk::{
         events::room::name::SyncRoomNameEvent,
         events::room::power_levels::SyncRoomPowerLevelsEvent,
         events::room::topic::SyncRoomTopicEvent,
+        events::room::MediaSource,
         events::AnyInitialStateEvent,
         events::EmptyStateKey,
         events::InitialStateEvent,
@@ -96,16 +97,6 @@ fn to_opt(s: &str) -> Option<&str> {
         None
     } else {
         Some(s)
-    }
-}
-
-/// Convert String to String with '' being converted to null and value being converted to quoted value "value"
-/// For printing string in JSON format
-fn to_nul(s: &str) -> String {
-    if s.is_empty() {
-        "null".to_owned()
-    } else {
-        "\"".to_owned() + s + "\""
     }
 }
 
@@ -486,7 +477,7 @@ pub(crate) async fn get_avatar_url(client: &Client, output: Output) -> Result<()
             "Avatar MXC URI obtained successfully. MXC_URI is {:?}",
             mxc_uri
         );
-        print_mxc_uri("avatar_mxc_uri", mxc_uri, output);
+        print_json(&json::object!(avatar_mxc_uri: mxc_uri.to_string()), output);
         Ok(())
     } else {
         Err(Error::GetAvatarUrlFailed)
@@ -519,7 +510,10 @@ pub(crate) async fn set_avatar(
             "Avatar file uploaded successfully. MXC_URI is {:?}",
             mxc_uri
         );
-        print_mxc_uri("avatar_mxc_uri", mxc_uri, output);
+        print_json(
+            &json::object!(filename: path.to_str(), avatar_mxc_uri: mxc_uri.to_string()),
+            output,
+        );
         Ok(())
     } else {
         Err(Error::SetAvatarFailed)
@@ -561,7 +555,7 @@ pub(crate) async fn get_display_name(client: &Client, output: Output) -> Result<
             "Display name obtained successfully. Display name is {:?}",
             name
         );
-        print_one_string("display_name", name, output);
+        print_json(&json::object!(display_name: name), output);
         Ok(())
     } else {
         Err(Error::GetDisplaynameFailed)
@@ -588,11 +582,8 @@ pub(crate) async fn get_profile(client: &Client, output: Output) -> Result<(), E
     debug!("Get profile from server");
     if let Ok(profile) = client.account().get_profile().await {
         debug!("Profile successfully. Profile {:?}", profile);
-        print_two_strings(
-            "display_name",
-            profile.displayname,
-            "avatar_url",
-            profile.avatar_url.map(|mxc| mxc.to_string()),
+        print_json(
+            &json::object!(display_name: profile.displayname, avatar_url: profile.avatar_url.as_ref().map(|x| x.as_str())),
             output,
         );
         Ok(())
@@ -650,87 +641,39 @@ pub(crate) async fn get_room_info(
     Ok(())
 }
 
-/// Utility function to print a MXC URI
-pub(crate) fn print_mxc_uri(json_label: &str, mxc_uri: OwnedMxcUri, output: Output) {
-    debug!("{}: {:?}", json_label, mxc_uri);
+/// Utility function to print JSON object as JSON or as plain text
+pub(crate) fn print_json(json_data: &json::JsonValue, output: Output) {
+    debug!("{:?}", json_data);
     match output {
-        Output::Text => println!("{}:    {}", json_label, mxc_uri,),
+        Output::Text => {
+            let mut first = true;
+            for (key, val) in json_data.entries() {
+                if first {
+                    first = false;
+                } else {
+                    print!("    ");
+                }
+                print!("{}:", key);
+                if val.is_object() {
+                    // if it is an object, check recursively
+                    print_json(val, output);
+                } else if val.is_boolean() {
+                    print!("    {}", val);
+                } else if val.is_null() {
+                    print!("    "); // print nothing
+                } else if val.is_string() {
+                    print!("    {}", val);
+                } else if val.is_number() {
+                    print!("    {}", val);
+                } else if val.is_array() {
+                    print!("    [{}]", val);
+                }
+            }
+            println!();
+        }
         Output::JsonSpec => (),
         _ => {
-            println!("{{\"{}\": {:?}}}", json_label, mxc_uri,);
-        }
-    }
-}
-
-/// Utility function to print one string
-pub(crate) fn print_one_string(json_label: &str, value: String, output: Output) {
-    debug!("{}: {:?}", json_label, value);
-    match output {
-        Output::Text => println!("{}:    {}", json_label, value,),
-        Output::JsonSpec => (),
-        _ => {
-            println!("{{\"{}\": {:?}}}", json_label, value,);
-        }
-    }
-}
-
-// Todo: convert the 2 function print-one-string and print-two-string into a single function print-option-string-vector
-// Todo: remove the print_mxc_uri fn and use print_string-vector instead with uri-to-str conversion first.
-
-/// Utility function to print two strings
-pub(crate) fn print_two_strings(
-    json_label1: &str,
-    value1: Option<String>,
-    json_label2: &str,
-    value2: Option<String>,
-    output: Output,
-) {
-    debug!(
-        "{}: {:?}, {}: {:?}",
-        json_label1, value1, json_label2, value2
-    );
-    let mut val1 = ("\"").to_string();
-    match value1 {
-        Some(s) => {
-            val1.push_str(&s);
-            val1.push('"');
-        }
-        _ => {
-            val1.clear();
-            val1.push_str("null");
-        }
-    }
-    let mut val2 = ("\"").to_string();
-    match value2 {
-        Some(s) => {
-            val2.push_str(&s);
-            val2.push('"');
-        }
-        _ => {
-            val2.clear();
-            val2.push_str("null");
-        }
-    }
-    match output {
-        Output::Text => println!(
-            "{}:    {}    {}:    {}",
-            json_label1,
-            val1.strip_suffix("\"")
-                .unwrap_or("")
-                .strip_prefix("\"")
-                .unwrap_or(""),
-            json_label2,
-            val2.strip_suffix("\"")
-                .unwrap_or("")
-                .strip_prefix("\"")
-                .unwrap_or(""),
-        ),
-        Output::JsonSpec => (),
-        _ => {
-            println!(
-                "{{\"{}\": {}, \"{}\": {}}}",
-                json_label1, val1, json_label2, val2,
-            );
+            println!("{}", json_data.dump(),);
         }
     }
 }
@@ -833,6 +776,7 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
 pub(crate) async fn room_create(
     client: &Client,
     is_dm: bool,             //is DM room
+    is_encrypted: bool,      // share we create an encrypted room or not
     users: &[String],        // users, only useful for DM rooms
     room_aliases: &[String], // list of simple alias names like 'SomeAlias', not full aliases
     names: &[String],        // list of room names, optional
@@ -876,42 +820,46 @@ pub(crate) async fn room_create(
             i, users2[i], aliases2[i], names2[i], topics2[i]
         );
 
-        // see: https://docs.rs/ruma/0.7.4/ruma/api/client/room/create_room/v3/struct.Request.html
-        // pub struct Request<'a> {
-        //     pub creation_content: Option<Raw<CreationContent>>,
-        //     pub initial_state: &'a [Raw<AnyInitialStateEvent>],
-        //     pub invite: &'a [OwnedUserId],
-        //     pub invite_3pid: &'a [Invite3pid<'a>],
-        //     pub is_direct: bool,
-        //     pub name: Option<&'a str>,
-        //     pub power_level_content_override: Option<Raw<RoomPowerLevelsEventContent>>,
-        //     pub preset: Option<RoomPreset>,
-        //     pub room_alias_name: Option<&'a str>,
-        //     pub room_version: Option<&'a RoomVersionId>,
-        //     pub topic: Option<&'a str>,
-        //     pub visibility: Visibility,  }
-        let content = RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
-        let initstateev: InitialStateEvent<RoomEncryptionEventContent>;
-        initstateev = InitialStateEvent {
-            content: content,
-            state_key: EmptyStateKey,
-        };
-        let rawinitstateev = Raw::new(&initstateev)?;
-        // let anyinitstateev: AnyInitialStateEvent =
-        //     matrix_sdk::ruma::events::AnyInitialStateEvent::RoomEncryption(initstateev);
-        // todo: better alternative? let anyinitstateev2: AnyInitialStateEvent = AnyInitialStateEvent::from(initstateev);
-
-        let rawanyinitstateev: Raw<AnyInitialStateEvent> = rawinitstateev.cast();
         let mut request = CreateRoomRequest::new();
-        let initstatevec = vec![rawanyinitstateev];
-        request.initial_state = &initstatevec;
+        let mut initstateevvec: Vec<Raw<AnyInitialStateEvent>> = vec![];
+        if is_encrypted {
+            // see: https://docs.rs/ruma/0.7.4/ruma/api/client/room/create_room/v3/struct.Request.html
+            // pub struct Request<'a> {
+            //     pub creation_content: Option<Raw<CreationContent>>,
+            //     pub initial_state: &'a [Raw<AnyInitialStateEvent>],
+            //     pub invite: &'a [OwnedUserId],
+            //     pub invite_3pid: &'a [Invite3pid<'a>],
+            //     pub is_direct: bool,
+            //     pub name: Option<&'a str>,
+            //     pub power_level_content_override: Option<Raw<RoomPowerLevelsEventContent>>,
+            //     pub preset: Option<RoomPreset>,
+            //     pub room_alias_name: Option<&'a str>,
+            //     pub room_version: Option<&'a RoomVersionId>,
+            //     pub topic: Option<&'a str>,
+            //     pub visibility: Visibility,  }
+            let content =
+                RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
+            let initstateev: InitialStateEvent<RoomEncryptionEventContent>;
+            initstateev = InitialStateEvent {
+                content,
+                state_key: EmptyStateKey,
+            };
+            let rawinitstateev = Raw::new(&initstateev)?;
+            // let anyinitstateev: AnyInitialStateEvent =
+            //     matrix_sdk::ruma::events::AnyInitialStateEvent::RoomEncryption(initstateev);
+            // todo: better alternative? let anyinitstateev2: AnyInitialStateEvent = AnyInitialStateEvent::from(initstateev);
+
+            let rawanyinitstateev: Raw<AnyInitialStateEvent> = rawinitstateev.cast();
+            initstateevvec.push(rawanyinitstateev);
+            request.initial_state = &initstateevvec;
+        }
 
         request.name = to_opt(&names2[i]);
         request.room_alias_name = to_opt(&aliases2[i]);
         request.topic = to_opt(&topics2[i]);
         request.is_direct = is_dm;
         let usr: OwnedUserId;
-        // defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
+        // Visibility defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
         let vis = Visibility::Private;
         let mut invites = vec![];
         if is_dm {
@@ -932,25 +880,19 @@ pub(crate) async fn room_create(
         match client.create_room(request).await {
             Ok(response) => {
                 debug!("create_room succeeded, result is {:?}.", response);
-                if output.is_text() {
-                    println!(
-                        "{}    {}    {}    {}    {}    {}    {}",
-                        response.room_id, aliases2[i], names2[i], topics2[i], users2[i], is_dm, vis
-                    );
-                } else {
-                    // all json formats
-                    // trait Serialize not implemented for Result
-                    let mut jstr: String = "{".to_owned();
-                    jstr.push_str(&format!("\"room_id\": \"{}\"", response.room_id));
-                    jstr.push_str(&format!(", \"alias\": {}", to_nul(&aliases2[i])));
-                    jstr.push_str(&format!(", \"name\": {}", to_nul(&names2[i])));
-                    jstr.push_str(&format!(", \"topic\": {}", to_nul(&topics2[i])));
-                    jstr.push_str(&format!(", \"invited\": {}", to_nul(&users2[i])));
-                    jstr.push_str(&format!(", \"direct\": {}", is_dm));
-                    jstr.push_str(&format!(", \"visibility\": \"{}\"", vis));
-                    jstr.push('}');
-                    println!("{}", jstr);
-                }
+                print_json(
+                    &json::object!(
+                        room_id: response.room_id.to_string(),
+                        alias: to_opt(&aliases2[i]),
+                        name: to_opt(&names2[i]),
+                        topic: to_opt(&topics2[i]),
+                        invited: <std::string::String as AsRef<str>>::as_ref(&users2[i]),
+                        direct: is_dm,
+                        encrypted: is_encrypted,
+                        visibility: vis.to_string()
+                    ),
+                    output,
+                );
                 // room_enable_encryption(): no longer needed, already done by setting request.initial_state
             }
             Err(ref e) => {
@@ -2084,5 +2026,208 @@ pub(crate) async fn file(
         Ok(())
     } else {
         Err(Error::SendFailed)
+    }
+}
+
+/// Upload one or more files to the server.
+/// Allows various Mime formats.
+pub(crate) async fn media_upload(
+    client: &Client,
+    filenames: &[PathBuf],
+    mime_strings: &[String],
+    output: Output,
+) -> Result<(), Error> {
+    debug!(
+        "In media_upload(): filename are {:?}, mimes are {:?}",
+        filenames, mime_strings,
+    );
+    let num = filenames.len();
+    let mut i = 0usize;
+    let mut mime_strings2 = mime_strings.to_owned();
+    mime_strings2.resize(num, "".to_string());
+
+    let mut err_count = 0u32;
+    let mut filename;
+    let mut mime_str;
+    let mut mime;
+    while i < num {
+        filename = filenames[i].clone();
+        mime_str = mime_strings2[i].clone();
+        debug!(
+            "In position {} we have filename {:?}, mime {:?}.",
+            i, filename, mime_str
+        );
+        if mime_str.trim().is_empty() {
+            mime = mime_guess::from_path(&filename).first_or(mime::APPLICATION_OCTET_STREAM);
+        } else {
+            mime = match mime_str.parse() {
+                Ok(m) => m,
+                Err(ref e) => {
+                    error!("Provided Mime {:?} is not valid; the upload of file {:?} will be skipped; returned error {:?}", mime_str, filename, e);
+                    err_count += 1;
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+
+        let data = if filename.to_str().unwrap() == "-" {
+            // read from stdin
+            let mut buffer = Vec::new();
+            if atty::is(Stream::Stdin) {
+                eprint!("Waiting for data to be piped into stdin. Enter data now: ");
+                std::io::stdout()
+                    .flush()
+                    .expect("error: could not flush stderr");
+            }
+            // read the whole file
+            io::stdin().read_to_end(&mut buffer)?;
+            buffer
+        } else {
+            if filename.to_str().unwrap() == r"\-" {
+                filename = PathBuf::from(r"-");
+            }
+            fs::read(&filename).unwrap_or_else(|e| {
+                error!("File {:?} was not found; the upload of file {:?} will be skipped; returned error {:?}", filename, filename, e);
+                err_count += 1;
+                Vec::new()
+            })
+        };
+        if data.is_empty() {
+            error!(
+                "No data to send. Data is empty. The upload of file {:?} will be skipped.",
+                filename
+            );
+            err_count += 1;
+        } else {
+            match client.media().upload(&mime, &data).await {
+                Ok(response) => {
+                    debug!("upload successful {:?}", response);
+                    print_json(
+                        &json::object!(file_name: filename.to_str(),
+                        upload_mxc_uri: response.content_uri.as_str(),
+                        mime: mime.to_string()),
+                        output,
+                    );
+                }
+                Err(ref e) => {
+                    error!(
+                        "The upload of file {:?} failed. Upload returned error {:?}",
+                        filename, e
+                    );
+                    err_count += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+    if err_count == 0 {
+        Ok(())
+    } else {
+        Err(Error::MediaUploadFailed)
+    }
+}
+
+/// Download one or more files from the server based on XMC URI.
+/// Allows various Mime formats.
+pub(crate) async fn media_download(
+    client: &Client,
+    mxc_uris: &[OwnedMxcUri],
+    filenames: &[PathBuf],
+    output: Output, // how to format output, currently no output
+) -> Result<(), Error> {
+    debug!(
+        "In media_download(): mxc_uris are {:?}, filenames are {:?}",
+        mxc_uris, filenames,
+    );
+    let num = mxc_uris.len();
+    let mut i = 0usize;
+    let mut filenames2 = filenames.to_owned();
+    filenames2.resize(num, PathBuf::new());
+
+    let mut err_count = 0u32;
+    let mut mxc_uri;
+    let mut filename;
+    while i < num {
+        mxc_uri = mxc_uris[i].clone();
+        filename = filenames2[i].clone();
+        debug!(
+            "In position {} we have mxc_uri {:?}, filename {:?}.",
+            i, mxc_uri, filename
+        );
+        if filename.as_os_str().is_empty() {
+            filename = PathBuf::from("mxc-".to_owned() + mxc_uri.media_id().unwrap_or(""));
+        } else if filename.to_string_lossy().contains("__mxc_id__") {
+            filename = PathBuf::from(filename.to_string_lossy().replacen(
+                "__mxc_id__",
+                mxc_uri.media_id().unwrap_or(""),
+                10,
+            ));
+        }
+        let request = MediaRequest {
+            source: MediaSource::Plain(mxc_uri.clone()),
+            format: MediaFormat::File,
+        };
+        match client.media().get_media_content(&request, false).await {
+            Ok(response) => {
+                debug!("dowload successful: {:?} bytes received", response.len());
+                if filename.to_str().unwrap() == "-" {
+                    match std::io::stdout().write_all(&response) {
+                        Ok(_) => {
+                            debug!("Downloaded media was successfully written to stdout.");
+                            print_json(
+                                &json::object!(download_mxc_uri: mxc_uri.as_str(), file_name: "-", size: response.len()),
+                                output,
+                            );
+                        }
+                        Err(ref e) => {
+                            error!("The downloaded media data could not be written to stdout. write() returned error {:?}", e);
+                            err_count += 1;
+                            continue;
+                        }
+                    }
+                } else {
+                    if filename.to_str().unwrap() == r"\-" {
+                        filename = PathBuf::from(r"-");
+                    }
+                    match File::create(&filename).map(|mut o| o.write_all(&response)) {
+                        Ok(Ok(())) => {
+                            debug!(
+                                "Downloaded media was successfully written to file {:?}.",
+                                filename
+                            );
+                            if response.is_empty() {
+                                warn!("The download of MXC URI had 0 bytes of data. It is empty.");
+                            };
+                            print_json(
+                                &json::object!(download_mxc_uri: mxc_uri.as_str(), file_name: filename.to_str(), size: response.len()),
+                                output,
+                            );
+                        }
+                        Ok(Err(ref e)) => {
+                            error!("Writing downloaded media to file {:?} failed. Error returned is {:?}",filename,e);
+                            err_count += 1;
+                        }
+                        Err(ref e) => {
+                            error!("Could not create file {:?} for storing downloaded media. Returned error {:?}.",filename,e);
+                            err_count += 1;
+                        }
+                    }
+                };
+            }
+            Err(ref e) => {
+                error!(
+                    "The download of MXC URI {:?} failed. Download returned error {:?}",
+                    mxc_uri, e
+                );
+                err_count += 1;
+            }
+        }
+        i += 1;
+    }
+    if err_count == 0 {
+        Ok(())
+    } else {
+        Err(Error::MediaDownloadFailed)
     }
 }
