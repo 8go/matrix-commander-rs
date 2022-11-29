@@ -165,6 +165,42 @@ pub(crate) async fn convert_to_full_room_ids(
     }
 }
 
+/// Convert partial mxc uris to full mxc uris.
+/// SomeStrangeUriKey => "mxc://matrix.server.org/SomeStrangeUriKey"
+/// Default_host is a string like "matrix.server.org" or "127.0.0.1"
+pub(crate) async fn convert_to_full_mxc_uris(vecstr: &mut Vec<OwnedMxcUri>, default_host: &str) {
+    vecstr.retain(|x| !x.as_str().trim().is_empty());
+    let num = vecstr.len();
+    let mut i = 0;
+    while i < num {
+        let mut s = vecstr[i].as_str().to_string();
+        s.retain(|c| !c.is_whitespace());
+        if s.is_empty() {
+            debug!("Skipping {:?} because it is empty.", vecstr[i]);
+            vecstr[i] = OwnedMxcUri::from("");
+            i += 1;
+            continue;
+        }
+        if s.starts_with("mxc://") {
+            debug!("Skipping {:?}.", vecstr[i]);
+            i += 1;
+            continue;
+        }
+        if s.contains(':') || s.contains('/') {
+            error!("This does not seem to be a short MXC URI. Contains : or /. Skipping {:?}. This will likely cause a failure later.", vecstr[i]);
+            i += 1;
+            continue;
+        }
+        let mxc = "mxc://".to_owned() + default_host + "/" + &s;
+        vecstr[i] = OwnedMxcUri::from(mxc);
+        if !vecstr[i].is_valid() {
+            error!("This does not seem to be a short MXC URI. Contains : or /. Skipping {:?}. This will likely cause a failure later.", vecstr[i]);
+        }
+        i += 1;
+    }
+    vecstr.retain(|x| !x.as_str().trim().is_empty());
+}
+
 /// Convert partial user ids to full user ids.
 /// john => @john:matrix.server.com
 /// @john => @john:matrix.server.com
@@ -943,6 +979,10 @@ pub(crate) async fn room_leave(
                     info!("Left room {:?} successfully.", id);
                     // Todo: does this work? Does not seem to work.
                     jroom.clone_info().mark_as_left();
+                    // Todo: starting v0.7 this sync() will no longer be necessary
+                    client
+                        .sync_once(SyncSettings::new().timeout(Duration::new(10, 0)))
+                        .await?; //todo: remove this it did not fix the problem.
                 }
                 Err(ref e) => {
                     error!("Error: leave() returned error {:?}.", e);
@@ -2229,5 +2269,96 @@ pub(crate) async fn media_download(
         Ok(())
     } else {
         Err(Error::MediaDownloadFailed)
+    }
+}
+
+// Todo: remove media content thumbnails
+
+/// Delete one or more files from the server based on XMC URI.
+/// Does not delete Thumbnails.
+pub(crate) async fn media_delete(
+    client: &Client,
+    mxc_uris: &[OwnedMxcUri],
+    _output: Output, // how to format output
+) -> Result<(), Error> {
+    debug!("In media_delete(): mxc_uris are {:?}", mxc_uris,);
+    let mut err_count = 0u32;
+    for mxc in mxc_uris {
+        match mxc.validate() {
+            Ok(()) => {
+                debug!("mxc {:?} is valid.", mxc);
+                match client.media().remove_media_content_for_uri(mxc).await {
+                    Ok(()) => {
+                        debug!("Successfully deleted MXC URI {:?}.", mxc);
+                    }
+                    Err(ref e) => {
+                        error!(
+                            "Deleting the MXC URI {:?} failed. Error returned is {:?}.",
+                            mxc, e
+                        );
+                        err_count += 1;
+                    }
+                }
+            }
+            Err(ref e) => {
+                error!("Invalid MXC URI {:?}. Error returned is {:?}.", mxc, e);
+                err_count += 1;
+            }
+        }
+    }
+    if err_count == 0 {
+        Ok(())
+    } else {
+        Err(Error::MediaDeleteFailed)
+    }
+}
+
+/// Convert one or more XMC URIs to HTTP URLs. This is for legacy reasons
+/// and compatibility with Python version of matrix-commander.
+/// This works without a server and without being logged in.
+/// Converts a string like "mxc://matrix.server.org/SomeStrangeUriKey"
+/// to a string like "https://matrix.server.org/_matrix/media/r0/download/matrix.server.org/SomeStrangeUriKey".
+pub(crate) async fn media_mxc_to_http(
+    mxc_uris: &[OwnedMxcUri],
+    default_homeserver: &Url,
+    output: Output, // how to format output
+) -> Result<(), Error> {
+    debug!("In media_mxc_to_http(): mxc_uris are {:?}", mxc_uris,);
+    let mut err_count = 0u32;
+    let mut http;
+    for mxc in mxc_uris {
+        match mxc.validate() {
+            Ok(()) => {
+                let p = default_homeserver.as_str()
+                    [0..default_homeserver.as_str().find('/').unwrap() - 1]
+                    .to_string(); // http or https
+                let (server_name, media_id) = mxc.parts().unwrap();
+                debug!(
+                    "MXC URI {:?} is valid. Protocol is {:?}, Server is {:?}, media id is {:?}.",
+                    mxc, p, server_name, media_id
+                );
+                http = p
+                    + "://"
+                    + server_name.as_str()
+                    + "/_matrix/media/r0/download/"
+                    + server_name.as_str()
+                    + "/"
+                    + media_id;
+                debug!("http of mxc {:?} is {:?}", mxc, http);
+                print_json(
+                    &json::object!(mxc_uri: mxc.as_str(), http: http, media_id: media_id),
+                    output,
+                );
+            }
+            Err(ref e) => {
+                error!("Invalid MXC URI {:?}. Error returned is {:?}.", mxc, e);
+                err_count += 1;
+            }
+        }
+    }
+    if err_count == 0 {
+        Ok(())
+    } else {
+        Err(Error::MediaMxcToHttpFailed)
     }
 }

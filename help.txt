@@ -569,18 +569,22 @@ Options:
           using '-'. Furthermore, '-' can only be used once. Upon being stored
           in the homeserver's content repository, the data is assigned a Matrix
           MXC URI. For each file uploaded successfully, a single line with the
-          MXC URI will be printed
+          MXC URI will be printed. The uploaded data will not by encrypted. If
+          you want to upload encrypted data, encrypt the file before uploading
+          it
       --media-download [<MXC_URI>...]
           Download one or multiple files from the homeserver content
           repository. You must provide one or multiple Matrix URIs (MXCs) which
-          are strings like this 'mxc://example.com/SomeStrangeUriKey'. If found
-          they will be downloaded, decrypted, and stored in local files. If
-          file names are specified with --file-name the downloads will be saved
-          with these file names. If --file-name is not specified, then the file
-          name 'mxc-<mxc-id>' will be used. If a file name in --file-name
-          contains the placeholder __mxc_id__, it will be replaced with the
-          mxc-id. If a file name is specified as empty string in --file-name,
-          then also the name 'mxc-<mxc-id>' will be used. Do not confuse
+          are strings like this 'mxc://example.com/SomeStrangeUriKey'.
+          Alternatively, you can just provide the MXC id, i.e. the part after
+          the last slash. If found they will be downloaded, decrypted, and
+          stored in local files. If file names are specified with --file-name
+          the downloads will be saved with these file names. If --file-name is
+          not specified, then the file name 'mxc-<mxc-id>' will be used. If a
+          file name in --file-name contains the placeholder __mxc_id__, it will
+          be replaced with the mxc-id. If a file name is specified as empty
+          string '' in --file-name, then also the name 'mxc-<mxc-id>' will be
+          used. Be careful, existing files will be overwritten. Do not confuse
           --media-download with --download-media. See --download-media
       --mime [<MIME_TYPE>...]
           Specify the Mime type of certain input files. Specify '' if the Mime
@@ -591,5 +595,25 @@ Options:
           types are: 'image/jpeg', 'image/png', 'image/gif', 'text/plain', and
           'application/pdf'. For a full list see
           'https://docs.rs/mime/latest/mime/#constants'
+      --media-delete [<MXC_URI>...]
+          Delete one or multiple objects (e.g. files) from the content
+          repository. You must provide one or multiple Matrix URIs (MXC) which
+          are strings like this 'mxc://example.com/SomeStrangeUriKey'.
+          Alternatively, you can just provide the MXC id, i.e. the part after
+          the last slash. If found they will be deleted from the server
+          database. In order to delete objects one must have server admin
+          permissions. Having only room admin permissions is not sufficient and
+          it will fail. Read
+          https://matrix-org.github.io/synapse/latest/usage/administration/admin_api/
+          for learning how to set server admin permissions on the server.
+          Thumbnails will currently not be deleted. Deleting something that
+          does not exist will be ignored and will not cause an error
+      --media-mxc-to-http [<MXC_URI>...]
+          Convert one or more matrix content URIs to the corresponding HTTP
+          URLs. The MXC URIs to provide look something like this
+          'mxc://example.com/SomeStrangeUriKey'. Alternatively, you can just
+          provide the MXC id, i.e. the part after the last slash. The syntax of
+          the provided MXC URIs will be verified. The existance of content for
+          the XMC URI will not be checked
   -h, --help
           Print help information (use `--help` for more detail)

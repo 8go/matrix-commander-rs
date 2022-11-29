@@ -46,8 +46,7 @@ use std::env;
 use std::fmt::{self, Debug};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
@@ -73,14 +72,14 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_alias_ids, convert_to_full_room_ids, convert_to_full_user_ids,
-    delete_devices_pre, devices, file, get_avatar, get_avatar_url, get_display_name, get_profile,
-    get_room_info, invited_rooms, joined_members, joined_rooms, left_rooms, login, logout,
-    logout_local, media_download, media_upload, message, replace_star_with_rooms,
-    restore_credentials, restore_login, room_ban, room_create, room_enable_encryption, room_forget,
-    room_get_state, room_get_visibility, room_invite, room_join, room_kick, room_leave,
-    room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url, set_display_name,
-    unset_avatar_url, verify,
+    convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_ids,
+    convert_to_full_user_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
+    get_display_name, get_profile, get_room_info, invited_rooms, joined_members, joined_rooms,
+    left_rooms, login, logout, logout_local, media_delete, media_download, media_mxc_to_http,
+    media_upload, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
+    room_create, room_enable_encryption, room_forget, room_get_state, room_get_visibility,
+    room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
+    set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -218,6 +217,12 @@ pub enum Error {
 
     #[error("Media Download Failed")]
     MediaDownloadFailed,
+
+    #[error("Media Delete Failed")]
+    MediaDeleteFailed,
+
+    #[error("MXC TO HTTP Failed")]
+    MediaMxcToHttpFailed,
 
     #[error("Invalid Client Connection")]
     InvalidClientConnection,
@@ -1570,6 +1575,9 @@ pub struct Args {
     /// data is assigned a Matrix MXC URI. For each file uploaded
     /// successfully, a
     /// single line with the MXC URI will be printed.
+    /// The uploaded data will not by encrypted.
+    /// If you want to upload encrypted data, encrypt the file before
+    /// uploading it.
     // Use --plain to disable encryption for the upload.
     #[arg(long, alias = "upload", value_name = "FILE", num_args(0..), )]
     media_upload: Vec<PathBuf>,
@@ -1577,7 +1585,11 @@ pub struct Args {
     /// Download one or multiple files from the homeserver content
     /// repository. You must provide one or multiple Matrix
     /// URIs (MXCs) which are strings like this
-    /// 'mxc://example.com/SomeStrangeUriKey'. If found they
+    /// 'mxc://example.com/SomeStrangeUriKey'.
+    /// Alternatively,
+    /// you can just provide the MXC id, i.e. the part after
+    /// the last slash.
+    /// If found they
     /// will be downloaded, decrypted, and stored in local
     /// files. If file names are specified with --file-name
     /// the downloads will be saved with these file names. If
@@ -1586,8 +1598,9 @@ pub struct Args {
     /// --file-name
     /// contains the placeholder __mxc_id__, it will be
     /// replaced with the mxc-id. If a file name is specified
-    /// as empty string in --file-name, then also the name
-    /// 'mxc-<mxc-id>' will be used.
+    /// as empty string '' in --file-name, then also the name
+    /// 'mxc-<mxc-id>' will be used. Be careful, existing
+    /// files will be overwritten.
     // By default, the upload
     // was encrypted so a decryption dictionary must be
     // provided to decrypt the data. Specify one or multiple
@@ -1615,6 +1628,37 @@ pub struct Args {
     // One cannot use Vec<Mime> as type because that prevents '' from being used.
     #[arg(long, value_name = "MIME_TYPE", num_args(0..), )]
     mime: Vec<String>,
+
+    /// Delete one or multiple objects (e.g. files) from the
+    /// content repository. You must provide one or multiple
+    /// Matrix URIs (MXC) which are strings like this
+    /// 'mxc://example.com/SomeStrangeUriKey'. Alternatively,
+    /// you can just provide the MXC id, i.e. the part after
+    /// the last slash. If found they will be deleted from the
+    /// server database. In order to delete objects one must
+    /// have server admin permissions. Having only room admin
+    /// permissions is not sufficient and it will fail. Read
+    /// https://matrix-org.github.io/synapse/latest/usage/administration/admin_api/
+    /// for learning how to set server
+    /// admin permissions on the server.
+    /// Thumbnails will currently not be deleted.
+    /// Deleting something that does not exist will be ignored
+    /// and will not cause an error.
+    #[arg(long, alias = "delete-mxc", value_name = "MXC_URI", num_args(0..), )]
+    media_delete: Vec<OwnedMxcUri>,
+
+    /// Convert one or more matrix content URIs to the
+    /// corresponding HTTP URLs. The MXC URIs to provide look
+    /// something like this
+    /// 'mxc://example.com/SomeStrangeUriKey'.
+    /// Alternatively,
+    /// you can just provide the MXC id, i.e. the part after
+    /// the last slash.
+    /// The syntax of the provided MXC URIs will be verified.
+    /// The existance of content for the XMC URI will not be checked.
+    // This works without a server or without being logged in.
+    #[arg(long, alias = "mxc-to-http", value_name = "MXC_URI", num_args(0..), )]
+    media_mxc_to_http: Vec<OwnedMxcUri>,
 }
 
 impl Default for Args {
@@ -1694,6 +1738,8 @@ impl Args {
             get_profile: false,
             media_upload: Vec::new(),
             media_download: Vec::new(),
+            media_delete: Vec::new(),
+            media_mxc_to_http: Vec::new(),
             mime: Vec::new(),
         }
     }
@@ -2462,6 +2508,23 @@ pub(crate) async fn cli_media_download(client: &Client, ap: &Args) -> Result<(),
     media_download(client, &ap.media_download, &ap.file_name, ap.output).await // returning
 }
 
+/// Handle the --media-delete once CLI argument
+pub(crate) async fn cli_media_delete(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Media delete chosen.");
+    media_delete(client, &ap.media_delete, ap.output).await // returning
+}
+
+/// Handle the --media-mxc-to-http once CLI argument
+pub(crate) async fn cli_media_mxc_to_http(ap: &Args) -> Result<(), Error> {
+    info!("Media mxc_to_http chosen.");
+    media_mxc_to_http(
+        &ap.media_mxc_to_http,
+        &ap.creds.as_ref().unwrap().homeserver,
+        ap.output,
+    )
+    .await // returning
+}
+
 /// Handle the --listen once CLI argument
 pub(crate) async fn cli_listen_once(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Listen Once chosen.");
@@ -2861,6 +2924,8 @@ async fn main() -> Result<(), Error> {
     debug!("get-profile option is {:?}", ap.get_profile);
     debug!("media-upload option is {:?}", ap.media_upload);
     debug!("media-download option is {:?}", ap.media_download);
+    debug!("media-delete option is {:?}", ap.media_delete);
+    debug!("media-mxc-to-http option is {:?}", ap.media_mxc_to_http);
     debug!("mime option is {:?}", ap.mime);
 
     if ap.version {
@@ -2892,6 +2957,7 @@ async fn main() -> Result<(), Error> {
         || ap.get_display_name
         || ap.get_profile
         || !ap.media_download.is_empty()
+        || !ap.media_mxc_to_http.is_empty()
         // set actions
         || !ap.room_create.is_empty()
         || !ap.room_dm_create.is_empty()
@@ -2909,6 +2975,7 @@ async fn main() -> Result<(), Error> {
         || !ap.set_display_name.is_none()
         || !ap.room_enable_encryption.is_empty()
         || !ap.media_upload.is_empty()
+        || !ap.media_delete.is_empty()
         // send and listen actions
         || !ap.message.is_empty()
         || !ap.file.is_empty()
@@ -2951,6 +3018,20 @@ async fn main() -> Result<(), Error> {
         };
     };
 
+    convert_to_full_mxc_uris(
+        &mut ap.media_mxc_to_http,
+        ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+    )
+    .await; // convert short mxcs to full mxc uris
+
+    // media_mxc_to_http works without client (server connection)
+    if !ap.media_mxc_to_http.is_empty() {
+        match crate::cli_media_mxc_to_http(&ap).await {
+            Ok(ref _n) => debug!("crate::media_mxc_to_http successful"),
+            Err(ref e) => error!("Error: crate::media_mxc_to_http reported {}", e),
+        };
+    };
+
     match clientres {
         Ok(ref _n) => {
             debug!("A valid client connection has been established with server.");
@@ -2988,6 +3069,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_leave.retain(|x| !x.trim().is_empty());
+
         replace_minus_with_default_room(
             &mut ap.room_forget,
             &ap.creds.as_ref().unwrap().room_default,
@@ -3130,6 +3212,18 @@ async fn main() -> Result<(), Error> {
             ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
         );
         ap.alias.retain(|x| !x.trim().is_empty());
+
+        convert_to_full_mxc_uris(
+            &mut ap.media_download,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short mxcs to full mxc uris
+
+        convert_to_full_mxc_uris(
+            &mut ap.media_delete,
+            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
+        )
+        .await; // convert short mxcs to full mxc uris
 
         if ap.tail > 0 {
             // overwrite --listen if user has chosen both
@@ -3275,8 +3369,8 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_leave.is_empty() {
-            error!("There seems to be a bug in the matrix-sdk library and hence this is not working properly at the moment.");
-            error!("If you know the matrix-sdk library please help fix this bug.");
+            error!("There is a bug in the matrix-sdk library and hence this is not working properly at the moment.");
+            error!(" It will start working once matrix-sdk v0.7 is released.");
             match crate::cli_room_leave(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_leave successful"),
                 Err(ref e) => error!("Error: crate::room_leave reported {}", e),
@@ -3284,8 +3378,8 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_forget.is_empty() {
-            error!("There seems to be a bug in the matrix-sdk library and hence this is not working properly at the moment.");
-            error!("If you know the matrix-sdk library please help fix this bug.");
+            error!("There is a bug in the matrix-sdk library and hence this is not working properly at the moment.");
+            error!(" It will start working once matrix-sdk v0.7 is released.");
             match crate::cli_room_forget(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_forget successful"),
                 Err(ref e) => error!("Error: crate::room_forget reported {}", e),
@@ -3373,6 +3467,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_media_upload(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::media_upload successful"),
                 Err(ref e) => error!("Error: crate::media_upload reported {}", e),
+            };
+        };
+
+        if !ap.media_delete.is_empty() {
+            match crate::cli_media_delete(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::media_delete successful"),
+                Err(ref e) => error!("Error: crate::media_delete reported {}", e),
             };
         };
 

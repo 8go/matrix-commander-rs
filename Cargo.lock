@@ -1244,7 +1244,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "matrix-commander"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "atty",
  "clap",
