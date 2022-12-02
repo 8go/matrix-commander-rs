@@ -1754,7 +1754,8 @@ pub struct Credentials {
     user_id: OwnedUserId,
     access_token: String,
     device_id: OwnedDeviceId,
-    room_default: String,
+    // room_id (was room_default); renamed to room_id to make it compatible with Python version
+    room_id: String,
     refresh_token: Option<String>,
 }
 
@@ -1763,7 +1764,7 @@ pub struct Credentials {
 //     user_id!(r"@a:a").to_owned(), // user_id: OwnedUserId,
 //     String::new().to_owned(), // access_token: String,
 //     device_id!("").to_owned(), // device_id: OwnedDeviceId,
-//     String::new(), // room_default: String,
+//     String::new(), // room_id: String,
 //     None, // refresh_token: Option<String>
 // ),
 
@@ -1781,7 +1782,7 @@ impl Credentials {
         user_id: OwnedUserId,
         access_token: String,
         device_id: OwnedDeviceId,
-        room_default: String,
+        room_id: String,
         refresh_token: Option<String>,
     ) -> Self {
         Self {
@@ -1789,7 +1790,7 @@ impl Credentials {
             user_id,
             access_token,
             device_id,
-            room_default,
+            room_id,
             refresh_token,
         }
     }
@@ -1839,7 +1840,7 @@ impl From<Credentials> for Session {
             user_id: creditials.user_id,
             access_token: creditials.access_token,
             device_id: creditials.device_id,
-            // no default_room in session
+            // no room_id (was default_room) in session
             refresh_token: creditials.refresh_token,
         }
     }
@@ -2275,7 +2276,7 @@ fn set_rooms(ap: &mut Args) {
 /// Get the default room id from the credentials file.
 /// On error return None.
 fn get_room_default_from_credentials(credentials: &Credentials) -> String {
-    credentials.room_default.clone()
+    credentials.room_id.clone()
 }
 
 /// A user is either specified with --user or the default from credentials file is used
@@ -2820,6 +2821,14 @@ pub(crate) async fn cli_logout(client: &Client, ap: &mut Args) -> Result<(), Err
 async fn main() -> Result<(), Error> {
     let mut ap = Args::parse();
 
+    println!("WARNING: Incompatible change between version v0.1.20 and v0.1.21.");
+    println!("If your credentials file was created with Python, don't do anything.");
+    println!("If your credentials file was created with Rust, follow either Option 1 or Option 2.");
+    println!("Option 1: Please edit your Rust-created credentials file (usually at $HOME/.local/share/matrix-commander-rs/credentials.json).");
+    println!("Replace \"room_default\" with \"room_id\".");
+    println!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");
+    println!("You can do this by running first with argument \"--logout\" and then a second time with argument \"--login\".");
+
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
     // println!("Original log_level option is {:?}", ap.log_level);
@@ -3058,10 +3067,7 @@ async fn main() -> Result<(), Error> {
         // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
         set_rooms(&mut ap); // if no rooms in --room, set rooms to default room from credentials file
         set_users(&mut ap); // if no users in --user, set users to default user from credentials file
-        replace_minus_with_default_room(
-            &mut ap.room_leave,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_leave, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_leave,
@@ -3070,10 +3076,7 @@ async fn main() -> Result<(), Error> {
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_leave.retain(|x| !x.trim().is_empty());
 
-        replace_minus_with_default_room(
-            &mut ap.room_forget,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_forget, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_forget,
@@ -3089,7 +3092,7 @@ async fn main() -> Result<(), Error> {
 
         replace_minus_with_default_room(
             &mut ap.room_enable_encryption,
-            &ap.creds.as_ref().unwrap().room_default,
+            &ap.creds.as_ref().unwrap().room_id,
         ); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
@@ -3099,10 +3102,7 @@ async fn main() -> Result<(), Error> {
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_enable_encryption.retain(|x| !x.trim().is_empty());
 
-        replace_minus_with_default_room(
-            &mut ap.get_room_info,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.get_room_info, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.get_room_info,
@@ -3111,10 +3111,7 @@ async fn main() -> Result<(), Error> {
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.get_room_info.retain(|x| !x.trim().is_empty());
 
-        replace_minus_with_default_room(
-            &mut ap.room_invite,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_invite, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_invite,
@@ -3122,10 +3119,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_invite.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
-            &mut ap.room_join,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_join, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_join,
@@ -3133,7 +3127,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_join.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(&mut ap.room_ban, &ap.creds.as_ref().unwrap().room_default); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_ban, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_ban,
@@ -3141,10 +3135,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_ban.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
-            &mut ap.room_unban,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_unban, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_unban,
@@ -3152,10 +3143,7 @@ async fn main() -> Result<(), Error> {
         )
         .await; // convert short ids, short aliases and aliases to full room ids
         ap.room_unban.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
-            &mut ap.room_kick,
-            &ap.creds.as_ref().unwrap().room_default,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.room_kick, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
         convert_to_full_room_ids(
             &client,
             &mut ap.room_kick,
@@ -3165,7 +3153,7 @@ async fn main() -> Result<(), Error> {
         ap.room_kick.retain(|x| !x.trim().is_empty());
         replace_minus_with_default_room(
             &mut ap.room_get_visibility,
-            &ap.creds.as_ref().unwrap().room_default,
+            &ap.creds.as_ref().unwrap().room_id,
         ); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.room_get_visibility); // convert '*' to full list of rooms
         convert_to_full_room_ids(
@@ -3177,7 +3165,7 @@ async fn main() -> Result<(), Error> {
         ap.room_get_visibility.retain(|x| !x.trim().is_empty());
         replace_minus_with_default_room(
             &mut ap.room_get_state,
-            &ap.creds.as_ref().unwrap().room_default,
+            &ap.creds.as_ref().unwrap().room_id,
         ); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.room_get_state); // convert '*' to full list of rooms
         convert_to_full_room_ids(
@@ -3190,7 +3178,7 @@ async fn main() -> Result<(), Error> {
 
         replace_minus_with_default_room(
             &mut ap.joined_members,
-            &ap.creds.as_ref().unwrap().room_default,
+            &ap.creds.as_ref().unwrap().room_id,
         ); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
         convert_to_full_room_ids(
