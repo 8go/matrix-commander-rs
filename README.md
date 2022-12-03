@@ -107,14 +107,15 @@ Usage: matrix-commander-rs [OPTIONS]
 Options:
       --contribute
           Please contribute
-  -v, --version
-          Print version number
-      --version-check
-          Check if a newer version exists on crates.io. This connects to
-          https://crates.io and gets the version number of latest stable
-          release. There is no "calling home" on every run, only a "check
-          crates.io" upon request. Your privacy is protected. New release is
-          neither downloaded, nor installed. It just informs you
+  -v, --version [<CHECK>]
+          Print version number or check if a newer version exists on crates.io.
+          If used without an argument such as '--version' it will print the
+          version number. If 'check' is added ('--version check') then the
+          program connects to https://crates.io and gets the version number of
+          latest stable release. There is no "calling home" on every run, only
+          a "check crates.io" upon request. Your privacy is protected. New
+          release is neither downloaded, nor installed. It just informs you [possible
+          values: check]
   -d, --debug...
           Overwrite the default log level. If not used, then the default log
           level set with environment variable 'RUST_LOG' will be used. If used,

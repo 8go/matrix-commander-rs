@@ -113,6 +113,59 @@ pub(crate) fn replace_star_with_rooms(client: &Client, vecstr: &mut Vec<String>)
     }
 }
 
+/// Convert partial room id, partial room alias, room alias to
+/// full room id.
+/// !irywieryiwre => !irywieryiwre:matrix.server.com
+/// john => !irywieryiwre:matrix.server.com
+/// #john => !irywieryiwre:matrix.server.com
+/// #john:matrix.server.com => !irywieryiwre:matrix.server.com
+pub(crate) async fn convert_to_full_room_id(
+    client: &Client,
+    room: &mut String,
+    default_host: &str,
+) {
+    room.retain(|c| !c.is_whitespace());
+    if room.starts_with('@') {
+        error!("This room alias or id {:?} starts with an at sign. @ are used for user ids, not room id or room aliases. This will fail later.", room);
+        return;
+    }
+    if !room.starts_with('#') && !room.starts_with('!') {
+        room.insert(0, '#');
+    }
+    if !room.contains(':') {
+        room.push(':');
+        room.push_str(default_host);
+    }
+    // now we either full room id or full room alias id
+    if room.starts_with('!') {
+        return;
+    }
+    if room.starts_with('#') {
+        match RoomAliasId::parse(room.clone()) {
+            Ok(id) => match client.resolve_room_alias(&id).await {
+                Ok(res) => {
+                    room.clear();
+                    room.push_str(res.room_id.as_ref());
+                }
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid alias {:?}. resolve_room_alias() returned error {:?}.",
+                        room, e
+                    );
+                    room.clear();
+                }
+            },
+            Err(ref e) => {
+                error!(
+                    "Error: invalid alias {:?}. Error reported is {:?}.",
+                    room, e
+                );
+                room.clear();
+            }
+        }
+    }
+}
+
 /// Convert partial room ids, partial room aliases, room aliases to
 /// full room ids.
 /// !irywieryiwre => !irywieryiwre:matrix.server.com
@@ -125,44 +178,13 @@ pub(crate) async fn convert_to_full_room_ids(
     default_host: &str,
 ) {
     vecstr.retain(|x| !x.trim().is_empty());
-    for el in vecstr {
-        el.retain(|c| !c.is_whitespace());
-        if el.starts_with('@') {
-            error!("This room alias or id {:?} starts with an at sign. @ are used for user ids, not room id or room aliases. This will fail later.", el);
-            continue;
-        }
-        if !el.starts_with('#') && !el.starts_with('!') {
-            el.insert(0, '#');
-        }
-        if !el.contains(':') {
-            el.push(':');
-            el.push_str(default_host);
-        }
-        // now we either full room id or full room alias id
-        if el.starts_with('!') {
-            continue;
-        }
-        if el.starts_with('#') {
-            match RoomAliasId::parse(el.clone()) {
-                Ok(id) => {
-                    match client.resolve_room_alias(&id).await {
-                        Ok(res) => {
-                            el.clear();
-                            el.push_str(res.room_id.as_ref());
-                        }
-                        Err(ref e) => {
-                            error!("Error: invalid alias {:?}. resolve_room_alias() returned error {:?}.", el, e);
-                            el.clear();
-                        }
-                    }
-                }
-                Err(ref e) => {
-                    error!("Error: invalid alias {:?}. Error reported is {:?}.", el, e);
-                    el.clear();
-                }
-            }
-        }
+    let num = vecstr.len();
+    let mut i = 0;
+    while i < num {
+        convert_to_full_room_id(client, &mut vecstr[i], default_host).await;
+        i += 1;
     }
+    vecstr.retain(|x| !x.trim().is_empty());
 }
 
 /// Convert partial mxc uris to full mxc uris.

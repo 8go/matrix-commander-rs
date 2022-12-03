@@ -72,14 +72,15 @@ use matrix_sdk::{
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_ids,
-    convert_to_full_user_ids, delete_devices_pre, devices, file, get_avatar, get_avatar_url,
-    get_display_name, get_profile, get_room_info, invited_rooms, joined_members, joined_rooms,
-    left_rooms, login, logout, logout_local, media_delete, media_download, media_mxc_to_http,
-    media_upload, message, replace_star_with_rooms, restore_credentials, restore_login, room_ban,
-    room_create, room_enable_encryption, room_forget, room_get_state, room_get_visibility,
-    room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
-    set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
+    convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_id,
+    convert_to_full_room_ids, convert_to_full_user_ids, delete_devices_pre, devices, file,
+    get_avatar, get_avatar_url, get_display_name, get_profile, get_room_info, invited_rooms,
+    joined_members, joined_rooms, left_rooms, login, logout, logout_local, media_delete,
+    media_download, media_mxc_to_http, media_upload, message, replace_star_with_rooms,
+    restore_credentials, restore_login, room_ban, room_create, room_enable_encryption, room_forget,
+    room_get_state, room_get_visibility, room_invite, room_join, room_kick, room_leave,
+    room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url, set_display_name,
+    unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -117,7 +118,7 @@ pub enum Error {
     Custom(&'static str),
 
     #[error("No valid home directory path")]
-    NoNomeDirectory,
+    NoHomeDirectory,
 
     #[error("Not logged in")]
     NotLoggedIn,
@@ -359,6 +360,41 @@ impl FromStr for Sync {
 
 /// Creates .to_string() for Sync for --sync option
 impl fmt::Display for Sync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Enumerator used for --version option
+#[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
+enum Version {
+    /// Check if there is a newer version available
+    #[default]
+    Check,
+}
+
+/// is_ functions for the enum
+// impl Version {
+//     pub fn is_check(&self) -> bool {
+//         self == &Self::Check
+//     }
+// }
+
+/// Converting from String to Version for --version option
+impl FromStr for Version {
+    type Err = ();
+    fn from_str(src: &str) -> Result<Version, ()> {
+        return match src.to_lowercase().trim() {
+            "check" => Ok(Version::Check),
+            _ => Err(()),
+        };
+    }
+}
+
+/// Creates .to_string() for Sync for --sync option
+impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
@@ -656,20 +692,16 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     contribute: bool,
 
-    /// Print version number.
-    #[arg(short, long, default_value_t = false)]
-    version: bool,
-
-    /// Check if a newer version exists on crates.io.
-    /// This connects to https://crates.io and gets the version
+    /// Print version number or check if a newer version exists on crates.io.
+    /// If used without an argument such as '--version' it will
+    /// print the version number. If 'check' is added ('--version check')
+    /// then the program connects to https://crates.io and gets the version
     /// number of latest stable release. There is no "calling home"
     /// on every run, only a "check crates.io" upon request. Your
     /// privacy is protected. New release is neither downloaded,
     /// nor installed. It just informs you.
-    #[arg(long,
-        aliases = ["check_version", "check_update"],
-        default_value_t = false, )]
-    version_check: bool,
+    #[arg(short, long, value_name = "CHECK")]
+    version: Option<Option<Version>>,
 
     /// Overwrite the default log level. If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
@@ -1672,8 +1704,7 @@ impl Args {
         Args {
             creds: None,
             contribute: false,
-            version: false,
-            version_check: false,
+            version: None,
             debug: 0u8,
             log_level: LogLevel::None,
             verbose: 0u8,
@@ -1808,7 +1839,7 @@ impl Credentials {
 
     /// Writing the credentials to a file
     fn save(&self, path: &Path) -> Result<(), Error> {
-        fs::create_dir_all(path.parent().ok_or(Error::NoNomeDirectory)?)?;
+        fs::create_dir_all(path.parent().ok_or(Error::NoHomeDirectory)?)?;
         let writer = File::create(path)?;
         serde_json::to_writer_pretty(&writer, self)?;
         Credentials::set_permissions(&writer)?;
@@ -2256,11 +2287,10 @@ fn get_room_default(ap: &mut Args) {
 
 /// A room is either specified with --room or the default from credentials file is used
 /// On error return None.
-fn set_rooms(ap: &mut Args) {
+fn set_rooms(ap: &mut Args, default_room: &str) {
     debug!("set_rooms()");
     if ap.room.is_empty() {
-        let droom = get_room_default_from_credentials(ap.creds.as_ref().unwrap());
-        ap.room.push(droom); // since --room is empty, use default room from credentials
+        ap.room.push(default_room.to_string()); // since --room is empty, use default room from credentials
     }
 }
 
@@ -2275,8 +2305,15 @@ fn set_rooms(ap: &mut Args) {
 
 /// Get the default room id from the credentials file.
 /// On error return None.
-fn get_room_default_from_credentials(credentials: &Credentials) -> String {
-    credentials.room_id.clone()
+async fn get_room_default_from_credentials(client: &Client, credentials: &Credentials) -> String {
+    let mut room = credentials.room_id.clone();
+    convert_to_full_room_id(
+        client,
+        &mut room,
+        credentials.homeserver.host_str().unwrap(),
+    )
+    .await;
+    room
 }
 
 /// A user is either specified with --user or the default from credentials file is used
@@ -2864,8 +2901,7 @@ async fn main() -> Result<(), Error> {
     debug!("Package name is {}", get_pkg_name());
     debug!("Repo is {}", get_pkg_repository());
     debug!("contribute flag is {}", ap.contribute);
-    debug!("version flag is set to {}", ap.version);
-    debug!("version-check flag is set to {}", ap.version_check);
+    debug!("version option is set to {:?}", ap.version);
     debug!("debug flag is {}", ap.debug);
     debug!("log-level option is {:?}", ap.log_level);
     debug!("verbose option is {}", ap.verbose);
@@ -2937,12 +2973,11 @@ async fn main() -> Result<(), Error> {
     debug!("media-mxc-to-http option is {:?}", ap.media_mxc_to_http);
     debug!("mime option is {:?}", ap.mime);
 
-    if ap.version {
-        crate::version();
-    };
-    if ap.version_check {
-        crate::version_check();
-    };
+    match ap.version {
+        None => (),                     // do nothing
+        Some(None) => crate::version(), // print version
+        Some(Some(Version::Check)) => crate::version_check(),
+    }
     if ap.contribute {
         crate::contribute();
     };
@@ -3065,153 +3100,64 @@ async fn main() -> Result<(), Error> {
 
     if let Ok(client) = clientres {
         // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
-        set_rooms(&mut ap); // if no rooms in --room, set rooms to default room from credentials file
+        let default_room =
+            get_room_default_from_credentials(&client, ap.creds.as_ref().unwrap()).await;
+        // Todo: port number is not handled in hostrname, could be matrix.server.org:90
+        let creds = ap.creds.clone().unwrap();
+        let hostname = creds.homeserver.host_str().unwrap(); // matrix.server.org
+        set_rooms(&mut ap, &default_room); // if no rooms in --room, set rooms to default room from credentials file
         set_users(&mut ap); // if no users in --user, set users to default user from credentials file
-        replace_minus_with_default_room(&mut ap.room_leave, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_leave,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_leave.retain(|x| !x.trim().is_empty());
 
-        replace_minus_with_default_room(&mut ap.room_forget, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_forget,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_forget.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(&mut ap.room_leave, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_leave, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        convert_to_full_room_aliases(
-            &mut ap.room_resolve_alias,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        ); // convert short aliases to full aliases
+        replace_minus_with_default_room(&mut ap.room_forget, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_forget, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(
-            &mut ap.room_enable_encryption,
-            &ap.creds.as_ref().unwrap().room_id,
-        ); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_enable_encryption,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_enable_encryption.retain(|x| !x.trim().is_empty());
+        convert_to_full_room_aliases(&mut ap.room_resolve_alias, hostname); // convert short aliases to full aliases
 
-        replace_minus_with_default_room(&mut ap.get_room_info, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.get_room_info,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.get_room_info.retain(|x| !x.trim().is_empty());
+        replace_minus_with_default_room(&mut ap.room_enable_encryption, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_enable_encryption, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_invite, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_invite,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_invite.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(&mut ap.room_join, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_join,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_join.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(&mut ap.room_ban, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_ban,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_ban.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(&mut ap.room_unban, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_unban,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_unban.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(&mut ap.room_kick, &ap.creds.as_ref().unwrap().room_id); // convert '-' to default room
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_kick,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_kick.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
-            &mut ap.room_get_visibility,
-            &ap.creds.as_ref().unwrap().room_id,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.get_room_info, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.get_room_info, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_invite, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_invite, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_join, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_join, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_ban, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_ban, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_unban, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_unban, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_kick, &default_room); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_kick, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_get_visibility, &default_room); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.room_get_visibility); // convert '*' to full list of rooms
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_get_visibility,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_get_visibility.retain(|x| !x.trim().is_empty());
-        replace_minus_with_default_room(
-            &mut ap.room_get_state,
-            &ap.creds.as_ref().unwrap().room_id,
-        ); // convert '-' to default room
+        convert_to_full_room_ids(&client, &mut ap.room_get_visibility, hostname).await; // convert short ids, short aliases and aliases to full room ids
+
+        replace_minus_with_default_room(&mut ap.room_get_state, &default_room); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.room_get_state); // convert '*' to full list of rooms
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.room_get_state,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.room_get_state.retain(|x| !x.trim().is_empty());
+        convert_to_full_room_ids(&client, &mut ap.room_get_state, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(
-            &mut ap.joined_members,
-            &ap.creds.as_ref().unwrap().room_id,
-        ); // convert '-' to default room
+        replace_minus_with_default_room(&mut ap.joined_members, &default_room); // convert '-' to default room
         replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
-        convert_to_full_room_ids(
-            &client,
-            &mut ap.joined_members,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short ids, short aliases and aliases to full room ids
-        ap.joined_members.retain(|x| !x.trim().is_empty());
+        convert_to_full_room_ids(&client, &mut ap.joined_members, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        convert_to_full_user_ids(
-            &mut ap.room_dm_create,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        );
+        convert_to_full_user_ids(&mut ap.room_dm_create, hostname);
         ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
-        convert_to_full_alias_ids(
-            &mut ap.alias,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        );
+        convert_to_full_alias_ids(&mut ap.alias, hostname);
         ap.alias.retain(|x| !x.trim().is_empty());
 
-        convert_to_full_mxc_uris(
-            &mut ap.media_download,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short mxcs to full mxc uris
+        convert_to_full_mxc_uris(&mut ap.media_download, hostname).await; // convert short mxcs to full mxc uris
 
-        convert_to_full_mxc_uris(
-            &mut ap.media_delete,
-            ap.creds.as_ref().unwrap().homeserver.host_str().unwrap(),
-        )
-        .await; // convert short mxcs to full mxc uris
+        convert_to_full_mxc_uris(&mut ap.media_delete, hostname).await; // convert short mxcs to full mxc uris
 
         if ap.tail > 0 {
             // overwrite --listen if user has chosen both
