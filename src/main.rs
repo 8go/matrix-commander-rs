@@ -2858,13 +2858,13 @@ pub(crate) async fn cli_logout(client: &Client, ap: &mut Args) -> Result<(), Err
 async fn main() -> Result<(), Error> {
     let mut ap = Args::parse();
 
-    println!("WARNING: Incompatible change between version v0.1.20 and v0.1.21.");
-    println!("If your credentials file was created with Python, don't do anything.");
-    println!("If your credentials file was created with Rust, follow either Option 1 or Option 2.");
-    println!("Option 1: Please edit your Rust-created credentials file (usually at $HOME/.local/share/matrix-commander-rs/credentials.json).");
-    println!("Replace \"room_default\" with \"room_id\".");
-    println!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");
-    println!("You can do this by running first with argument \"--logout\" and then a second time with argument \"--login\".");
+    eprintln!("WARNING: Incompatible change between version v0.1.20 and v0.1.21.");
+    eprintln!("If your credentials file was created with Python, don't do anything.");
+    eprintln!("If your credentials file was created with Rust, follow either Option 1 or Option 2.");
+    eprintln!("Option 1: Please edit your Rust-created credentials file (usually at $HOME/.local/share/matrix-commander-rs/credentials.json).");
+    eprintln!("Replace \"room_default\" with \"room_id\".");
+    eprintln!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");
+    eprintln!("You can do this by running first with argument \"--logout\" and then a second time with argument \"--login\".");
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
