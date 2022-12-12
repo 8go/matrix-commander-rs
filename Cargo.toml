@@ -35,7 +35,7 @@ tokio = { version = "1.22", default-features = false, features = [
 atty = "0.2"
 mime = "0.3"
 mime_guess = "2.0"
-update-informer = "0.5"
+update-informer = "0.6"
 json = "0.12.4"
 
 
