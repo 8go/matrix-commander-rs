@@ -730,6 +730,7 @@ pub struct Args {
     #[arg(long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
     verbose: u8,
 
+    // Todo
     /// Disable encryption for a specific action. By default encryption is
     /// turned on wherever possible. E.g. rooms created will be created
     /// by default with encryption enabled. To turn encryption off for a
@@ -967,6 +968,20 @@ pub struct Args {
     /// i.e. -m 'start' '-' 'end'
     /// will send 3 messages out of which the second one is read from stdin.
     /// The stdin indicator '-' may appear only once overall in all arguments.
+    /// '-' reads everything that is in the pipe in one swoop and
+    /// sends a single message.
+    /// Similar to '-', another shortcut character
+    /// is '_'. The special character '_' is used for
+    /// streaming data via a pipe on stdin. With '_' the stdin
+    /// pipe is read line-by-line and each line is treated as
+    /// a separate message and sent right away. The program
+    /// waits for pipe input until the pipe is closed. E.g.
+    /// Imagine a tool that generates output sporadically
+    /// 24x7. It can be piped, i.e. streamed, into matrix-
+    /// commander, and matrix-commander stays active, sending
+    /// all input instantly. If you want to send the literal
+    /// letter '_' then escape it and send '\_'. '_' can be
+    /// used only once. And either '-' or '_' can be used.
     #[arg(short, long, num_args(0..), )]
     message: Vec<String>,
 
@@ -2449,6 +2464,16 @@ pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> 
     crate::verify(client).await
 }
 
+fn trim_newline(s: &mut String) -> &mut String {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+    return s;
+}
+
 /// Handle the --message CLI argument
 pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Message chosen.");
@@ -2479,8 +2504,54 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
                 io::stdin().read_to_string(&mut line)?;
             }
             line
+        } else if msg == r"_" {
+            let mut eof = false;
+            while !eof {
+                let mut line = String::new();
+                match io::stdin().read_line(&mut line) {
+                    // If this function returns Ok(0), the stream has reached EOF.
+                    Ok(n) => {
+                        if n == 0 {
+                            eof = true;
+                            debug!("Reached EOF of pipe stream.");
+                        } else {
+                            debug!(
+                                "Read {n} bytes containing \"{}\\n\" from pipe stream.",
+                                trim_newline(&mut line.clone())
+                            );
+                            match message(
+                                client,
+                                &[line],
+                                &ap.room,
+                                ap.code,
+                                ap.markdown,
+                                ap.notice,
+                                ap.emote,
+                            )
+                            .await
+                            {
+                                Ok(()) => {
+                                    debug!("message from pipe stream sent successfully");
+                                }
+                                Err(ref e) => {
+                                    error!(
+                                        "Error: sending message from pipe stream reported {}",
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(ref e) => {
+                        error!("Error: reading from pipe stream reported {}", e);
+                    }
+                }
+            }
+            "".to_owned()
         } else if msg == r"\-" {
             "-".to_string()
+        } else if msg == r"\_" {
+            "_".to_string()
         } else if msg == r"\-\-" {
             "--".to_string()
         } else if msg == r"\-\-\-" {
@@ -2488,7 +2559,9 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
         } else {
             msg.to_string()
         };
-        fmsgs.push(fmsg);
+        if !fmsg.is_empty() {
+            fmsgs.push(fmsg);
+        }
     }
     if fmsgs.is_empty() {
         return Ok(()); // nothing to do
@@ -2860,7 +2933,9 @@ async fn main() -> Result<(), Error> {
 
     eprintln!("WARNING: Incompatible change between version v0.1.20 and v0.1.21.");
     eprintln!("If your credentials file was created with Python, don't do anything.");
-    eprintln!("If your credentials file was created with Rust, follow either Option 1 or Option 2.");
+    eprintln!(
+        "If your credentials file was created with Rust, follow either Option 1 or Option 2."
+    );
     eprintln!("Option 1: Please edit your Rust-created credentials file (usually at $HOME/.local/share/matrix-commander-rs/credentials.json).");
     eprintln!("Replace \"room_default\" with \"room_id\".");
     eprintln!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");

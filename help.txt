@@ -196,7 +196,18 @@ Options:
           Keyboard input is limited to one line. The stdin indicator '-' may
           appear in any position, i.e. -m 'start' '-' 'end' will send 3
           messages out of which the second one is read from stdin. The stdin
-          indicator '-' may appear only once overall in all arguments
+          indicator '-' may appear only once overall in all arguments. '-'
+          reads everything that is in the pipe in one swoop and sends a single
+          message. Similar to '-', another shortcut character is '_'. The
+          special character '_' is used for streaming data via a pipe on stdin.
+          With '_' the stdin pipe is read line-by-line and each line is treated
+          as a separate message and sent right away. The program waits for pipe
+          input until the pipe is closed. E.g. Imagine a tool that generates
+          output sporadically 24x7. It can be piped, i.e. streamed, into
+          matrix- commander, and matrix-commander stays active, sending all
+          input instantly. If you want to send the literal letter '_' then
+          escape it and send '\_'. '_' can be used only once. And either '-' or
+          '_' can be used
       --markdown
           There are 3 message formats for '--message'. Plain text, MarkDown,
           and Code. By default, if no command line options are specified,
