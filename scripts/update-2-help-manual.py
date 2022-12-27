@@ -7,21 +7,21 @@ from datetime import datetime
 from os import R_OK, access
 from os.path import isfile
 
-# runs program (cargo run) to create the help.txt file
+# runs program (cargo run) to create the help.manual.txt file
 #
 # replace this pattern:
 # ```
 # Usage: ...
 # ```
-# in the README.md file with the help.txt file
+# in the README.md file with the help.manual.txt file
 
 # datetime object containing current date and time
 now = datetime.now()
 date_string = now.strftime("%Y%m%d-%H%M%S")
 
-helpfile = "help.txt"
+helpfile = "help.manual.txt"
 filename = "README.md"
-# create_help_script = "scripts/create-help.sh"
+# create_help_script = "scripts/create-help-manual.sh"
 
 if isfile(filename) and access(filename, R_OK):
     # so that subprocess can execute it without PATH
@@ -42,11 +42,11 @@ shutil.copy2(filename, backupfile)
 
 with open(helpfile, "w") as f:
     # tty size defaults to 80 columns
-    bashCmd = ["cargo", "run", "--", "-h"]
+    bashCmd = ["cargo", "run", "--", "--manual"]
     process = subprocess.Popen(bashCmd, stdout=f)
     _, error = process.communicate()
     if error:
-        print("Error: Runnung cargo failed. Not enough disk space?")
+        print("Error: Running cargo failed. Not enough disk space?")
         print(error)
         sys.exit(1)
 

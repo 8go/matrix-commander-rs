@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+# vipe (from moreutils) must be installed
+type vipe >/dev/null 2>&1 || {
+    echo "This script requires that you install \"vipe\" from the packge \"moreutils\"."
+    echo "Read https://www.putorius.net/moreutils.html for installation instructions."
+    echo "As an alternative you could also install \"vipe.sh\" from https://github.com/0mp/vipe.sh/blob/master/vipe.sh."
+    exit 0
+}
+
+# fzf must be installed
+type fzf >/dev/null 2>&1 || {
+    echo "This script requires that you install \"fzf\"."
+    echo "Read https://github.com/junegunn/fzf#installation for installation instructions."
+    exit 0
+}
+
+EXE=matrix-commander-rs
+
+# Instruction on how to use fzf
+echo "Set env variables EDITOR and VISUAL to change the editor being used."
+echo "Use tab to select the correct arguments in the correct order."
+sleep 1
+# generate the short command options list
+# run it throu fzf, run it through editor, execute it
+# shellcheck disable=SC2046 # quoting will
+PATH=".:./target/release/:./target/debug/:$PATH" $EXE --usage |
+    sed '1,/^Options:/d' | 
+    sed "s/^  -., /      /g" |
+    sed "s/^      //g" |
+    sed "s/^$//g" | sort |
+    echo -n "$EXE $(fzf -m)" | xargs | vipe | /bin/bash
+
+# to force a specific editor do this: e.g. forcing to use "nano"
+# PATH=".:./target/release/:./target/debug/:$PATH" $EXE --usage |
+#     sed '1,/^Options:/d' | sed "s/^  -., /      /g" | sed "s/^      //g" | sed "s/^$//g" | sort |
+#     echo -n "$EXE $(fzf -m)" | EDITOR=nano VISUAL=nano vipe | /bin/bash

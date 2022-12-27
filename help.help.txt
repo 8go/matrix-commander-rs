@@ -1,0 +1,166 @@
+Welcome to "matrix-commander-rs", a Matrix CLI client. ─── On the first run use
+--login to log in, to authenticate. On the second run we suggest to use
+--verify to get verified. Emoji verification is built-in and can be used to
+verify devices. Or combine both --login and --verify in the first run. On
+further runs "matrix-commander-rs" implements a simple Matrix CLI client that
+can send messages or files, listen to messages, operate on rooms, etc.  ───
+─── This project is currently only a vision. The Python package
+"matrix-commander" exists. The vision is to have a compatible program in Rust.
+I cannot do it myself, but I can coordinate and merge your pull requests. Have
+a look at the repo "https://github.com/8go/matrix-commander-rs/". Please help!
+Please contribute code to make this vision a reality, and to one day have a
+feature-rich "matrix-commander-rs" crate. Safe!
+Usage: matrix-commander-rs [OPTIONS]
+Options:
+      --contribute
+          Please contribute
+  -v, --version [<CHECK>]
+          Print version number or check if a newer version exists on crates.io.
+      --usage
+          Prints a very short help summary.
+  -h, --help
+          Prints short help displaying about one line per argument.
+      --manual
+          Prints long help.
+      --readme
+          Prints README.md file, the documenation in Markdown.
+  -d, --debug...
+          Overwrite the default log level.
+      --log-level <LOG_LEVEL>
+          Set the log level by overwriting the default log level.
+      --verbose...
+          Set the verbosity level.
+      --plain
+          Disable encryption for a specific action.
+  -c, --credentials <PATH_TO_FILE>
+          Specify path to a file containing credentials.
+  -s, --store <PATH_TO_DIRECTORY>
+          Specify a path to a directory to be used as "store" for encrypted
+          messaging.
+      --login <LOGIN_METHOD>
+          Login to and authenticate with the Matrix homeserver.
+      --verify <VERIFICATION_METHOD>
+          Perform account verification.
+      --logout <DEVICE>
+          Logout this or all devices from the Matrix homeserver.
+      --homeserver <HOMESERVER>
+          Specify a homeserver for use by certain actions.
+      --user-login <USER_LOGIN>
+          Optional argument to specify the user for --login.
+      --password <PASSWORD>
+          Specify a password for use by certain actions.
+      --device <DEVICE>
+          Specify a device name, for use by certain actions.
+      --room-default <ROOM_DEFAULT>
+          Optionally specify a room as the default room for future actions.
+      --devices
+          Print the list of devices.
+      --timeout <TIMEOUT>
+          Set the timeout of the calls to the Matrix server.
+  -m, --message [<MESSAGE>...]
+          Send one or more messages.
+      --markdown
+          Specify the message format as MarkDown.
+      --code
+          SPecify the message format as Code.
+  -r, --room [<ROOM>...]
+          Optionally specify one or multiple rooms.
+  -f, --file [<FILE>...]
+          Send one or multiple files (e.g. PDF, DOC, MP4).
+      --notice
+          Specify the message type as Notice.
+      --emote
+          Specify the message type as Emote.
+      --sync <SYNC_TYPE>
+          Select synchronization choice.
+  -l, --listen <LISTEN_TYPE>
+          Listen to messages.
+      --tail <TAIL>
+          Get the last messages.
+  -y, --listen-self
+          Get your own messages.
+      --whoami
+          Print your user name.
+  -o, --output <OUTPUT_FORMAT>
+          Specify the output format.
+      --file-name [<FILE_NAME>...]
+          Specify one or multiple file names for some actions.
+      --get-room-info [<ROOM>...]
+          Get room information.
+      --room-create [<LOCAL_ALIAS>...]
+          Create one or multiple rooms.
+      --room-dm-create [<USER>...]
+          Create one or multiple direct messaging (DM) rooms for given users.
+      --room-leave [<ROOM>...]
+          Leave this room or these rooms.
+      --room-forget [<ROOM>...]
+          Forget one or multiple rooms.
+      --room-invite [<ROOM>...]
+          Invite one ore more users to join one or more rooms.
+      --room-join [<ROOM>...]
+          Join one or multiple rooms.
+      --room-ban [<ROOM>...]
+          Ban one ore more users from one or more rooms.
+      --room-unban [<ROOM>...]
+          Unban one ore more users from one or more rooms.
+      --room-kick [<ROOM>...]
+          Kick one ore more users from one or more rooms.
+      --room-resolve-alias [<ALIAS>...]
+          Resolves room aliases to room ids.
+      --room-enable-encryption [<ROOM>...]
+          Enable encryption for one or multiple rooms.
+      --alias [<ALIAS>...]
+          Provide one or more aliases.
+      --name [<NAME>...]
+          Specify one or multiple names.
+      --topic [<TOPIC>...]
+          Specify one or multiple topics.
+      --rooms
+          Print the list of past and current rooms.
+      --invited-rooms
+          Print the list of invited rooms.
+      --joined-rooms
+          Print the list of joined rooms.
+      --left-rooms
+          Print the list of left rooms.
+      --room-get-visibility [<ROOM>...]
+          Get the visibility of one or more rooms.
+      --room-get-state [<ROOM>...]
+          Get the state of one or more rooms.
+      --joined-members [<ROOM>...]
+          Print the list of joined members for one or multiple rooms.
+      --delete-device [<DEVICE>...]
+          Delete one or multiple devices.
+  -u, --user [<USER>...]
+          Specify one or multiple users.
+      --get-avatar <FILE>
+          Get your own avatar.
+      --set-avatar <FILE>
+          Set your own avatar.
+      --get-avatar-url
+          Get your own avatar URL.
+      --set-avatar-url <MAX_URI>
+          Set your own avatar URL.
+      --unset-avatar-url
+          Remove your own avatar URL.
+      --get-display-name
+          Get your own display name.
+      --set-display-name <NAME>
+          Set your own display name.
+      --get-profile
+          Get your own profile.
+      --media-upload [<FILE>...]
+          Upload one or multiple files (e.g. PDF, DOC, MP4) to the homeserver
+          content repository.
+      --media-download [<MXC_URI>...]
+          Download one or multiple files from the homeserver content
+          repository.
+      --mime [<MIME_TYPE>...]
+          Specify the Mime type of certain input files.
+      --media-delete [<MXC_URI>...]
+          Delete one or multiple objects (e.g. files) from the content
+          repository.
+      --media-mxc-to-http [<MXC_URI>...]
+          Convert URIs to HTTP URLs.
+PS: Also have a look at scripts/matrix-commander-rs-tui.
+Use --manual to get more detailed help information.

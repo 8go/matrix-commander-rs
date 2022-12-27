@@ -38,9 +38,10 @@
 // #![allow(unused_imports)] // Todo
 
 use atty::Stream;
-use clap::{ColorChoice, Parser, ValueEnum};
+use clap::{ColorChoice, CommandFactory, Parser, ValueEnum};
 use directories::ProjectDirs;
 // use mime::Mime;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::{self, Debug};
@@ -110,6 +111,8 @@ const CREDENTIALS_FILE_DEFAULT: &str = "credentials.json";
 const SLEDSTORE_DIR_DEFAULT: &str = "sledstore/";
 /// default timeouts for waiting for the Matrix server, in seconds
 const TIMEOUT_DEFAULT: u64 = 60;
+/// URL for README.md file downloaded for --readme
+const URL_README: &str = "https://raw.githubusercontent.com/8go/matrix-commander-rs/main/README.md";
 
 /// The enumerator for Errors
 #[derive(Error, Debug)]
@@ -674,12 +677,14 @@ impl fmt::Display for Output {
 /// and to one day have a feature-rich "matrix-commander-rs" crate.
 /// Safe!
 #[derive(Clone, Debug, Parser)]
-#[command(author, version, next_line_help = true,
+#[command(author, version,
+    next_line_help = true,
     bin_name = get_prog_without_ext(),
     color = ColorChoice::Always,
     term_width = 79,
-    after_help = "",
+    after_help = "PS: Also have a look at scripts/matrix-commander-rs-tui.",
     disable_version_flag = true,
+    disable_help_flag = true,
 )]
 pub struct Args {
     // This is an internal field used to store credentials.
@@ -693,6 +698,7 @@ pub struct Args {
     contribute: bool,
 
     /// Print version number or check if a newer version exists on crates.io.
+    /// Details::
     /// If used without an argument such as '--version' it will
     /// print the version number. If 'check' is added ('--version check')
     /// then the program connects to https://crates.io and gets the version
@@ -703,7 +709,33 @@ pub struct Args {
     #[arg(short, long, value_name = "CHECK")]
     version: Option<Option<Version>>,
 
-    /// Overwrite the default log level. If not used, then the default
+    /// Prints a very short help summary.
+    /// Details:: See also --help, --manual and --readme.
+    #[arg(long)]
+    usage: bool,
+
+    /// Prints short help displaying about one line per argument.
+    /// Details:: See also --usage, --manual and --readme.
+    #[arg(short, long)]
+    help: bool,
+
+    /// Prints long help.
+    /// Details:: This is like a man page.
+    /// See also --usage, --help and --readme.
+    #[arg(long)]
+    manual: bool,
+
+    /// Prints README.md file, the documenation in Markdown.
+    /// Details:: The README.md file will be downloaded from
+    /// Github. It is a Markdown file and it is best viewed with a
+    /// Markdown viewer.
+    /// See also --usage, --help and --manual.
+    #[arg(long)]
+    readme: bool,
+
+    /// Overwrite the default log level.
+    /// Details::
+    /// If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
     /// If used, log level will be set to 'DEBUG' and debugging information
     /// will be printed.
@@ -714,6 +746,7 @@ pub struct Args {
     debug: u8,
 
     /// Set the log level by overwriting the default log level.
+    /// Details::
     /// If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
     /// See also '--debug' and '--verbose'.
@@ -722,7 +755,9 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = LogLevel::default(), ignore_case = true, )]
     log_level: LogLevel,
 
-    /// Set the verbosity level. If not used, then verbosity will be
+    /// Set the verbosity level.
+    /// Details::
+    /// If not used, then verbosity will be
     /// set to low. If used once, verbosity will be high.
     /// If used more than once, verbosity will be very high.
     /// Verbosity only affects the debug information.
@@ -731,7 +766,9 @@ pub struct Args {
     verbose: u8,
 
     // Todo
-    /// Disable encryption for a specific action. By default encryption is
+    /// Disable encryption for a specific action.
+    /// Details::
+    /// By default encryption is
     /// turned on wherever possible. E.g. rooms created will be created
     /// by default with encryption enabled. To turn encryption off for a
     /// specific action use --plain. Currently --plain is supported by
@@ -740,7 +777,8 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     plain: bool,
 
-    /// Path to a file containing credentials.
+    /// Specify path to a file containing credentials.
+    /// Details::
     /// At login (--login), information about homeserver, user, room
     /// id, etc. will be written to a credentials file. By
     /// default, this file is "credentials.json". On further
@@ -757,8 +795,9 @@ pub struct Args {
         )]
     credentials: PathBuf,
 
-    /// Path to a directory to be used as "store" for encrypted
+    /// Specify a path to a directory to be used as "store" for encrypted
     /// messaging.
+    /// Details::
     /// Since encryption is always enabled, a store is always
     /// needed. If this option is provided, the provided
     /// directory name will be used as persistent storage
@@ -775,6 +814,7 @@ pub struct Args {
     store: PathBuf,
 
     /// Login to and authenticate with the Matrix homeserver.
+    /// Details::
     /// This requires exactly one argument, the login method.
     /// Currently two choices are offered: 'password' and 'SSO'.
     /// Provide one of these methods.
@@ -806,7 +846,9 @@ pub struct Args {
         default_value_t = Login::default(), ignore_case = true, )]
     login: Login,
 
-    /// Perform verification. By default, no
+    /// Perform account verification.
+    /// Details::
+    /// By default, no
     /// verification is performed.
     /// Verification is currently only offered via Emojis.
     /// Hence, specify '--verify emoji'.
@@ -847,6 +889,7 @@ pub struct Args {
     verify: Verify,
 
     /// Logout this or all devices from the Matrix homeserver.
+    /// Details::
     /// This requires exactly one argument.
     /// Two choices are offered: 'me' and 'all'.
     /// Provide one of these choices.
@@ -871,6 +914,7 @@ pub struct Args {
     logout: Logout,
 
     /// Specify a homeserver for use by certain actions.
+    /// Details::
     /// It is an optional argument.
     /// By default --homeserver is ignored and not used.
     /// It is used by '--login' action.
@@ -879,6 +923,7 @@ pub struct Args {
     homeserver: Option<Url>,
 
     /// Optional argument to specify the user for --login.
+    /// Details::
     /// This gives the otion to specify the user id for login.
     /// For '--login sso' the --user-login is not needed as user id can be
     /// obtained from server via SSO. For '--login password', if not
@@ -891,6 +936,7 @@ pub struct Args {
     user_login: Option<String>,
 
     /// Specify a password for use by certain actions.
+    /// Details::
     /// It is an optional argument.
     /// By default --password is ignored and not used.
     /// It is used by '--login password' and '--delete-device'
@@ -901,6 +947,7 @@ pub struct Args {
     password: Option<String>,
 
     /// Specify a device name, for use by certain actions.
+    /// Details::
     /// It is an optional argument.
     /// By default --device is ignored and not used.
     /// It is used by '--login' action.
@@ -914,7 +961,9 @@ pub struct Args {
     device: Option<String>,
 
     /// Optionally specify a room as the
-    /// default room for future actions. If not specified for --login, it
+    /// default room for future actions.
+    /// Details::
+    /// If not specified for --login, it
     /// will be queried via the keyboard. --login stores the specified room
     /// as default room in your credentials file. This option is only used
     /// in combination with --login. A default room is needed. Specify a
@@ -922,19 +971,24 @@ pub struct Args {
     #[arg(long)]
     room_default: Option<String>,
 
-    /// Print the list of devices. All device of this
+    /// Print the list of devices.
+    /// Details::
+    /// All device of this
     /// account will be printed, one device per line.
     /// Don't confuse this option with --device.
     #[arg(long)]
     devices: bool,
 
     /// Set the timeout of the calls to the Matrix server.
+    /// Details::
     /// By default they are set to 60 seconds.
     /// Specify the timeout in seconds. Use 0 for infinite timeout.
     #[arg(long, default_value_t = TIMEOUT_DEFAULT)]
     timeout: u64,
 
-    /// Send one or more messages. Message data must not be binary data, it
+    /// Send one or more messages.
+    /// Details::
+    /// Message data must not be binary data, it
     /// must be text.
     // If no '-m' is used and no other conflicting
     // arguments are provided, and information is piped into the program,
@@ -985,6 +1039,8 @@ pub struct Args {
     #[arg(short, long, num_args(0..), )]
     message: Vec<String>,
 
+    /// Specify the message format as MarkDown.
+    /// Details::
     /// There are 3 message formats for '--message'.
     /// Plain text, MarkDown, and Code. By default, if no
     /// command line options are specified, 'plain text'
@@ -996,6 +1052,8 @@ pub struct Args {
     #[arg(long)]
     markdown: bool,
 
+    /// SPecify the message format as Code.
+    /// Details::
     /// There are 3 message formats for '--message'.
     /// Plain text, MarkDown, and Code. By default, if no
     /// command line options are specified, 'plain text'
@@ -1007,7 +1065,9 @@ pub struct Args {
     #[arg(long)]
     code: bool,
 
-    /// Optionally specify one or multiple rooms via room ids or
+    /// Optionally specify one or multiple rooms.
+    /// Details::
+    /// Specify rooms via room ids or
     /// room aliases. '--room' is used by
     /// various options like '--message', '--file', some
     /// variants of '--listen', '--delete-device', etc.
@@ -1038,6 +1098,7 @@ pub struct Args {
     room: Vec<String>,
 
     /// Send one or multiple files (e.g. PDF, DOC, MP4).
+    /// Details::
     /// First files are sent,
     /// then text messages are sent.
     /// If you want to feed a file into "matrix-commander-rs"
@@ -1053,7 +1114,10 @@ pub struct Args {
     /// Furthermore, '-' can only be used once.
     #[arg(short, long, num_args(0..), )]
     file: Vec<String>,
+
     // Todo: change this Vec<String> to Vec<PathBuf> for --file
+    /// Specify the message type as Notice.
+    /// Details::
     /// There are 3 message types for '--message'.
     /// Text, Notice, and Emote. By default, if no
     /// command line options are specified, 'Text'
@@ -1065,6 +1129,8 @@ pub struct Args {
     #[arg(long)]
     notice: bool,
 
+    /// Specify the message type as Emote.
+    /// Details::
     /// There are 3 message types for '--message'.
     /// Text, Notice, and Emote. By default, if no
     /// command line options are specified, 'Text'
@@ -1076,6 +1142,8 @@ pub struct Args {
     #[arg(long)]
     emote: bool,
 
+    /// Select synchronization choice.
+    /// Details::
     /// This option decides on whether the program
     /// synchronizes the state with the server before a 'send' action.
     /// Currently two choices are offered: 'full' and 'off'.
@@ -1093,6 +1161,8 @@ pub struct Args {
         default_value_t = Sync::default(), ignore_case = true, )]
     sync: Sync,
 
+    /// Listen to messages.
+    /// Details::
     /// The '--listen' option takes one argument. There are
     /// several choices: 'never', 'once', 'forever', 'tail',
     /// and 'all'. By default, --listen is set to 'never'. So,
@@ -1126,6 +1196,8 @@ pub struct Args {
         default_value_t = Listen::default(), ignore_case = true, )]
     listen: Listen,
 
+    /// Get the last messages.
+    /// Details::
     /// The '--tail' option reads and prints up to the last N
     /// messages from the specified rooms, then quits. It
     /// takes one argument, an integer, which we call N here.
@@ -1141,18 +1213,24 @@ pub struct Args {
     #[arg(long, default_value_t = 0u64)]
     tail: u64,
 
+    /// Get your own messages.
+    /// Details::
     /// If set and listening, then program will listen to and
     /// print also the messages sent by its own user. By
     /// default messages from oneself are not printed.
     #[arg(short = 'y', long)]
     listen_self: bool,
 
+    /// Print your user name.
+    /// Details::
     /// Print the user id used by "matrix-commander-rs" (itself).
     /// One can get this information also by looking at the
     /// credentials file.
     #[arg(long)]
     whoami: bool,
 
+    /// Specify the output format.
+    /// Details::
     /// This option decides on how the output is presented.
     /// Currently offered choices are: 'text', 'json', 'json-max',
     /// and 'json-spec'. Provide one of these choices.
@@ -1189,6 +1267,7 @@ pub struct Args {
     output: Output,
 
     /// Specify one or multiple file names for some actions.
+    /// Details::
     /// This is an optional argument. Use this option in
     /// combination with options like '--file'.
     // or '--download'
@@ -1198,6 +1277,8 @@ pub struct Args {
     #[arg(long, num_args(0..), )]
     file_name: Vec<PathBuf>,
 
+    /// Get room information.
+    /// Details::
     /// Get the room information such as room display name,
     /// room alias, room creator, etc. for one or multiple
     /// specified rooms. The included room 'display name' is
@@ -1232,7 +1313,9 @@ pub struct Args {
         alias = "room-get-info")]
     get_room_info: Vec<String>,
 
-    /// Create one or multiple rooms. One or multiple room
+    /// Create one or multiple rooms.
+    /// Details::
+    /// One or multiple room
     /// aliases can be specified. For each alias specified a
     /// room will be created. For each created room one line
     /// with room id, alias, name and topic will be printed
@@ -1254,7 +1337,9 @@ pub struct Args {
     room_create: Vec<String>,
 
     /// Create one or multiple direct messaging (DM) rooms
-    /// for given users. One or multiple
+    /// for given users.
+    /// Details::
+    /// One or multiple
     /// users can be specified. For each user specified a
     /// DM room will be created. For each created DM room one line
     /// with room id, alias, name and topic will be printed
@@ -1273,7 +1358,9 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "USER", )]
     room_dm_create: Vec<String>,
 
-    /// Leave this room or these rooms. One or multiple room
+    /// Leave this room or these rooms.
+    /// Details::
+    /// One or multiple room
     /// aliases can be specified. The room (or multiple ones)
     /// provided in the arguments will be left.
     /// You can run both commands '--room-leave' and
@@ -1281,6 +1368,8 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_leave: Vec<String>,
 
+    /// Forget one or multiple rooms.
+    /// Details::
     /// After leaving a room you should (most likely) forget
     /// the room. Forgetting a room removes the users' room
     /// history. One or multiple room aliases can be
@@ -1295,6 +1384,7 @@ pub struct Args {
     room_forget: Vec<String>,
 
     /// Invite one ore more users to join one or more rooms.
+    /// Details::
     /// Specify the user(s) as arguments to --user. Specify
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-invite. The user must have
@@ -1304,7 +1394,9 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_invite: Vec<String>,
 
-    /// Join this room or these rooms. One or multiple room
+    /// Join one or multiple rooms.
+    /// Details::
+    /// One or multiple room
     /// aliases can be specified. The room (or multiple ones)
     /// provided in the arguments will be joined. The user
     /// must have permissions to join these rooms.
@@ -1315,7 +1407,9 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_join: Vec<String>,
 
-    /// Ban one ore more users from one or more rooms. Specify
+    /// Ban one ore more users from one or more rooms.
+    /// Details::
+    /// Specify
     /// the user(s) as arguments to --user. Specify the rooms
     /// as arguments to this option, i.e. as arguments to
     /// --room-ban. The user must have permissions to ban
@@ -1326,6 +1420,7 @@ pub struct Args {
     room_ban: Vec<String>,
 
     /// Unban one ore more users from one or more rooms.
+    /// Details::
     /// Specify the user(s) as arguments to --user. Specify
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-unban. The user must have
@@ -1339,6 +1434,7 @@ pub struct Args {
     room_unban: Vec<String>,
 
     /// Kick one ore more users from one or more rooms.
+    /// Details::
     /// Specify the user(s) as arguments to --user. Specify
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-kick. The user must have
@@ -1348,6 +1444,8 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_kick: Vec<String>,
 
+    /// Resolves room aliases to room ids.
+    /// Details::
     /// Resolves a room alias to the corresponding room id, or
     /// multiple room aliases to their corresponding room ids.
     /// Provide one or multiple room aliases. A room alias
@@ -1367,6 +1465,8 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ALIAS", )]
     room_resolve_alias: Vec<String>,
 
+    /// Enable encryption for one or multiple rooms.
+    /// Details::
     /// Provide one or more room ids. For each room given
     /// encryption will be enabled. You must be member of the
     /// room in order to be able to enable encryption. Use
@@ -1376,7 +1476,9 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_enable_encryption: Vec<String>,
 
-    /// Provide one or more aliases. --alias is currently used in
+    /// Provide one or more aliases.
+    /// Details::
+    /// --alias is currently used in
     /// combination with --room-dm-create. It is ignored otherwise.
     /// Canonical short alias look like 'SomeRoomAlias'.
     /// Short aliases look like '#SomeRoomAlias'. And full aliases
@@ -1387,21 +1489,27 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "ALIAS", )]
     alias: Vec<String>,
 
-    /// Specify one or multiple names. This option is only
+    /// Specify one or multiple names.
+    /// Details::
+    /// This option is only
     /// meaningful in combination with option --room-create.
     /// This option --name specifies the names to be used with
     /// the command --room-create.
     #[arg(long, num_args(0..), )]
     name: Vec<String>,
 
-    /// Specify one or multiple topics. This option is only
+    /// Specify one or multiple topics.
+    /// Details::
+    /// This option is only
     /// meaningful in combination with option --room-create.
     /// This option --topic specifies the topics to be used
     /// with the command --room-create.
     #[arg(long, num_args(0..), )]
     topic: Vec<String>,
 
-    /// Print the list of past and current rooms. All rooms that you
+    /// Print the list of past and current rooms.
+    /// Details::
+    /// All rooms that you
     /// are currently a member of (joined rooms), that you had been a
     /// member of in the past (left rooms), and rooms that you have
     /// been invited to (invited rooms) will be printed,
@@ -1410,22 +1518,30 @@ pub struct Args {
     #[arg(long)]
     rooms: bool,
 
-    /// Print the list of invited rooms. All rooms that you are
+    /// Print the list of invited rooms.
+    /// Details::
+    /// All rooms that you are
     /// currently invited to will be printed, one room per line.
     #[arg(long)]
     invited_rooms: bool,
 
-    /// Print the list of joined rooms. All rooms that you are
+    /// Print the list of joined rooms.
+    /// Details::
+    /// All rooms that you are
     /// currently a member of will be printed, one room per line.
     #[arg(long)]
     joined_rooms: bool,
 
-    /// Print the list of left rooms. All rooms that you have
+    /// Print the list of left rooms.
+    /// Details::
+    /// All rooms that you have
     /// left in the past will be printed, one room per line.
     #[arg(long)]
     left_rooms: bool,
 
-    /// Get the visibility of one or more rooms. Provide one
+    /// Get the visibility of one or more rooms.
+    /// Details::
+    /// Provide one
     /// or more room ids as arguments. If the shortcut '-' is
     /// used, then the default room of 'matrix-commander-rs' (as
     /// found in credentials file) will be used. The shortcut
@@ -1439,7 +1555,9 @@ pub struct Args {
         value_name = "ROOM", )]
     room_get_visibility: Vec<String>,
 
-    /// Get the state of one or more rooms. Provide one or
+    /// Get the state of one or more rooms.
+    /// Details::
+    /// Provide one or
     /// more room ids as arguments. If the shortcut '-' is
     /// used, then the default room of 'matrix-commander-rs' (as
     /// found in credentials file) will be used. The shortcut
@@ -1457,14 +1575,18 @@ pub struct Args {
     room_get_state: Vec<String>,
 
     /// Print the list of joined members for one or multiple
-    /// rooms. If you want to print the joined members of all
+    /// rooms.
+    /// Details::
+    /// If you want to print the joined members of all
     /// rooms that you are member of, then use the special
     /// shortcut character '*'. If you want the members of
     /// the pre-configured default room, use shortcut '-'.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     joined_members: Vec<String>,
 
-    /// Delete one or multiple devices. By default devices
+    /// Delete one or multiple devices.
+    /// Details::
+    /// By default devices
     /// belonging to itself, i.e. belonging to
     /// "matrix-commander-rs", will be deleted.
     /// If you want to delete the one device
@@ -1502,7 +1624,9 @@ pub struct Args {
         value_name = "DEVICE", )]
     delete_device: Vec<String>,
 
-    /// Specify one or multiple users. This option is
+    /// Specify one or multiple users.
+    /// Details::
+    /// This option is
     /// meaningful in combination with
     /// a) room actions like
     /// --room-invite, --room-ban, --room-unban, etc. and
@@ -1552,6 +1676,8 @@ pub struct Args {
     #[arg(short, long, num_args(0..), )]
     user: Vec<String>,
 
+    /// Get your own avatar.
+    /// Details::
     /// Get the avatar of itself, i.e. the
     /// 'matrix-commander-rs' user account. Spefify a
     /// file optionally with path to store the image.
@@ -1559,6 +1685,8 @@ pub struct Args {
     #[arg(long, value_name = "FILE")]
     get_avatar: Option<PathBuf>,
 
+    /// Set your own avatar.
+    /// Details::
     /// Set, i.e. upload, an image to be used as avatar for
     /// 'matrix-commander-rs' user account. Spefify a
     /// file optionally with path with the image. If the MIME
@@ -1570,11 +1698,15 @@ pub struct Args {
     #[arg(long, alias = "upload-avatar", value_name = "FILE")]
     set_avatar: Option<PathBuf>,
 
+    /// Get your own avatar URL.
+    /// Details::
     /// Get the MXC URI of the avatar of itself, i.e. the
     /// 'matrix-commander-rs' user account.
     #[arg(long)]
     get_avatar_url: bool,
 
+    /// Set your own avatar URL.
+    /// Details::
     /// Set the avatar MXC URI of the URL to be used as avatar for
     /// the 'matrix-commander-rs' user account. Spefify a
     /// MXC URI.
@@ -1582,23 +1714,31 @@ pub struct Args {
     #[arg(long, alias = "upload-avatar-url", value_name = "MAX_URI")]
     set_avatar_url: Option<OwnedMxcUri>,
 
+    /// Remove your own avatar URL.
+    /// Details::
     /// Remove the avatar MXC URI to be used as avatar for
     /// the 'matrix-commander-rs' user account. In other words, remove
     /// the avatar of the 'matrix-commander-rs' user.
     #[arg(long, alias = "remove-avatar")]
     unset_avatar_url: bool,
 
+    /// Get your own display name.
+    /// Details::
     /// Get the display name of itself, i.e. of the
     /// 'matrix-commander-rs' user account.
     #[arg(long)]
     get_display_name: bool,
 
+    /// Set your own display name.
+    /// Details::
     /// Set the display name of
     /// the 'matrix-commander-rs' user account. Spefify a
     /// name.
     #[arg(long, value_name = "NAME")]
     set_display_name: Option<String>,
 
+    /// Get your own profile.
+    /// Details::
     /// Get the profile of itself, i.e. of the
     /// 'matrix-commander-rs' user account. This is
     /// getting both display name and avatar MXC URI in a call.
@@ -1607,6 +1747,7 @@ pub struct Args {
 
     /// Upload one or multiple files (e.g. PDF, DOC, MP4) to the
     /// homeserver content repository.
+    /// Details::
     /// If you want to feed a file for upload into "matrix-commander-rs"
     /// via a pipe, via stdin, then specify the special
     /// character '-' as stdin indicator.
@@ -1630,7 +1771,9 @@ pub struct Args {
     media_upload: Vec<PathBuf>,
 
     /// Download one or multiple files from the homeserver content
-    /// repository. You must provide one or multiple Matrix
+    /// repository.
+    /// Details::
+    /// You must provide one or multiple Matrix
     /// URIs (MXCs) which are strings like this
     /// 'mxc://example.com/SomeStrangeUriKey'.
     /// Alternatively,
@@ -1663,6 +1806,7 @@ pub struct Args {
     media_download: Vec<OwnedMxcUri>,
 
     /// Specify the Mime type of certain input files.
+    /// Details::
     /// Specify '' if the Mime type should be guessed
     /// based on the filename. If input is from stdin
     /// (i.e. '-' and piped into 'matrix-commander-rs')
@@ -1677,7 +1821,9 @@ pub struct Args {
     mime: Vec<String>,
 
     /// Delete one or multiple objects (e.g. files) from the
-    /// content repository. You must provide one or multiple
+    /// content repository.
+    /// Details::
+    /// You must provide one or multiple
     /// Matrix URIs (MXC) which are strings like this
     /// 'mxc://example.com/SomeStrangeUriKey'. Alternatively,
     /// you can just provide the MXC id, i.e. the part after
@@ -1694,6 +1840,8 @@ pub struct Args {
     #[arg(long, alias = "delete-mxc", value_name = "MXC_URI", num_args(0..), )]
     media_delete: Vec<OwnedMxcUri>,
 
+    /// Convert URIs to HTTP URLs.
+    /// Details::
     /// Convert one or more matrix content URIs to the
     /// corresponding HTTP URLs. The MXC URIs to provide look
     /// something like this
@@ -1718,6 +1866,10 @@ impl Args {
     pub fn new() -> Args {
         Args {
             creds: None,
+            usage: false,
+            help: false,
+            manual: false,
+            readme: false,
             contribute: false,
             version: None,
             debug: 0u8,
@@ -2095,6 +2247,91 @@ fn get_pkg_repository() -> &'static str {
 fn get_prog_without_ext() -> &'static str {
     get_bin_name() // with -rs suffix
                    // get_pkg_name() // without -rs suffix
+}
+
+/// Prints the usage info
+pub fn usage() {
+    let help_str = Args::command().render_usage().to_string();
+    println!("{}", &help_str);
+    println!("Options:");
+    // let cmd = Args::command();
+    // // println!("{:?}", cmd);
+    // // for arg in cmd.get_arguments() {
+    // //         println!("{:?}",arg);
+    // // }
+    // // for arg in cmd.get_arguments() {
+    // //         println!("{}",arg); // bug in clap, panics
+    // // }
+    // for arg in cmd.get_arguments() {
+    //     let s = arg.get_help().unwrap().to_string();
+    //     let v: Vec<&str> = s.split("Details::").collect();
+    //     let val_names = arg.get_value_names().unwrap_or(&[]);
+    //     let mut pvalnames = false;
+    //     match arg.get_num_args() {
+    //         None => {}
+    //         Some(range) => {
+    //             println!("range {:?}", range);
+    //             if range != clap::builder::ValueRange::EMPTY {
+    //                 pvalnames = true;
+    //             }
+    //         }
+    //     }
+    //     if pvalnames {
+    //         println!(
+    //             "--{} [<{}>]:  {}",
+    //             arg.get_long().unwrap(),
+    //             val_names[0],
+    //             v[0]
+    //         );
+    //     } else {
+    //         println!("--{}: {}", arg.get_long().unwrap(), v[0]);
+    //     }
+    // }
+    let help_str = Args::command().render_help().to_string();
+    let v: Vec<&str> = help_str.split('\n').collect();
+    for l in v {
+        if l.starts_with("  -") || l.starts_with("      --") {
+            println!("{}", &l);
+        }
+    }
+}
+
+/// Prints the short help
+pub fn help() {
+    let help_str = Args::command().render_help().to_string();
+    // println!("{}", &help_str);
+    // regex to remove shortest pieces "Details:: ... \n  -"
+    // regex to remove shortest pieces "Details:: ... \n      --"
+    // regex to remove shortest pieces "Details:: ... \nPS:"
+    // 2 regex groups: delete and keep.
+    // [\S\s]*? ... match anything in a non-greedy fashion
+    // stop when either "PS:", "  -" or "      --" is reached
+    let re = Regex::new(r"(?P<del>[ ]+Details::[\S\s]*?)(?P<keep>\nPS:|\n  -|\n      --)").unwrap();
+    let after = re.replace_all(&help_str, "$keep");
+    print!("{}", &after.replace("\n\n", "\n")); // remove empty lines
+    println!("{}", "Use --manual to get more detailed help information.");
+}
+
+/// Prints the long help
+pub fn manual() {
+    let help_str = Args::command().render_long_help().to_string();
+    println!("{}", &help_str);
+}
+
+/// Prints the README.md file
+pub async fn readme() {
+    match reqwest::get(URL_README).await {
+        Ok(resp) => {
+            debug!("Got README.md file from URL {:?}.", URL_README);
+            println!("{}", resp.text().await.unwrap())
+        }
+        Err(ref e) => {
+            println!(
+                "Error getting README.md from {:#?}. Reported error {:?}.",
+                URL_README, e
+            );
+        }
+    };
 }
 
 /// Prints the version information
@@ -2940,6 +3177,7 @@ async fn main() -> Result<(), Error> {
     eprintln!("Replace \"room_default\" with \"room_id\".");
     eprintln!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");
     eprintln!("You can do this by running first with argument \"--logout\" and then a second time with argument \"--login\".");
+    eprintln!();
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
@@ -3055,6 +3293,22 @@ async fn main() -> Result<(), Error> {
     }
     if ap.contribute {
         crate::contribute();
+    };
+    if ap.usage {
+        crate::usage();
+        return Ok(());
+    };
+    if ap.help {
+        crate::help();
+        return Ok(());
+    };
+    if ap.manual {
+        crate::manual();
+        return Ok(());
+    };
+    if ap.readme {
+        crate::readme().await;
+        return Ok(());
     };
 
     if !(!ap.login.is_none()

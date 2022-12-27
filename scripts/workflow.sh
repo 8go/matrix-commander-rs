@@ -71,17 +71,19 @@ OPT2="scripts/update-1-version.sh --minor # increment MINOR version number, new 
 OPT3="scripts/update-1-version.sh --patch # increment PATCH version number, bug fix"
 OPT4="cargo clean"
 OPT5="cargo build"
-OPT6="scripts/update-2-help.py            # update help file, puts it also inte README.md"
-OPT7="cargo clippy                        # linting"
-OPT8="cargo fmt                           # beautifying"
+OPT6="scripts/create-help-usage.sh        # create help usage file"
+OPT7="scripts/create-help-help.sh         # create help help file"
+OPT8="scripts/update-2-help-manual.py     # update help manual file, puts it also into README.md"
+OPT9="cargo clippy                        # linting"
+OPT10="cargo fmt                           # beautifying"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPT8" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPT8" "$OPT9" "$OPT10" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
     if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
     if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
     case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" )
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" | "$OPT9" | "$OPT10" )
         OPTE=${opt%%#*} # remove everything after first #
         echo "Performing: $OPTE"
         $OPTE
@@ -157,7 +159,7 @@ select opt in "${options[@]}"; do
 done
 
 PS3='Please enter your choice: '
-OPT1="scripts/update-4-tag.sh # create new annotated tag"
+OPT1="scripts/update-5-tag.sh # create new annotated tag"
 OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPTC" "$OPTQ")

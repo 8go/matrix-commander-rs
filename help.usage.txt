@@ -1,0 +1,75 @@
+Usage: matrix-commander-rs [OPTIONS]
+Options:
+      --contribute
+  -v, --version [<CHECK>]
+      --usage
+  -h, --help
+      --manual
+      --readme
+  -d, --debug...
+      --log-level <LOG_LEVEL>
+      --verbose...
+      --plain
+  -c, --credentials <PATH_TO_FILE>
+  -s, --store <PATH_TO_DIRECTORY>
+      --login <LOGIN_METHOD>
+      --verify <VERIFICATION_METHOD>
+      --logout <DEVICE>
+      --homeserver <HOMESERVER>
+      --user-login <USER_LOGIN>
+      --password <PASSWORD>
+      --device <DEVICE>
+      --room-default <ROOM_DEFAULT>
+      --devices
+      --timeout <TIMEOUT>
+  -m, --message [<MESSAGE>...]
+      --markdown
+      --code
+  -r, --room [<ROOM>...]
+  -f, --file [<FILE>...]
+      --notice
+      --emote
+      --sync <SYNC_TYPE>
+  -l, --listen <LISTEN_TYPE>
+      --tail <TAIL>
+  -y, --listen-self
+      --whoami
+  -o, --output <OUTPUT_FORMAT>
+      --file-name [<FILE_NAME>...]
+      --get-room-info [<ROOM>...]
+      --room-create [<LOCAL_ALIAS>...]
+      --room-dm-create [<USER>...]
+      --room-leave [<ROOM>...]
+      --room-forget [<ROOM>...]
+      --room-invite [<ROOM>...]
+      --room-join [<ROOM>...]
+      --room-ban [<ROOM>...]
+      --room-unban [<ROOM>...]
+      --room-kick [<ROOM>...]
+      --room-resolve-alias [<ALIAS>...]
+      --room-enable-encryption [<ROOM>...]
+      --alias [<ALIAS>...]
+      --name [<NAME>...]
+      --topic [<TOPIC>...]
+      --rooms
+      --invited-rooms
+      --joined-rooms
+      --left-rooms
+      --room-get-visibility [<ROOM>...]
+      --room-get-state [<ROOM>...]
+      --joined-members [<ROOM>...]
+      --delete-device [<DEVICE>...]
+  -u, --user [<USER>...]
+      --get-avatar <FILE>
+      --set-avatar <FILE>
+      --get-avatar-url
+      --set-avatar-url <MAX_URI>
+      --unset-avatar-url
+      --get-display-name
+      --set-display-name <NAME>
+      --get-profile
+      --media-upload [<FILE>...]
+      --media-download [<MXC_URI>...]
+      --mime [<MIME_TYPE>...]
+      --media-delete [<MXC_URI>...]
+      --media-mxc-to-http [<MXC_URI>...]
