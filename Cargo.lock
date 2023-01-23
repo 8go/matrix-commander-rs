@@ -177,6 +177,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "base64"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
+
+[[package]]
 name = "base64ct"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1341,7 +1347,7 @@ dependencies = [
  "aes",
  "async-trait",
  "atomic",
- "base64",
+ "base64 0.13.1",
  "byteorder",
  "ctr",
  "dashmap",
@@ -1370,7 +1376,7 @@ checksum = "7847d36bba832bc787214323bc042b71dca7fdf2aee9f0e3eb573b64f2f7eb7f"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64",
+ "base64 0.13.1",
  "dashmap",
  "derive_builder",
  "getrandom 0.2.8",
@@ -1936,11 +1942,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.13"
+version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68cc60575865c7831548863cc02356512e3f1dc2f3f82cb837d7fc4cc8f3c97c"
+checksum = "21eed90ec8570952d53b772ecf8f206aa1ec9a3d76b2521c56c42973f2d91ee9"
 dependencies = [
- "base64",
+ "base64 0.21.0",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -2023,7 +2029,7 @@ version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "716889595f4edc3cfeb94d9f122e413f73e37d7d80ea1c14196e1004241a3889"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bytes",
  "form_urlencoded",
  "getrandom 0.2.8",
@@ -2647,7 +2653,7 @@ version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97acb4c28a254fd7a4aeec976c46a7fa404eac4d7c134b30c75144846d7cb8f"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "chunked_transfer",
  "flate2",
  "log",
@@ -2717,7 +2723,7 @@ checksum = "f6f20153a1c82ac5f1243b62e80f067ae608facc415c6ef82f88426a61c79886"
 dependencies = [
  "aes",
  "arrayvec",
- "base64",
+ "base64 0.13.1",
  "cbc",
  "ed25519-dalek",
  "hkdf",
