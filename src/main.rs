@@ -51,7 +51,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
-use tracing_subscriber;
+// use tracing_subscriber;
 use update_informer::{registry, Check};
 use url::Url;
 
@@ -2309,7 +2309,7 @@ pub fn help() {
     let re = Regex::new(r"(?P<del>[ ]+Details::[\S\s]*?)(?P<keep>\nPS:|\n  -|\n      --)").unwrap();
     let after = re.replace_all(&help_str, "$keep");
     print!("{}", &after.replace("\n\n", "\n")); // remove empty lines
-    println!("{}", "Use --manual to get more detailed help information.");
+    println!("Use --manual to get more detailed help information.");
 }
 
 /// Prints the long help

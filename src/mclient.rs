@@ -585,7 +585,7 @@ pub(crate) async fn set_avatar_url(
     _output: Output,
 ) -> Result<(), Error> {
     debug!("Upload avatar MXC URI to server");
-    if let Ok(_) = client.account().set_avatar_url(Some(mxc_uri)).await {
+    if client.account().set_avatar_url(Some(mxc_uri)).await.is_ok() {
         debug!("Avatar file uploaded successfully.",);
         Ok(())
     } else {
@@ -597,7 +597,7 @@ pub(crate) async fn set_avatar_url(
 /// In other words, remove the avatar from the matrix-commander-rs user.
 pub(crate) async fn unset_avatar_url(client: &Client, _output: Output) -> Result<(), Error> {
     debug!("Remove avatar MXC URI on server");
-    if let Ok(_) = client.account().set_avatar_url(None).await {
+    if client.account().set_avatar_url(None).await.is_ok() {
         debug!("Avatar removed successfully.",);
         Ok(())
     } else {
@@ -627,7 +627,7 @@ pub(crate) async fn set_display_name(
     _output: Output,
 ) -> Result<(), Error> {
     debug!("Set display name of current user");
-    if let Ok(_) = client.account().set_display_name(Some(name)).await {
+    if client.account().set_display_name(Some(name)).await.is_ok() {
         debug!("Display name set successfully.",);
         Ok(())
     } else {
