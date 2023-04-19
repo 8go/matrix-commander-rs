@@ -719,9 +719,7 @@ pub(crate) fn print_json(json_data: &json::JsonValue, output: Output) {
                     print!("    {}", val);
                 } else if val.is_null() {
                     print!("    "); // print nothing
-                } else if val.is_string() {
-                    print!("    {}", val);
-                } else if val.is_number() {
+                } else if val.is_string() || val.is_number() {
                     print!("    {}", val);
                 } else if val.is_array() {
                     print!("    [{}]", val);
@@ -833,8 +831,8 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
 /// As output it lists/prints the newly generated room ids and and the corresponding room aliases.
 pub(crate) async fn room_create(
     client: &Client,
-    is_dm: bool,             //is DM room
-    is_encrypted: bool,      // share we create an encrypted room or not
+    is_dm: bool,             // is DM room
+    is_encrypted: bool,      // create an encrypted room or not
     users: &[String],        // users, only useful for DM rooms
     room_aliases: &[String], // list of simple alias names like 'SomeAlias', not full aliases
     names: &[String],        // list of room names, optional
@@ -897,8 +895,7 @@ pub(crate) async fn room_create(
             //     pub visibility: Visibility,  }
             let content =
                 RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
-            let initstateev: InitialStateEvent<RoomEncryptionEventContent>;
-            initstateev = InitialStateEvent {
+            let initstateev: InitialStateEvent<RoomEncryptionEventContent> = InitialStateEvent {
                 content,
                 state_key: EmptyStateKey,
             };
@@ -1619,9 +1616,9 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                     "Room:    {:?}    Member:    {:?}    {:?}    {:?}    {:?}    {:?}    \"{:?}\"",
                     room_id,
                     m.user_id(),
-                    m.display_name().as_deref().unwrap_or(""),
+                    m.display_name(), // .as_deref().unwrap_or(""),
                     m.name(),
-                    m.avatar_url().as_deref().unwrap_or("".into()),
+                    m.avatar_url(), // .as_deref().unwrap_or("".into()),
                     m.power_level(),
                     m.membership(),
                 )
@@ -1640,9 +1637,9 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                 print!(
                     "{{\"user_id\": {:?}, \"display_name\": {:?}, \"name\": {:?}, \"avatar_url\": {:?}, \"power_level\": {:?}, \"membership\": \"{:?}\"}}",
                     m.user_id(),
-                    m.display_name().as_deref().unwrap_or(""),
+                    m.display_name(), // .as_deref().unwrap_or(""),
                     m.name(),
-                    m.avatar_url().as_deref().unwrap_or("".into()),
+                    m.avatar_url(), // .as_deref().unwrap_or("".into()),
                     m.power_level(),
                     m.membership(),
                 );
@@ -1798,7 +1795,7 @@ pub(crate) async fn room_enable_encryption(
     // client.sync_once(SyncSettings::new()).await?; we should have sync-ed before.
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        match client.get_joined_room(&id) {
+        match client.get_joined_room(id) {
             Some(room) => match room.enable_encryption().await {
                 Ok(_) => {
                     debug!("enable_encryption succeeded for room {:?}.", id);

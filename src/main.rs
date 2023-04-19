@@ -2708,7 +2708,7 @@ fn trim_newline(s: &mut String) -> &mut String {
             s.pop();
         }
     }
-    return s;
+    s
 }
 
 /// Handle the --message CLI argument
@@ -3058,7 +3058,7 @@ pub(crate) async fn cli_room_enable_encryption(client: &Client, ap: &Args) -> Re
 pub(crate) async fn cli_get_avatar(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Get-avatar chosen.");
     if let Some(path) = ap.get_avatar.as_ref() {
-        crate::get_avatar(client, &path, ap.output).await
+        crate::get_avatar(client, path, ap.output).await
     } else {
         Err(Error::MissingCliParameter)
     }
@@ -3068,7 +3068,7 @@ pub(crate) async fn cli_get_avatar(client: &Client, ap: &Args) -> Result<(), Err
 pub(crate) async fn cli_set_avatar(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Set-avatar chosen.");
     if let Some(path) = ap.set_avatar.as_ref() {
-        crate::set_avatar(client, &path, ap.output).await
+        crate::set_avatar(client, path, ap.output).await
     } else {
         Err(Error::MissingCliParameter)
     }
@@ -3084,7 +3084,7 @@ pub(crate) async fn cli_get_avatar_url(client: &Client, ap: &Args) -> Result<(),
 pub(crate) async fn cli_set_avatar_url(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Set-avatar-url chosen.");
     if let Some(mxc_uri) = ap.set_avatar_url.as_ref() {
-        crate::set_avatar_url(client, &mxc_uri, ap.output).await
+        crate::set_avatar_url(client, mxc_uri, ap.output).await
     } else {
         Err(Error::MissingCliParameter)
     }
@@ -3106,7 +3106,7 @@ pub(crate) async fn cli_get_display_name(client: &Client, ap: &Args) -> Result<(
 pub(crate) async fn cli_set_display_name(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Set-display-name chosen.");
     if let Some(name) = ap.set_display_name.as_ref() {
-        crate::set_display_name(client, &name, ap.output).await
+        crate::set_display_name(client, name, ap.output).await
     } else {
         Err(Error::MissingCliParameter)
     }
@@ -3325,7 +3325,7 @@ async fn main() -> Result<(), Error> {
         || !ap.room_get_state.is_empty()
         || !ap.joined_members.is_empty()
         || !ap.room_resolve_alias.is_empty()
-        || !ap.get_avatar.is_none()
+        || ap.get_avatar.is_some()
         || ap.get_avatar_url
         || ap.get_display_name
         || ap.get_profile
@@ -3342,10 +3342,10 @@ async fn main() -> Result<(), Error> {
         || !ap.room_unban.is_empty()
         || !ap.room_kick.is_empty()
         || !ap.delete_device.is_empty()
-        || !ap.set_avatar.is_none()
-        || !ap.set_avatar_url.is_none()
+        || ap.set_avatar.is_some()
+        || ap.set_avatar_url.is_some()
         || ap.unset_avatar_url
-        || !ap.set_display_name.is_none()
+        || ap.set_display_name.is_some()
         || !ap.room_enable_encryption.is_empty()
         || !ap.media_upload.is_empty()
         || !ap.media_delete.is_empty()
@@ -3580,7 +3580,7 @@ async fn main() -> Result<(), Error> {
             };
         };
 
-        if !ap.get_avatar.is_none() {
+        if ap.get_avatar.is_some() {
             match crate::cli_get_avatar(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::get_avatar successful"),
                 Err(ref e) => error!("Error: crate::get_avatar reported {}", e),
@@ -3691,14 +3691,14 @@ async fn main() -> Result<(), Error> {
             };
         };
 
-        if !ap.set_avatar.is_none() {
+        if ap.set_avatar.is_some() {
             match crate::cli_set_avatar(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_avatar successful"),
                 Err(ref e) => error!("Error: crate::set_avatar reported {}", e),
             };
         };
 
-        if !ap.set_avatar_url.is_none() {
+        if ap.set_avatar_url.is_some() {
             match crate::cli_set_avatar_url(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_avatar_url successful"),
                 Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
@@ -3712,7 +3712,7 @@ async fn main() -> Result<(), Error> {
             };
         };
 
-        if !ap.set_display_name.is_none() {
+        if ap.set_display_name.is_some() {
             match crate::cli_set_display_name(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::set_display_name successful"),
                 Err(ref e) => error!("Error: crate::set_display_name reported {}", e),
