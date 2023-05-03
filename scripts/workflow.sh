@@ -7,6 +7,34 @@ echo "You have written some code? Let's publish it."
 
 # https://askubuntu.com/questions/1705/how-can-i-create-a-select-menu-in-a-shell-script
 PS3='Please enter your choice: '
+OPT1="rustup self update # update rustup"
+OPT2="rustup update stable # update rust"
+OPTC="Continue"
+OPTQ="Quit"
+options=("$OPT1" "$OPT2" "$OPTC" "$OPTQ")
+select opt in "${options[@]}"; do
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" )
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
+done
+
+PS3='Please enter your choice: '
 OPT1="git pull # get the latest from Github"
 OPTC="Continue"
 OPTQ="Quit"
