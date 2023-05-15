@@ -28,7 +28,7 @@ tracing = "0.1"
 directories = "5.0"
 matrix-sdk = { version = "0.6", features = ["markdown", "anyhow"] }
 # matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk , features = ["markdown", "anyhow"] }
-tokio = { version = "1.27", default-features = false, features = [
+tokio = { version = "1.28", default-features = false, features = [
     "rt-multi-thread",
     "macros",
 ] }
