@@ -37,9 +37,10 @@
 // #![allow(unused_variables)] // Todo
 // #![allow(unused_imports)] // Todo
 
-use atty::Stream;
 use clap::{ColorChoice, CommandFactory, Parser, ValueEnum};
+use colored::Colorize;
 use directories::ProjectDirs;
+use std::io::{stdin, stdout, IsTerminal};
 // use mime::Mime;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -2336,6 +2337,11 @@ pub async fn readme() {
 
 /// Prints the version information
 pub fn version() {
+    let version = if stdout().is_terminal() {
+        get_version().green()
+    } else {
+        get_version().normal()
+    };
     println!();
     println!(
         "  _|      _|      _|_|_|                     {}",
@@ -2345,7 +2351,7 @@ pub fn version() {
     println!("a rusty vision of a Matrix CLI client");
     println!(
         "  _|  _|  _|    _|         \\) /  o o  \\ (/   version {}",
-        get_version()
+        version
     );
     println!(
         "  _|      _|    _|           '_   -   _'     repo {}",
@@ -2362,13 +2368,31 @@ pub fn version_check() {
     let name = env!("CARGO_PKG_NAME");
     let version = env!("CARGO_PKG_VERSION");
     let informer = update_informer::new(registry::Crates, name, version).check_version();
+    let avail = "New version is available";
+    let uptod = "You are up-to-date.";
+    let couldnot = "Could not get latest version.";
+    let available;
+    let uptodate;
+    let couldnotget;
+    if stdout().is_terminal() {
+        // debug!("stdout is a terminal so we can use color codes")
+        available = avail.yellow();
+        uptodate = uptod.green();
+        couldnotget = couldnot.red();
+    } else {
+        available = avail.normal();
+        uptodate = uptod.normal();
+        couldnotget = couldnot.normal();
+    }
     match informer {
         Ok(Some(version)) => println!(
-            "New version is available on https://crates.io/crates/{}: {}",
-            name, version
+            "{} on https://crates.io/crates/{}: {}",
+            available, name, version
         ),
-        Ok(None) => println!("You are up-to-date. You already have the latest version."),
-        Err(ref e) => println!("Could not get latest version. Error reported: {:?}.", e),
+        Ok(None) => {
+            println!("{} You already have the latest version.", uptodate)
+        }
+        Err(ref e) => println!("{} Error reported: {:?}.", couldnotget, e),
     };
 }
 
@@ -2731,7 +2755,7 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
         // \- maps to text r'-', a 1-letter message
         let fmsg = if msg == r"-" {
             let mut line = String::new();
-            if atty::is(Stream::Stdin) {
+            if stdin().is_terminal() {
                 print!("Message: ");
                 std::io::stdout()
                     .flush()
@@ -3167,17 +3191,6 @@ pub(crate) async fn cli_logout(client: &Client, ap: &mut Args) -> Result<(), Err
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let mut ap = Args::parse();
-
-    eprintln!("WARNING: Incompatible change between version v0.1.20 and v0.1.21.");
-    eprintln!("If your credentials file was created with Python, don't do anything.");
-    eprintln!(
-        "If your credentials file was created with Rust, follow either Option 1 or Option 2."
-    );
-    eprintln!("Option 1: Please edit your Rust-created credentials file (usually at $HOME/.local/share/matrix-commander-rs/credentials.json).");
-    eprintln!("Replace \"room_default\" with \"room_id\".");
-    eprintln!("Option 2: Alternatively you can delete the credentials file and create a new one by logging in again. ");
-    eprintln!("You can do this by running first with argument \"--logout\" and then a second time with argument \"--login\".");
-    eprintln!();
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();

@@ -10,8 +10,6 @@
 //! logging in, logging out, verifying, sending messages, sending files, etc.
 //! It excludes receiving and listening (see listen.rs).
 
-use atty::Stream;
-// use json::stringify;
 use mime::Mime;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
@@ -20,6 +18,7 @@ use std::fs;
 use std::fs::File;
 // use std::ops::Deref;
 // use std::path::Path;
+use std::io::{stdin, IsTerminal};
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 // use thiserror::Error;
@@ -2030,7 +2029,7 @@ pub(crate) async fn file(
             let data = if filename.to_str().unwrap() == "-" {
                 // read from stdin
                 let mut buffer = Vec::new();
-                if atty::is(Stream::Stdin) {
+                if stdin().is_terminal() {
                     print!("Waiting for data to be piped into stdin. Enter data now: ");
                     std::io::stdout()
                         .flush()
@@ -2133,7 +2132,7 @@ pub(crate) async fn media_upload(
         let data = if filename.to_str().unwrap() == "-" {
             // read from stdin
             let mut buffer = Vec::new();
-            if atty::is(Stream::Stdin) {
+            if stdin().is_terminal() {
                 eprint!("Waiting for data to be piped into stdin. Enter data now: ");
                 std::io::stdout()
                     .flush()
