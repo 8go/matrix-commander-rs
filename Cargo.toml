@@ -18,7 +18,7 @@ publish = true
 
 
 [dependencies]
-clap = { version = "4.2", features = ["derive", "color", "wrap_help", "unicode"] }
+clap = { version = "4.4", features = ["derive", "color", "wrap_help", "unicode"] }
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 url = { version = "2.3", features = ["serde"] }
