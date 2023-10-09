@@ -360,7 +360,8 @@ Options:
           [default: full]
 
           Possible values:
-          - off:  Turns syncing off for sending operations to improve performance
+          - off:  Turns syncing off for sending operations to improve
+            performance
           - full: full: the default value
 
   -l, --listen <LISTEN_TYPE>
@@ -390,14 +391,15 @@ Options:
 
           Possible values:
           - never:   Never: Indicates to not listen, default
-          - once:    Once: Indicates to listen once in *all* rooms and then continue
-          - forever: Forever: Indicates to listen forever in *all* rooms, until process
-            is killed manually. This is the only option that remains in the
-            event loop
-          - tail:    Tail: Indicates to get the last N messages from the specified
-            romm(s) and then continue
-          - all:     All: Indicates to get *all* the messages from from the specified
-            romm(s) and then continue
+          - once:    Once: Indicates to listen once in *all* rooms and then
+            continue
+          - forever: Forever: Indicates to listen forever in *all* rooms, until
+            process is killed manually. This is the only option that remains in
+            the event loop
+          - tail:    Tail: Indicates to get the last N messages from the
+            specified romm(s) and then continue
+          - all:     All: Indicates to get *all* the messages from from the
+            specified romm(s) and then continue
 
       --tail <TAIL>
           Get the last messages. Details:: The '--tail' option reads and prints
@@ -453,10 +455,10 @@ Options:
           Possible values:
           - text:      Text: Indicates to print human readable text, default
           - json:      Json: Indicates to print output in Json format
-          - json-max:  Json Max: Indicates to to print the maximum anount of output in
-            Json format
-          - json-spec: Json Spec: Indicates to to print output in Json format, but only
-            data that is according to Matrix Specifications
+          - json-max:  Json Max: Indicates to to print the maximum anount of
+            output in Json format
+          - json-spec: Json Spec: Indicates to to print output in Json format,
+            but only data that is according to Matrix Specifications
 
       --file-name [<FILE_NAME>...]
           Specify one or multiple file names for some actions. Details:: This
