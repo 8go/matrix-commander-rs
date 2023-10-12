@@ -53,6 +53,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
 // use tracing_subscriber;
+use rpassword::read_password;
 use update_informer::{registry, Check};
 use url::Url;
 
@@ -2479,20 +2480,16 @@ fn get_password(ap: &mut Args) {
         std::io::stdout()
             .flush()
             .expect("error: could not flush stdout");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
+        let password = read_password().unwrap();
+        match password.trim() {
             "" => {
                 error!("Empty password is not allowed!");
             }
             // Todo: check format, e.g. starts with letter, has @, has :, etc.
             _ => {
-                ap.password = Some(input.trim().to_string());
-                debug!("password is {}", input);
+                ap.password = Some(password);
+                // hide password from debug log files // password
+                debug!("password is {}", "******"); // password
             }
         }
     }
@@ -2682,9 +2679,10 @@ pub(crate) async fn cli_login(ap: &mut Args) -> Result<(Client, Credentials), Er
     get_password(ap);
     get_device(ap); // human-readable device name
     get_room_default(ap);
+    // hide password from debug log file // ap.password
     info!(
         "Parameters for login are: {:?} {:?} {:?} {:?} {:?}",
-        ap.homeserver, ap.user_login, ap.password, ap.device, ap.room_default
+        ap.homeserver, ap.user_login, "******", ap.device, ap.room_default
     );
     let (client, credentials) = crate::login(
         ap,

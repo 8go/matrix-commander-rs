@@ -1848,9 +1848,10 @@ pub(crate) async fn delete_devices_pre(client: &Client, ap: &mut Args) -> Result
                     ap.delete_device.push(device.device_id.to_string());
                 }
             }
+            // hide password from debug log file
             debug!(
                 "Preparing to delete these devices for user {:?} with password {:?}: {:?}",
-                user, password, ap.delete_device
+                user, "******", ap.delete_device
             );
             delete_devices(client, &ap.delete_device, user, password, ap.output).await
         } else {
@@ -1879,9 +1880,10 @@ pub(crate) async fn delete_devices(
         let deviceid: OwnedDeviceId = device_id.as_str().into();
         deviceids.push(deviceid);
     }
+    // hide password from debug log file
     debug!(
         "About to delete these devices of user {:?} with password {:?}: {:?}",
-        user, password, deviceids
+        user, "******", deviceids
     );
     if let Err(e) = client.delete_devices(&deviceids, None).await {
         if let Some(info) = e.uiaa_response() {

@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -37,8 +37,9 @@ mime_guess = "2.0"
 update-informer = "1.1"
 json = "0.12"
 reqwest = "0.11"
-regex = "1.9"
+regex = "1.10"
 colored = "2.0"
+rpassword = "7.2"
 
 [dev-dependencies]
 
