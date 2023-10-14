@@ -140,7 +140,7 @@ fn handle_originalsyncmessagelikeevent(
 // None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_redactedsyncroommessageevent(
     ev: RedactedSyncRoomMessageEvent,
-    _room: Room,
+    room: Room,
     _client: Client,
     context: Ctx<EvHandlerContext>,
 ) {
@@ -155,7 +155,15 @@ async fn handle_redactedsyncroommessageevent(
     if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
-            Ok(jsonstr) => jsonstr,
+            Ok(jsonstr) => {
+                // this event does not contain the room_id, other events do.
+                // People are missing the room_id in output.
+                // Nasty hack: inserting the room_id into the JSON string.
+                let mut s = String::from(jsonstr);
+                s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
+                s.insert_str(s.len() - 2, room.room_id().as_str());
+                s
+            }
             Err(e) => e.to_string(),
         };
         println!("{}", j);
@@ -171,7 +179,7 @@ async fn handle_redactedsyncroommessageevent(
 // None of the args can be borrowed because this function is passed into a spawned process.
 async fn handle_syncroomredactedevent(
     ev: SyncRoomRedactionEvent,
-    _room: Room,
+    room: Room,
     _client: Client,
     context: Ctx<EvHandlerContext>,
 ) {
@@ -183,7 +191,15 @@ async fn handle_syncroomredactedevent(
     if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
-            Ok(jsonstr) => jsonstr,
+            Ok(jsonstr) => {
+                // this event does not contain the room_id, other events do.
+                // People are missing the room_id in output.
+                // Nasty hack: inserting the room_id into the JSON string.
+                let mut s = String::from(jsonstr);
+                s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
+                s.insert_str(s.len() - 2, room.room_id().as_str());
+                s
+            }
             Err(e) => e.to_string(),
         };
         println!("{}", j);
@@ -273,7 +289,15 @@ async fn handle_syncroommessageevent(
     if !context.output.is_text() {
         // Serialize it to a JSON string.
         let j = match serde_json::to_string(&ev) {
-            Ok(jsonstr) => jsonstr,
+            Ok(jsonstr) => {
+                // this event does not contain the room_id, other events do.
+                // People are missing the room_id in output.
+                // Nasty hack: inserting the room_id into the JSON string.
+                let mut s = String::from(jsonstr);
+                s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
+                s.insert_str(s.len() - 2, room.room_id().as_str());
+                s
+            }
             Err(e) => e.to_string(),
         };
         println!("{}", j);
