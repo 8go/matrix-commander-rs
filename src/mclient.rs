@@ -371,7 +371,14 @@ pub(crate) async fn login<'a>(
         session.refresh_token,
     );
     credentials.save(&ap.credentials)?;
-    info!("Skipping sync due to --listen");
+    // sync is needed even when --login is used,
+    // because after --login argument, arguments like -m or --rooms might
+    // be used, e.g. in the login-fire-off-a-msg-and-forget scenario
+    if ap.listen == Listen::Never {
+        sync_once(&client, ap.timeout, ap.sync).await?;
+    } else {
+        info!("Skipping sync due to --listen");
+    }
     Ok((client, credentials))
 }
 
