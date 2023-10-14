@@ -43,8 +43,10 @@ use matrix_sdk::{
             /* RoomEncryptedEventContent, */ SyncRoomEncryptedEvent,
         },
         events::room::message::{
+            AudioMessageEventContent,
             // EmoteMessageEventContent,
             FileMessageEventContent,
+            ImageMessageEventContent,
             MessageType,
             // NoticeMessageEventContent,
             // OriginalRoomMessageEvent, OriginalSyncRoomMessageEvent,
@@ -54,6 +56,7 @@ use matrix_sdk::{
             RoomMessageEventContent,
             SyncRoomMessageEvent,
             TextMessageEventContent,
+            VideoMessageEventContent,
         },
         events::room::redaction::SyncRoomRedactionEvent,
         events::{
@@ -129,7 +132,43 @@ fn handle_originalsyncmessagelikeevent(
                     body, room_id, ev.sender, ev.event_id, filename, source, info,
                 );
             }
-            _ => warn!("Not handling this message type. Not implemented yet."),
+            MessageType::Image(imagemessageeventcontent) => {
+                // debug!("Msg of type File");
+                let ImageMessageEventContent {
+                    body, source, info, ..
+                } = imagemessageeventcontent;
+                println!(
+                    "Message: type Image: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
+                    body, room_id, ev.sender, ev.event_id, source, info,
+                );
+            }
+            MessageType::Audio(audiomessageeventcontent) => {
+                // debug!("Msg of type File");
+                let AudioMessageEventContent {
+                    body, source, info, ..
+                } = audiomessageeventcontent;
+                println!(
+                    "Message: type Image: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
+                    body, room_id, ev.sender, ev.event_id, source, info,
+                );
+            }
+            MessageType::Video(videomessageeventcontent) => {
+                // debug!("Msg of type File");
+                let VideoMessageEventContent {
+                    body, source, info, ..
+                } = videomessageeventcontent;
+                println!(
+                    "Message: type Image: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
+                    body, room_id, ev.sender, ev.event_id, source, info,
+                );
+            }
+            _ => {
+                debug!("Not handling this event: {:?}", ev);
+                warn!(
+                    "Not handling this message type. Not implemented yet. {:?}",
+                    ev
+                );
+            }
         }
     } else {
         debug!("Skipping message from itself because --listen-self is not set.");
