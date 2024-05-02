@@ -892,5 +892,4 @@ Options:
           The existance of content for the XMC URI will not be checked
 
 PS: Also have a look at scripts/matrix-commander-rs-tui.
-
 ```
