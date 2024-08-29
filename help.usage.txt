@@ -14,6 +14,7 @@ Options:
   -s, --store <PATH_TO_DIRECTORY>
       --login <LOGIN_METHOD>
       --verify <VERIFICATION_METHOD>
+      --bootstrap
       --logout <DEVICE>
       --homeserver <HOMESERVER>
       --user-login <USER_LOGIN>

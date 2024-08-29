@@ -22,11 +22,12 @@
 //!
 //! Usage:
 //! - matrix-commander-rs --login password # first time only
+//! - matrix-commander-rs --bootstrap --verify manual # manual verification
 //! - matrix-commander-rs --verify emoji # emoji verification
 //! - matrix-commander-rs --message "Hello World" "Good Bye!"
 //! - matrix-commander-rs --file test.txt
 //! - or do many things at a time:
-//! - matrix-commander-rs --login password --verify emoji
+//! - matrix-commander-rs --login password --verify manual
 //! - matrix-commander-rs --message Hi --file test.txt --devices --get-room-info
 //!
 //! For more information, see the README.md
@@ -37,23 +38,22 @@
 // #![allow(unused_variables)] // Todo
 // #![allow(unused_imports)] // Todo
 
+// use mime::Mime;
+// use tracing_subscriber;
 use clap::{ColorChoice, CommandFactory, Parser, ValueEnum};
 use colored::Colorize;
 use directories::ProjectDirs;
-use std::io::{stdin, stdout, IsTerminal};
-// use mime::Mime;
 use regex::Regex;
+use rpassword::read_password;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::{self, Debug};
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, stdin, stdout, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
-// use tracing_subscriber;
-use rpassword::read_password;
 use update_informer::{registry, Check};
 use url::Url;
 
@@ -69,13 +69,13 @@ use matrix_sdk::{
         OwnedUserId,
     },
     Client,
-    Session,
+    SessionMeta,
 };
 
 /// import matrix-sdk Client related code of general kind: login, logout, verify, sync, etc
 mod mclient;
 use crate::mclient::{
-    convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_id,
+    bootstrap, convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_id,
     convert_to_full_room_ids, convert_to_full_user_ids, delete_devices_pre, devices, file,
     get_avatar, get_avatar_url, get_display_name, get_profile, get_room_info, invited_rooms,
     joined_members, joined_rooms, left_rooms, login, logout, logout_local, media_delete,
@@ -109,8 +109,10 @@ const PKG_REPOSITORY_O: Option<&str> = option_env!("CARGO_PKG_REPOSITORY");
 const PKG_REPOSITORY: &str = "https://github.com/8go/matrix-commander-rs/";
 /// default name for login credentials JSON file
 const CREDENTIALS_FILE_DEFAULT: &str = "credentials.json";
+/// depreciated default directory to be used for persistent storage, remove in v0.5 todo
+const DEPRECIATED_STORE_DIR_DEFAULT: &str = "sledstore/";
 /// default directory to be used by end-to-end encrypted protocol for persistent storage
-const SLEDSTORE_DIR_DEFAULT: &str = "sledstore/";
+const STORE_DIR_DEFAULT: &str = "store/";
 /// default timeouts for waiting for the Matrix server, in seconds
 const TIMEOUT_DEFAULT: u64 = 60;
 /// URL for README.md file downloaded for --readme
@@ -139,6 +141,12 @@ pub enum Error {
 
     #[error("Login Failed")]
     LoginFailed,
+
+    #[error("Verify Failed")]
+    VerifyFailed,
+
+    #[error("Bootstrap Failed")]
+    BootstrapFailed,
 
     #[error("Login Unnecessary")]
     LoginUnnecessary,
@@ -413,6 +421,9 @@ enum Verify {
     /// None: option not used, no verification done
     #[default]
     None,
+    /// Manual: manual verification
+    /// See also: https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
+    Manual,
     /// Emoji: verify via emojis
     Emoji,
 }
@@ -421,6 +432,9 @@ enum Verify {
 impl Verify {
     pub fn is_none(&self) -> bool {
         self == &Self::None
+    }
+    pub fn is_manual(&self) -> bool {
+        self == &Self::Manual
     }
     pub fn is_emoji(&self) -> bool {
         self == &Self::Emoji
@@ -433,6 +447,7 @@ impl FromStr for Verify {
     fn from_str(src: &str) -> Result<Verify, ()> {
         return match src.to_lowercase().trim() {
             "none" => Ok(Verify::None),
+            "manual" => Ok(Verify::Manual),
             "emoji" => Ok(Verify::Emoji),
             _ => Err(()),
         };
@@ -507,7 +522,8 @@ enum Listen {
     Never,
     /// Once: Indicates to listen once in *all* rooms and then continue
     Once,
-    /// Forever: Indicates to listen forever in *all* rooms, until process is killed manually. This is the only option that remains in the event loop.
+    /// Forever: Indicates to listen forever in *all* rooms, until process is killed manually.
+    /// This is the only option that remains in the event loop.
     Forever,
     /// Tail: Indicates to get the last N messages from the specified romm(s) and then continue
     Tail,
@@ -664,7 +680,7 @@ impl fmt::Display for Output {
 /// Welcome to "matrix-commander-rs", a Matrix CLI client. ───
 /// On the first run use --login to log in, to authenticate.
 /// On the second run we suggest to use --verify to get verified.
-/// Emoji verification is built-in and can be used
+/// Manual verification is built-in and can be used
 /// to verify devices.
 /// Or combine both --login and --verify in the first run.
 /// On further runs "matrix-commander-rs" implements a simple Matrix CLI
@@ -789,7 +805,7 @@ pub struct Args {
     /// to the preconfigured room. If this option is provided,
     /// the provided path to a file will be used as credentials
     /// file instead of the default one.
-    // e.g. /home/user/.local/share/matrix-commander-rs/credentials.json
+    /// E.g. ~/.local/share/matrix-commander-rs/credentials.json
     #[arg(short, long,
         value_name = "PATH_TO_FILE",
         value_parser = clap::value_parser!(PathBuf),
@@ -811,7 +827,7 @@ pub struct Args {
         value_name = "PATH_TO_DIRECTORY",
         // value_parser = clap::builder::ValueParser::path_buf(),
         value_parser = clap::value_parser!(PathBuf),
-        default_value_os_t = get_sledstore_default_path(),
+        default_value_os_t = get_store_default_path(),
         )]
     store: PathBuf,
 
@@ -852,8 +868,12 @@ pub struct Args {
     /// Details::
     /// By default, no
     /// verification is performed.
-    /// Verification is currently only offered via Emojis.
-    /// Hence, specify '--verify emoji'.
+    /// Verification is currently offered via Manual and Emoji.
+    /// Manual verification is simpler but does less.
+    /// Try: --bootstrap --password mypassword --verify manual.
+    /// Manual only verfies devices one-directionally. See
+    /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
+    /// for more info on Manual verification.
     /// If verification is desired, run this program in the
     /// foreground (not as a service) and without a pipe.
     /// While verification is optional it is highly recommended, and it
@@ -869,7 +889,8 @@ pub struct Args {
     /// verification between two devices of the *same* user. For that,
     /// open (e.g.) Element in a browser, make sure Element is using the
     /// same user account as the "matrix-commander-rs" user (specified with
-    /// --user-login at --login). Now in the Element webpage go to the room
+    /// --user-login at --login).
+    /// On older versions of the Element webpage go to the room
     /// that is the "matrix-commander-rs" default room (specified with
     /// --room-default at --login). OK, in the web-browser you are now the
     /// same user and in the same room as "matrix-commander-rs".
@@ -878,17 +899,33 @@ pub struct Args {
     /// click red 'Not Trusted' text
     /// which indicated an untrusted device, then click the square
     /// 'Interactively verify by Emoji' button (one of 3 button choices).
+    /// On newer versions of Element, now go to the main menu (click
+    /// your personal icon top left), go into All Settings, go into Sessions.
+    /// Select the currently unverified session, click Verify With Other Device,
+    /// and that will bring up the emojis.
     /// At this point both web-page and "matrix-commander-rs" in terminal
     /// show a set of emoji icons and names. Compare them visually.
     /// Confirm on both sides (Yes, They Match, Got it), finally click OK.
     /// You should see a green shield and also see that the
     /// "matrix-commander-rs" device is now green and verified in the webpage.
     /// In the terminal you should see a text message indicating success.
-    /// You should now be verified across all devices and across all users.
+    /// You can do something similar to verify with other users on other rooms.
     #[arg(long, value_enum,
         value_name = "VERIFICATION_METHOD",
         default_value_t = Verify::default(), ignore_case = true, )]
     verify: Verify,
+
+    // Bootstrap cross signing.
+    /// Details::
+    /// By default, no
+    /// bootstrapping is performed. Bootstrapping is useful for verification.
+    /// --bootstrap creates cross sogning keys.
+    /// If you have trouble verifying with --verify manual, use --bootstrap before.
+    /// Use --password to provide password. If --password is not given it will read
+    /// password from command line (stdin). See also
+    /// https://docs.rs/matrix-sdk/0.7.1/matrix_sdk/encryption/struct.CrossSigningStatus.html#fields.
+    #[arg(long)]
+    bootstrap: bool,
 
     /// Logout this or all devices from the Matrix homeserver.
     /// Details::
@@ -942,8 +979,8 @@ pub struct Args {
     /// It is an optional argument.
     /// By default --password is ignored and not used.
     /// It is used by '--login password' and '--delete-device'
-    /// actions.
-    /// If not provided for --login or --delete-device
+    /// and --bootstrap actions.
+    /// If not provided for --login, --delete-device or --bootstrap
     /// the user will be queried for the password via keyboard interactively.
     #[arg(long)]
     password: Option<String>,
@@ -1311,7 +1348,7 @@ pub struct Args {
     /// The argument '--room-resolve-alias' can also be used
     /// to go the other direction, i.e. to find the room id
     /// given a room alias.
-    #[arg(long, num_args(0..), value_name = "ROOM", 
+    #[arg(long, num_args(0..), value_name = "ROOM",
         alias = "room-get-info")]
     get_room_info: Vec<String>,
 
@@ -1879,8 +1916,9 @@ impl Args {
             verbose: 0u8,
             plain: false,
             credentials: get_credentials_default_path(),
-            store: get_sledstore_default_path(),
+            store: get_store_default_path(),
             login: Login::None,
+            bootstrap: false,
             verify: Verify::None,
             message: Vec::new(),
             logout: Logout::None,
@@ -2034,14 +2072,14 @@ impl Credentials {
 }
 
 /// Implements From trait for Session
-impl From<Credentials> for Session {
+impl From<Credentials> for SessionMeta {
     fn from(creditials: Credentials) -> Self {
         Self {
             user_id: creditials.user_id,
-            access_token: creditials.access_token,
+            // 0.7 access_token: creditials.access_token,
             device_id: creditials.device_id,
             // no room_id (was default_room) in session
-            refresh_token: creditials.refresh_token,
+            // 0.7 refresh_token: creditials.refresh_token,
         }
     }
 
@@ -2092,8 +2130,8 @@ impl From<Credentials> for Session {
 //     // credentials_file_path was moved to Args.credentials
 //     // credentials_file_path: PathBuf,
 //     //
-//     // sledstore_dir_path was moved to Args.store
-//     // sledstore_dir_path: PathBuf,
+//     // store_dir_path was moved to Args.store
+//     // store_dir_path: PathBuf,
 //     //
 //     // Session info and a bit more
 //     credentials: Credentials,
@@ -2173,44 +2211,56 @@ fn credentials_exist(ap: &Args) -> bool {
     exists
 }
 
-/// Gets the *default* path (terminating in a directory) of the sled store directory
+/// Gets the *default* path (terminating in a directory) of the store directory
 /// The default path might not be the actual path as it can be overwritten with command line
-/// options.
-fn get_sledstore_default_path() -> PathBuf {
+/// options. To be removed in v0.5. : todo
+fn get_store_depreciated_default_path() -> PathBuf {
     let dir = ProjectDirs::from_path(PathBuf::from(get_prog_without_ext())).unwrap();
     // fs::create_dir_all(dir.data_dir());
-    let dp = dir.data_dir().join(SLEDSTORE_DIR_DEFAULT);
+    let dp = dir.data_dir().join(DEPRECIATED_STORE_DIR_DEFAULT);
     debug!("Default project directory is {:?}.", dir.data_dir());
-    info!("Default sled store directory is {}.", dp.display());
+    debug!("Ddepreciated default store directory is {}.", dp.display());
+    dp
+}
+
+/// Gets the *default* path (terminating in a directory) of the store directory
+/// The default path might not be the actual path as it can be overwritten with command line
+/// options.
+fn get_store_default_path() -> PathBuf {
+    let dir = ProjectDirs::from_path(PathBuf::from(get_prog_without_ext())).unwrap();
+    // fs::create_dir_all(dir.data_dir());
+    let dp = dir.data_dir().join(STORE_DIR_DEFAULT);
+    debug!("Default project directory is {:?}.", dir.data_dir());
+    info!("Default store directory is {}.", dp.display());
     dp
 }
 
 // Removed the Option, so it is always set by clap. Fn no longer needed.
 // /// A store is either specified with --store or the static default path is used
 // /// On error return None.
-// fn set_sledstore(ap: &mut Args) {
-//     debug!("set_sledstore()");
-//     let dstore = get_sledstore_default_path();
+// fn set_store(ap: &mut Args) {
+//     debug!("set_store()");
+//     let dstore = get_store_default_path();
 //     if ap.store.is_empty() {
 //         ap.store = Some(dstore); // since --store is empty, use default store path
 //     }
 // }
 
-/// Gets the *actual* path (including file name) of the sled store directory
+/// Gets the *actual* path (including file name) of the store directory
 /// The default path might not be the actual path as it can be overwritten with command line
 /// options.
-/// set_sledstore() must be called before this function is ever called.
-fn get_sledstore_actual_path(ap: &Args) -> &PathBuf {
+/// set_store() must be called before this function is ever called.
+fn get_store_actual_path(ap: &Args) -> &PathBuf {
     &ap.store
 }
 
-/// Return true if sledstore dir exists, false otherwise
+/// Return true if store dir exists, false otherwise
 #[allow(dead_code)]
-fn sledstore_exist(ap: &Args) -> bool {
-    let dp = get_sledstore_default_path();
-    let ap = get_sledstore_actual_path(ap);
+fn store_exist(ap: &Args) -> bool {
+    let dp = get_store_default_path();
+    let ap = get_store_actual_path(ap);
     debug!(
-        "sledstore_default_path = {:?}, sledstore_actual_path = {:?}",
+        "store_default_path = {:?}, store_actual_path = {:?}",
         dp, ap
     );
     let exists = ap.is_dir();
@@ -2706,21 +2756,29 @@ pub(crate) async fn cli_restore_login(
     crate::restore_login(credentials, ap).await
 }
 
+/// Handle the --bootstrap CLI argument
+pub(crate) async fn cli_bootstrap(client: &Client, ap: &mut Args) -> Result<(), Error> {
+    info!("Bootstrap chosen.");
+    crate::bootstrap(client, ap).await
+}
+
 /// Handle the --verify CLI argument
 pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Verify chosen.");
     if ap.verify.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if !ap.verify.is_emoji() {
+    if !ap.verify.is_manual() && !ap.verify.is_emoji() {
         error!(
-            "Verify option '{:?}' currently not supported. Use '{:?}' for the time being.",
+            "Verify option '{:?}' currently not supported. \
+            Use '{:?}' or {:?}' for the time being.",
             ap.verify,
+            Verify::Manual,
             Verify::Emoji
         );
         return Err(Error::UnsupportedCliParameter);
     }
-    crate::verify(client).await
+    crate::verify(client, ap).await
 }
 
 fn trim_newline(s: &mut String) -> &mut String {
@@ -3201,8 +3259,10 @@ async fn main() -> Result<(), Error> {
     if ap.log_level.is_none() {
         ap.log_level = LogLevel::from_str(&env_org_rust_log, true).unwrap_or(LogLevel::Error);
     }
-    // overwrite environment variable, important because it might have been empty/unset
-    env::set_var("RUST_LOG", ap.log_level.to_string());
+    unsafe {
+        // overwrite environment variable, important because it might have been empty/unset
+        env::set_var("RUST_LOG", ap.log_level.to_string());
+    }
 
     // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
     // Send *all* output from Debug to Error to stderr
@@ -3233,6 +3293,7 @@ async fn main() -> Result<(), Error> {
     debug!("credentials option is {:?}", ap.credentials);
     debug!("store option is {:?}", ap.store);
     debug!("login option is {:?}", ap.login);
+    debug!("bootstrap flag is {:?}", ap.bootstrap);
     debug!("verify flag is {:?}", ap.verify);
     debug!("message option is {:?}", ap.message);
     debug!("logout option is {:?}", ap.logout);
@@ -3325,6 +3386,7 @@ async fn main() -> Result<(), Error> {
     if !(!ap.login.is_none()
         // get actions
         || ap.whoami
+        || ap.bootstrap
         || !ap.verify.is_none()
         || ap.devices
         || !ap.get_room_info.is_empty()
@@ -3378,7 +3440,12 @@ async fn main() -> Result<(), Error> {
         match crate::cli_login(&mut ap).await {
             Ok((client, credentials)) => (Ok(client), credentials),
             Err(ref e) => {
-                error!("Login to server failed or credentials information could not be written to disk. Check your arguments and try --login again. Reported error is: {:?}", e);
+                error!(
+                    "Login to server failed or credentials information could not be \
+                    written to disk. Check your arguments and try --login again. \
+                    Reported error is: {:?}",
+                    e
+                );
                 return Err(Error::LoginFailed);
             }
         }
@@ -3388,7 +3455,10 @@ async fn main() -> Result<(), Error> {
             credentials,
         )
     } else {
-        error!("Credentials file does not exists or cannot be read. Consider doing a '--logout' to clean up, then perform a '--login'.");
+        error!(
+            "Credentials file does not exists or cannot be read. \
+            Consider doing a '--logout' to clean up, then perform a '--login'."
+        );
         return Err(Error::LoginFailed);
     };
     ap.creds = Some(credentials);
@@ -3503,14 +3573,41 @@ async fn main() -> Result<(), Error> {
             // overwrite --listen if user has chosen both
             if !ap.listen.is_never() && !ap.listen.is_tail() {
                 warn!(
-                "Two contradicting listening methods were specified. Overwritten with --tail. Will use '--listen tail'. {:?} {}",
-                ap.listen, ap.tail
-            )
+                    "Two contradicting listening methods were specified. \
+                    Overwritten with --tail. Will use '--listen tail'. {:?} {}",
+                    ap.listen, ap.tail
+                )
             }
             ap.listen = Listen::Tail
         }
 
+        // remove in version 0.5 : todo
+        warn!(
+            "Version 0.4 is incompatible with previous versions. \
+            The default location of the store has changed. \
+            The directory name of the default store used to be 'sledstore'. \
+            Now it is just 'store'. The program attempts to rename \
+            the store's directory name automatically. E.g. on Linux it tries \
+            to automatically rename \
+            '~/.local/share/matrix-commander-rs/sledstore/' to \
+            '~/.local/share/matrix-commander-rs/store/'. \
+            If you have used the default store name in the past, \
+            and automatical renaming is failing for you, then rename the store's \
+            directory name from \
+            'sledstore' to 'store' manually. Also, some JSON and \
+            text output is different than in previous version. If you are parsing \
+            the output you should do careful testing to adapt to the changed \
+            output."
+        );
+
         // top-priority actions
+
+        if ap.bootstrap {
+            match crate::cli_bootstrap(&client, &mut ap).await {
+                Ok(ref _n) => debug!("crate::bootstrap successful"),
+                Err(ref e) => error!("Error: crate::bootstrap reported {}", e),
+            };
+        };
 
         if !ap.verify.is_none() {
             match crate::cli_verify(&client, &ap).await {
@@ -3643,8 +3740,10 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_leave.is_empty() {
-            error!("There is a bug in the matrix-sdk library and hence this is not working properly at the moment.");
-            error!(" It will start working once matrix-sdk v0.7 is released.");
+            error!(
+                "There is a bug in the matrix-sdk library and hence this is not working \
+                properly at the moment. It will start working once matrix-sdk v0.7 is released."
+            );
             match crate::cli_room_leave(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_leave successful"),
                 Err(ref e) => error!("Error: crate::room_leave reported {}", e),
@@ -3652,8 +3751,10 @@ async fn main() -> Result<(), Error> {
         };
 
         if !ap.room_forget.is_empty() {
-            error!("There is a bug in the matrix-sdk library and hence this is not working properly at the moment.");
-            error!(" It will start working once matrix-sdk v0.7 is released.");
+            error!(
+                "There is a bug in the matrix-sdk library and hence this is not working \
+                properly at the moment. It will start working once matrix-sdk v0.7 is released."
+            );
             match crate::cli_room_forget(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::room_forget successful"),
                 Err(ref e) => error!("Error: crate::room_forget reported {}", e),

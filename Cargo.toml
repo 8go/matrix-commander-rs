@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -19,32 +19,30 @@ publish = true
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "color", "wrap_help", "unicode"] }
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-url = { version = "2.5", features = ["serde"] }
-serde_json = "1.0"
-tracing-subscriber = "0.3"
-tracing = "0.1"
+colored = "2.1"
 directories = "5.0"
-matrix-sdk = { version = "0.6", features = ["markdown", "anyhow"] }
+futures-util = "0.3"
+json = "0.12"
 # matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk , features = ["markdown", "anyhow"] }
-tokio = { version = "1.37", default-features = false, features = [
-    "rt-multi-thread",
-    "macros",
-] }
+matrix-sdk = { version = "0.7", features = ["markdown", "anyhow", "bundled-sqlite"] }
 mime = "0.3"
 mime_guess = "2.0"
-update-informer = "1.1"
-json = "0.12"
-reqwest = "0.11"
 regex = "1.10"
-colored = "2.1"
+reqwest = "0.12"
 rpassword = "7.3"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+tokio = { version = "1.39", default-features = false, features = ["rt-multi-thread", "macros",] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+update-informer = "1.1"
+url = { version = "2.5", features = ["serde"] }
+
 
 [dev-dependencies]
-
 # this is to distinguish it from "matrix-commander" which is the Python program
-# For people that have both Python and Rus installed:
+# For people that have both Python and Rust installed:
 # "matrix-commander" will remain the Python program
 # "matrix-commander-rs" will be the Rust program
 [[bin]]

@@ -6,14 +6,19 @@
 //! Module that bundles everything together do to emoji verification for Matrix.
 //! It implements the emoji-verification protocol.
 
-use std::io::{self, Write};
+use std::io::Write;
 use tracing::{debug, info};
+
+use futures_util::StreamExt;
 
 // Code for emoji verify
 use matrix_sdk::{
     self,
     config::SyncSettings,
-    encryption::verification::{format_emojis, SasVerification, Verification},
+    encryption::verification::{
+        format_emojis, Emoji, SasState, SasVerification, Verification, VerificationRequest,
+        VerificationRequestState,
+    },
     ruma::{
         events::{
             key::verification::{
@@ -31,39 +36,21 @@ use matrix_sdk::{
 // local
 use crate::get_prog_without_ext;
 
-/// Utility function to get user response interactively. Answer question if emojis match.
-/// The event manager calls this function once emoji verification has been initiated.
-// The arguments client and sas cannot be borrowed. If borrowed they would go out of scope.
-async fn wait_for_confirmation(client: Client, sas: SasVerification) {
-    let emoji = sas.emoji().expect("The emojis should be available now.");
-
+async fn wait_for_confirmation(sas: SasVerification, emoji: [Emoji; 7]) {
     println!("\nDo the emojis match: \n{}", format_emojis(emoji));
-    print!("Confirm with `yes` or cancel with `no` or Control-C to abort: ");
+    print!("Confirm with `yes` or cancel with `no`: ");
     std::io::stdout()
         .flush()
         .expect("We should be able to flush stdout");
 
     let mut input = String::new();
-    io::stdin()
+    std::io::stdin()
         .read_line(&mut input)
         .expect("error: unable to read user input");
 
     match input.trim().to_lowercase().as_ref() {
-        "yes" | "y" | "true" | "ok" => {
-            info!("Received 'Yes'!");
-            sas.confirm().await.unwrap();
-
-            if sas.is_done() {
-                print_devices(sas.other_device().user_id(), &client).await;
-                print_result(&sas);
-            } else {
-                info!("Sas not done yet.");
-            }
-        }
-        _ => {
-            info!("Cancelling. Sorry!");
-            sas.cancel().await.unwrap();
-        }
+        "yes" | "true" | "ok" => sas.confirm().await.unwrap(),
+        _ => sas.cancel().await.unwrap(),
     }
 }
 
@@ -101,6 +88,86 @@ async fn print_devices(user_id: &UserId, client: &Client) {
     }
 }
 
+async fn sas_verification_handler(client: Client, sas: SasVerification) {
+    println!(
+        "Starting verification with {} {}",
+        &sas.other_device().user_id(),
+        &sas.other_device().device_id()
+    );
+    print_devices(sas.other_device().user_id(), &client).await;
+    sas.accept().await.unwrap();
+
+    let mut stream = sas.changes();
+
+    while let Some(state) = stream.next().await {
+        match state {
+            SasState::KeysExchanged {
+                emojis,
+                decimals: _,
+            } => {
+                tokio::spawn(wait_for_confirmation(
+                    sas.clone(),
+                    emojis
+                        .expect("We only support verifications using emojis")
+                        .emojis,
+                ));
+            }
+            SasState::Done { .. } => {
+                let device = sas.other_device();
+
+                println!(
+                    "Successfully verified device {} {} {:?}",
+                    device.user_id(),
+                    device.device_id(),
+                    device.local_trust_state()
+                );
+
+                print_devices(sas.other_device().user_id(), &client).await;
+
+                break;
+            }
+            SasState::Cancelled(cancel_info) => {
+                println!(
+                    "The verification has been cancelled, reason: {}",
+                    cancel_info.reason()
+                );
+
+                break;
+            }
+            SasState::Started { .. } | SasState::Accepted { .. } | SasState::Confirmed => (),
+        }
+    }
+}
+
+async fn request_verification_handler(client: Client, request: VerificationRequest) {
+    println!(
+        "Accepting verification request from {}",
+        request.other_user_id(),
+    );
+    request
+        .accept()
+        .await
+        .expect("Can't accept verification request");
+
+    let mut stream = request.changes();
+
+    while let Some(state) = stream.next().await {
+        match state {
+            VerificationRequestState::Created { .. }
+            | VerificationRequestState::Requested { .. }
+            | VerificationRequestState::Ready { .. } => (),
+            VerificationRequestState::Transitioned { verification } => {
+                // We only support SAS verification.
+                if let Verification::SasV1(s) = verification {
+                    tokio::spawn(sas_verification_handler(client, s));
+                    break;
+                }
+            }
+            VerificationRequestState::Done | VerificationRequestState::Cancelled(_) => break,
+        }
+    }
+}
+
 /// Go into the event loop and implement the emoji verification protocol.
 /// This is the main function, the access point, to emoji verification.
 /// Remember it is interactive and will remain in the event loop until user
@@ -115,10 +182,32 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
                 .await
                 .expect("Request object wasn't created");
 
-            request
-                .accept()
-                .await
-                .expect("Can't accept verification request");
+            tokio::spawn(request_verification_handler(client, request));
+
+            // request
+            //     .accept()
+            //     .await
+            //     .expect("Can't accept verification request");
+        },
+    );
+
+    client.add_event_handler(
+        |ev: OriginalSyncRoomMessageEvent, client: Client| async move {
+            debug!("OriginalSyncRoomMessageEvent");
+            if let MessageType::VerificationRequest(_) = &ev.content.msgtype {
+                let request = client
+                    .encryption()
+                    .get_verification_request(&ev.sender, &ev.event_id)
+                    .await
+                    .expect("Request object wasn't created");
+
+                tokio::spawn(request_verification_handler(client, request));
+
+                // request
+                //     .accept()
+                //     .await
+                //     .expect("Can't accept verification request");
+            }
         },
     );
 
@@ -149,7 +238,7 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
                 .get_verification(&ev.sender, ev.content.transaction_id.as_str())
                 .await
             {
-                tokio::spawn(wait_for_confirmation(client, sas));
+                tokio::spawn(sas_verification_handler(client, sas));
             }
         },
     );
@@ -166,24 +255,6 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
                     print_result(&sas);
                     print_devices(&ev.sender, &client).await;
                 }
-            }
-        },
-    );
-
-    client.add_event_handler(
-        |ev: OriginalSyncRoomMessageEvent, client: Client| async move {
-            debug!("OriginalSyncRoomMessageEvent");
-            if let MessageType::VerificationRequest(_) = &ev.content.msgtype {
-                let request = client
-                    .encryption()
-                    .get_verification_request(&ev.sender, &ev.event_id)
-                    .await
-                    .expect("Request object wasn't created");
-
-                request
-                    .accept()
-                    .await
-                    .expect("Can't accept verification request");
             }
         },
     );
@@ -215,7 +286,7 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
                 .get_verification(&ev.sender, ev.content.relates_to.event_id.as_str())
                 .await
             {
-                tokio::spawn(wait_for_confirmation(client, sas));
+                tokio::spawn(sas_verification_handler(client, sas));
             }
         },
     );

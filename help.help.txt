@@ -1,6 +1,6 @@
 Welcome to "matrix-commander-rs", a Matrix CLI client. ─── On the first run use
 --login to log in, to authenticate. On the second run we suggest to use
---verify to get verified. Emoji verification is built-in and can be used to
+--verify to get verified. Manual verification is built-in and can be used to
 verify devices. Or combine both --login and --verify in the first run. On
 further runs "matrix-commander-rs" implements a simple Matrix CLI client that
 can send messages or files, listen to messages, operate on rooms, etc.  ───
@@ -41,6 +41,7 @@ Options:
           Login to and authenticate with the Matrix homeserver.
       --verify <VERIFICATION_METHOD>
           Perform account verification.
+      --bootstrap
       --logout <DEVICE>
           Logout this or all devices from the Matrix homeserver.
       --homeserver <HOMESERVER>

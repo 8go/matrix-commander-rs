@@ -30,7 +30,10 @@ use url::Url;
 use matrix_sdk::{
     attachment::AttachmentConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
+    // encryption::CryptoStoreError,
+    // deserialized_responses::RawSyncOrStrippedState,
     instant::Duration,
+    matrix_auth::{MatrixSession, MatrixSessionTokens},
     media::{MediaFormat, MediaRequest},
     room,
     room::{Room, RoomMember},
@@ -42,7 +45,7 @@ use matrix_sdk::{
         events::room::encryption::RoomEncryptionEventContent,
         // OwnedRoomOrAliasId, OwnedServerName,
         // device_id,
-        events::room::member::SyncRoomMemberEvent,
+        events::room::member::RoomMemberEventContent,
         // events::room::message::SyncRoomMessageEvent,
         events::room::message::{
             EmoteMessageEventContent,
@@ -57,9 +60,9 @@ use matrix_sdk::{
             // SyncRoomMessageEvent,
             TextMessageEventContent,
         },
-        events::room::name::SyncRoomNameEvent,
-        events::room::power_levels::SyncRoomPowerLevelsEvent,
-        events::room::topic::SyncRoomTopicEvent,
+        events::room::name::RoomNameEventContent,
+        events::room::power_levels::RoomPowerLevelsEventContent,
+        events::room::topic::RoomTopicEventContent,
         events::room::MediaSource,
         events::AnyInitialStateEvent,
         events::EmptyStateKey,
@@ -81,10 +84,15 @@ use matrix_sdk::{
         UserId,
     },
     Client,
+    RoomMemberships,
+    SessionMeta,
 };
 
 // from main.rs
-use crate::{credentials_exist, get_password, Args, Credentials, Error, Listen, Output, Sync};
+use crate::{
+    credentials_exist, get_password, get_store_default_path, get_store_depreciated_default_path,
+    Args, Credentials, Error, Listen, Output, Sync,
+};
 
 // import verification code
 #[path = "emoji_verify.rs"]
@@ -125,7 +133,12 @@ pub(crate) async fn convert_to_full_room_id(
 ) {
     room.retain(|c| !c.is_whitespace());
     if room.starts_with('@') {
-        error!("This room alias or id {:?} starts with an at sign. @ are used for user ids, not room id or room aliases. This will fail later.", room);
+        error!(
+            "This room alias or id {:?} starts with an at sign. \
+            @ are used for user ids, not room id or room aliases. \
+            This will fail later.",
+            room
+        );
         return;
     }
     if !room.starts_with('#') && !room.starts_with('!') {
@@ -208,14 +221,22 @@ pub(crate) async fn convert_to_full_mxc_uris(vecstr: &mut Vec<OwnedMxcUri>, defa
             continue;
         }
         if s.contains(':') || s.contains('/') {
-            error!("This does not seem to be a short MXC URI. Contains : or /. Skipping {:?}. This will likely cause a failure later.", vecstr[i]);
+            error!(
+                "This does not seem to be a short MXC URI. Contains : or /. \
+                Skipping {:?}. This will likely cause a failure later.",
+                vecstr[i]
+            );
             i += 1;
             continue;
         }
         let mxc = "mxc://".to_owned() + default_host + "/" + &s;
         vecstr[i] = OwnedMxcUri::from(mxc);
         if !vecstr[i].is_valid() {
-            error!("This does not seem to be a short MXC URI. Contains : or /. Skipping {:?}. This will likely cause a failure later.", vecstr[i]);
+            error!(
+                "This does not seem to be a short MXC URI. Contains : or /. \
+                Skipping {:?}. This will likely cause a failure later.",
+                vecstr[i]
+            );
         }
         i += 1;
     }
@@ -231,11 +252,19 @@ pub(crate) fn convert_to_full_user_ids(vecstr: &mut Vec<String>, default_host: &
     for el in vecstr {
         el.retain(|c| !c.is_whitespace());
         if el.starts_with('!') {
-            error!("This user id {:?} starts with an exclamation mark. ! are used for rooms, not users. This will fail later.", el);
+            error!(
+                "This user id {:?} starts with an exclamation mark. \
+                ! are used for rooms, not users. This will fail later.",
+                el
+            );
             continue;
         }
         if el.starts_with('#') {
-            error!("This user id {:?} starts with a hash tag. # are used for room aliases, not users. This will fail later.", el);
+            error!(
+                "This user id {:?} starts with a hash tag.
+            # are used for room aliases, not users. This will fail later.",
+                el
+            );
             continue;
         }
         if !el.starts_with('@') {
@@ -257,11 +286,19 @@ pub(crate) fn convert_to_full_alias_ids(vecstr: &mut Vec<String>, default_host: 
     for el in vecstr {
         el.retain(|c| !c.is_whitespace());
         if el.starts_with('!') {
-            warn!("This room alias {:?} starts with an exclamation mark. ! are used for rooms ids, not aliases. This might cause problems later.", el);
+            warn!(
+                "This room alias {:?} starts with an exclamation mark. \
+                ! are used for rooms ids, not aliases. This might cause problems later.",
+                el
+            );
             continue;
         }
         if el.starts_with('@') {
-            error!("This room alias {:?} starts with an at sign. @ are used for user ids, not aliases. This will fail later.", el);
+            error!(
+                "This room alias {:?} starts with an at sign. \
+                @ are used for user ids, not aliases. This will fail later.",
+                el
+            );
             continue;
         }
         if !el.starts_with('#') {
@@ -285,7 +322,11 @@ pub(crate) fn convert_to_short_canonical_alias_ids(vecstr: &mut Vec<String>) {
     for el in vecstr {
         el.retain(|c| !c.is_whitespace());
         if el.starts_with('!') {
-            warn!("This room alias {:?} starts with an exclamation mark. ! are used for rooms ids, not aliases. This might cause problems later.", el);
+            warn!(
+                "This room alias {:?} starts with an exclamation mark. \
+                ! are used for rooms ids, not aliases. This might cause problems later.",
+                el
+            );
             continue;
         }
         if el.starts_with('#') {
@@ -319,9 +360,46 @@ pub(crate) async fn restore_login(credentials: &Credentials, ap: &Args) -> Resul
         "restoring device with device_id = {:?} on homeserver {:?}.",
         &credentials.device_id, &homeserver
     );
-    let session: matrix_sdk::Session = credentials.clone().into();
+
+    // let session: matrix_sdk::SessionMeta = credentials.clone().into();
     let client = create_client(&homeserver, ap).await?;
-    client.restore_login(session).await?;
+
+    // let auth = client.matrix_auth();
+    // debug!("Called matrix_auth()");
+    // debug!("matrix_auth() successful");
+
+    let msession = MatrixSession {
+        meta: SessionMeta {
+            user_id: credentials.user_id.clone(),
+            device_id: credentials.device_id.clone(),
+        },
+        tokens: MatrixSessionTokens {
+            access_token: credentials.access_token.clone(),
+            refresh_token: None,
+        },
+    };
+
+    let res = client.restore_session(msession.clone()).await;
+    match res {
+        Ok(_) => {
+            debug!("restore_session() successful.");
+            debug!(
+                "Logged in as {}, got device_id {} and access_token {}",
+                msession.clone().meta.user_id,
+                msession.clone().meta.device_id,
+                msession.clone().tokens.access_token,
+            );
+        }
+        Err(e) => {
+            error!(
+                "Error: Login failed because restore_session() failed. \
+                Error: {}",
+                e
+            );
+            return Err(Error::LoginFailed);
+        }
+    }
+
     debug!("restore_login returned successfully. Logged in now.");
     if ap.listen == Listen::Never {
         sync_once(&client, ap.timeout, ap.sync).await?;
@@ -342,8 +420,10 @@ pub(crate) async fn login<'a>(
 ) -> Result<(Client, Credentials), Error> {
     let client = create_client(homeserver, ap).await?;
     debug!("About to call login_username()");
+    // we need to log in.
     let response = client
-        .login_username(&username, password)
+        .matrix_auth()
+        .login_username(username, password)
         .initial_device_display_name(device)
         .send()
         .await;
@@ -356,19 +436,19 @@ pub(crate) async fn login<'a>(
             return Err(Error::LoginFailed);
         }
     }
-    let session = client
+    let _ = client
         .session()
         .expect("error: client not logged in correctly. No session.");
-    info!("device id = {}", session.device_id);
+    info!("device id = {}", client.session_meta().unwrap().device_id);
     info!("credentials file = {:?}", ap.credentials);
 
     let credentials = Credentials::new(
         homeserver.clone(),
-        session.user_id.clone(),
-        session.access_token.clone(),
-        session.device_id.clone(),
+        client.session_meta().unwrap().user_id.clone(),
+        client.matrix_auth().access_token().unwrap(),
+        client.session_meta().unwrap().device_id.clone(),
         room_default.to_string(),
-        session.refresh_token,
+        client.matrix_auth().refresh_token(),
     );
     credentials.save(&ap.credentials)?;
     // sync is needed even when --login is used,
@@ -386,8 +466,30 @@ pub(crate) async fn login<'a>(
 /// Configures the matrix-sdk async Client.
 async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     // The location to save files to
-    let sledhome = &ap.store;
-    info!("Using sled store {:?}", &sledhome);
+    let sqlitestorehome = &ap.store;
+    // remove in version 0.5 : todo
+    // Incompatibility between v0.4 and v0.3-
+    debug!(
+        "Compare store names: {:?} {:?}",
+        ap.store,
+        get_store_default_path()
+    );
+    if ap.store == get_store_default_path()
+        && !get_store_default_path().exists()
+        && get_store_depreciated_default_path().exists()
+    {
+        warn!(
+            "In order to correct incompatibility in version v0.4 the \
+            directory {:?} will be renamed to {:?}.",
+            get_store_depreciated_default_path(),
+            get_store_default_path()
+        );
+        fs::rename(
+            get_store_depreciated_default_path(),
+            get_store_default_path(),
+        )?;
+    }
+    info!("Using sqlite store {:?}", &sqlitestorehome);
     // let builder = if let Some(proxy) = cli.proxy { builder.proxy(proxy) } else { builder };
     let builder = Client::builder()
         .homeserver_url(homeserver)
@@ -398,19 +500,110 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
                 .retry_timeout(Duration::from_secs(ap.timeout)),
         );
     let client = builder
-        .sled_store(sledhome, None)
-        .expect("error: cannot add sled store to ClientBuilder.")
+        .sqlite_store(sqlitestorehome, None)
         .build()
         .await
-        .expect("error: ClientBuilder build failed."); // no password for sled!
+        .expect("error: ClientBuilder build failed. error: cannot add store to ClientBuilder."); // no password for store!
     Ok(client)
 }
 
-/// Does emoji verification
-pub(crate) async fn verify(client: &Client) -> Result<(), Error> {
-    info!("Client logged in: {}", client.logged_in());
-    info!("Client access token used: {:?}", client.access_token());
-    emoji_verify::sync(client).await?; // wait in sync for other party to initiate emoji verify
+/// Does bootstrap cross signing
+pub(crate) async fn bootstrap(client: &Client, ap: &mut Args) -> Result<(), Error> {
+    let userid = &ap.creds.as_ref().unwrap().user_id.clone();
+    get_password(ap);
+    if let Some(password) = &ap.password {
+        let mut css = client.encryption().cross_signing_status().await;
+        debug!("Client cross signing status before: {:?}", css);
+
+        if let Err(e) = client.encryption().bootstrap_cross_signing(None).await {
+            if let Some(response) = e.as_uiaa_response() {
+                let mut password = uiaa::Password::new(
+                    uiaa::UserIdentifier::UserIdOrLocalpart(userid.to_string()),
+                    password.to_owned(),
+                );
+                password.session = response.session.clone();
+
+                // Note, on the failed attempt we can use `bootstrap_cross_signing` immediately, to
+                // avoid checks.
+                debug!("Called bootstrap cross signing {:?}", password.session);
+                client
+                    .encryption()
+                    .bootstrap_cross_signing(Some(uiaa::AuthData::Password(password)))
+                    .await
+                    .expect("Couldn't bootstrap cross signing")
+            } else {
+                error!("Error: {:?}", e);
+                return Err(Error::BootstrapFailed);
+            }
+        }
+        css = client.encryption().cross_signing_status().await;
+        debug!(
+            "bootstrap_cross_signing() was either successful or the cross signing keys were \
+            already available in which case nothing is done and password was ignored."
+        );
+        debug!("Client cross signing status after bootstrapping: {:?}", css);
+        Ok(())
+    } else {
+        Err(Error::MissingPassword)
+    }
+}
+
+/// Does verification
+pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
+    let userid = &ap.creds.as_ref().unwrap().user_id.clone();
+    let deviceid = &ap.creds.as_ref().unwrap().device_id.clone();
+    debug!("Client logged in: {}", client.logged_in());
+    debug!("Client user id: {}", userid);
+    debug!("Client device id: {}", deviceid);
+    debug!("Client access token used: {:?}", client.access_token());
+
+    let css = client.encryption().cross_signing_status().await;
+    debug!("Client cross signing status {:?}", css);
+    if let Some(cssc) = css {
+        if !cssc.has_self_signing {
+            warn!(
+                "Client cross signing status is false. Verify is likely to fail. \
+                Try running --bootstrap first. {:?}",
+                cssc
+            );
+        }
+    }
+
+    if ap.verify.is_manual() {
+        let response = client.devices().await?;
+        for device in response.devices {
+            let deviceid = device.device_id;
+
+            match client.encryption().get_device(userid, &deviceid).await {
+                Ok(device) => {
+                    if let Some(device) = device {
+                        match device.verify().await {
+                            Ok(()) => info!(
+                                "Successfully verified device {:?} in one direction.",
+                                deviceid
+                            ),
+                            Err(e) => {
+                                error!(
+                                    "Error: verify failed. Are you logged in? Device is yours? \
+                                    Do you have cross-signing keys available? {:?} {:?}",
+                                    deviceid, e
+                                );
+                                return Err(Error::VerifyFailed);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error: {:?}", e);
+                    return Err(Error::VerifyFailed);
+                }
+            }
+        }
+    } else if ap.verify.is_emoji() {
+        emoji_verify::sync(client).await?; // wait in sync for other party to initiate emoji verify
+    } else {
+        error!("Error: {:?}", Error::UnsupportedCliParameter);
+    }
     Ok(())
 }
 
@@ -435,8 +628,11 @@ pub(crate) fn logout_local(ap: &Args) -> Result<(), Error> {
         warn!("Credentials file does not exist {:?}", &ap.credentials)
     }
     match fs::remove_dir_all(&ap.store) {
-        Ok(()) => info!("Sled directory successfully remove {:?}", &ap.store),
-        Err(e) => error!("Error: Sled directory not removed. {:?} {:?}", &ap.store, e),
+        Ok(()) => info!("Store directory successfully remove {:?}", &ap.store),
+        Err(e) => error!(
+            "Error: Store directory not removed. {:?} {:?}",
+            &ap.store, e
+        ),
     }
     Ok(())
 }
@@ -444,7 +640,7 @@ pub(crate) fn logout_local(ap: &Args) -> Result<(), Error> {
 /// Only logs out from server, no local changes.
 pub(crate) async fn logout_server(client: &Client, ap: &Args) -> Result<(), Error> {
     if ap.logout.is_me() {
-        match client.logout().await {
+        match client.matrix_auth().logout().await {
             Ok(n) => info!("Logout sent to server {:?}", n),
             Err(e) => error!(
                 "Error: Server logout failed but we remove local device id anyway. {:?}",
@@ -453,12 +649,17 @@ pub(crate) async fn logout_server(client: &Client, ap: &Args) -> Result<(), Erro
         }
     }
     if ap.logout.is_all() {
-        debug!("Did nothing on server side. All devices should have been deleted already. Check the log a few lines up.");
+        debug!(
+            "Did nothing on server side. \
+            All devices should have been deleted already. \
+            Check the log a few lines up."
+        );
     }
     Ok(())
 }
 
-// Todo: when is this sync() really necessary? send seems to work without, listen do not need it, devices does not need it but forces it to consume msgs, ...
+// Todo: when is this sync() really necessary? send seems to work without,
+// listen do not need it, devices does not need it but forces it to consume msgs, ...
 /// Utility function to synchronize once.
 pub(crate) async fn sync_once(client: &Client, timeout: u64, stype: Sync) -> Result<(), Error> {
     debug!("value of sync in sync_once() is {:?}", stype);
@@ -566,7 +767,7 @@ pub(crate) async fn set_avatar(
         .account()
         .upload_avatar(
             &mime_guess::from_path(path).first_or(mime::IMAGE_PNG),
-            &image,
+            image,
         )
         .await
     {
@@ -741,13 +942,14 @@ pub(crate) fn print_json(json_data: &json::JsonValue, output: Output) {
 }
 
 /// Utility function to print Common room info
-pub(crate) fn print_common_room(room: &room::Common, output: Output) {
+pub(crate) fn print_common_room(room: &room::Room, output: Output) {
     debug!("common room: {:?}", room);
     match output {
         Output::Text => println!(
             "Room:    {:?}    {}    {:?}    {}    {:?}    {:?}",
             room.room_id(),
-            serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+            serde_json::to_string(&room.clone_info().room_type())
+                .unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
             room.canonical_alias()
                 .map_or(r#""#.to_string(), |v| v.to_string()),
             serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
@@ -760,7 +962,7 @@ pub(crate) fn print_common_room(room: &room::Common, output: Output) {
             println!(
                             "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
                             room.room_id(),
-                            serde_json::to_string(&room.room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+                            serde_json::to_string(&room.clone_info().room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
                             room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
                             serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
                             room.name().unwrap_or_default(),
@@ -773,7 +975,7 @@ pub(crate) fn print_common_room(room: &room::Common, output: Output) {
 /// Print list of rooms of a given type (invited, joined, left, all) of the current user.
 pub(crate) fn print_rooms(
     client: &Client,
-    rooms: Option<matrix_sdk::RoomType>, // None is the default and prints all 3 types of rooms
+    rooms: Option<matrix_sdk::RoomState>, // None is the default and prints all 3 types of rooms
     output: Output,
 ) -> Result<(), Error> {
     debug!("Rooms (local)");
@@ -785,17 +987,17 @@ pub(crate) fn print_rooms(
                 print_common_room(&r, output);
             }
         }
-        Some(matrix_sdk::RoomType::Invited) => {
+        Some(matrix_sdk::RoomState::Invited) => {
             for r in client.invited_rooms() {
                 print_common_room(&r, output);
             }
         }
-        Some(matrix_sdk::RoomType::Joined) => {
+        Some(matrix_sdk::RoomState::Joined) => {
             for r in client.joined_rooms() {
                 print_common_room(&r, output);
             }
         }
-        Some(matrix_sdk::RoomType::Left) => {
+        Some(matrix_sdk::RoomState::Left) => {
             for r in client.left_rooms() {
                 print_common_room(&r, output);
             }
@@ -813,19 +1015,19 @@ pub(crate) async fn rooms(client: &Client, output: Output) -> Result<(), Error> 
 /// Print list of all invited rooms (not joined, not left) of the current user.
 pub(crate) async fn invited_rooms(client: &Client, output: Output) -> Result<(), Error> {
     debug!("Invited_rooms (local)");
-    print_rooms(client, Some(matrix_sdk::RoomType::Invited), output)
+    print_rooms(client, Some(matrix_sdk::RoomState::Invited), output)
 }
 
 /// Print list of all joined rooms (not invited, not left) of the current user.
 pub(crate) async fn joined_rooms(client: &Client, output: Output) -> Result<(), Error> {
     debug!("Joined_rooms (local)");
-    print_rooms(client, Some(matrix_sdk::RoomType::Joined), output)
+    print_rooms(client, Some(matrix_sdk::RoomState::Joined), output)
 }
 
 /// Print list of all left rooms (not invited, not joined) of the current user.
 pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Error> {
     debug!("Left_rooms (local)");
-    print_rooms(client, Some(matrix_sdk::RoomType::Left), output)
+    print_rooms(client, Some(matrix_sdk::RoomState::Left), output)
 }
 
 /// Create rooms, either noemal room or DM room:
@@ -835,6 +1037,7 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
 /// If and when available set the room name from the name list.
 /// If and when available set the topic name from the topic list.
 /// As output it lists/prints the newly generated room ids and and the corresponding room aliases.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn room_create(
     client: &Client,
     is_dm: bool,             // is DM room
@@ -912,12 +1115,12 @@ pub(crate) async fn room_create(
 
             let rawanyinitstateev: Raw<AnyInitialStateEvent> = rawinitstateev.cast();
             initstateevvec.push(rawanyinitstateev);
-            request.initial_state = &initstateevvec;
+            request.initial_state = initstateevvec;
         }
 
-        request.name = to_opt(&names2[i]);
-        request.room_alias_name = to_opt(&aliases2[i]);
-        request.topic = to_opt(&topics2[i]);
+        request.name = Some(names2[i].clone());
+        request.room_alias_name = Some(aliases2[i].clone());
+        request.topic = Some(topics2[i].clone());
         request.is_direct = is_dm;
         let usr: OwnedUserId;
         // Visibility defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
@@ -929,12 +1132,16 @@ pub(crate) async fn room_create(
                 Err(ref e) => {
                     err_count += 1;
                     i += 1;
-                    error!("Error: create_room failed, because user for DM is not valid, reported error {:?}.", e);
+                    error!(
+                        "Error: create_room failed, because user for DM is not valid, \
+                        reported error {:?}.",
+                        e
+                    );
                     continue;
                 }
             };
             invites.push(usr);
-            request.invite = &invites;
+            request.invite = invites;
             request.visibility = vis.clone();
             request.preset = Some(RoomPreset::PrivateChat);
         }
@@ -943,7 +1150,7 @@ pub(crate) async fn room_create(
                 debug!("create_room succeeded, result is {:?}.", response);
                 print_json(
                     &json::object!(
-                        room_id: response.room_id.to_string(),
+                        room_id: response.room_id().to_string(),
                         alias: to_opt(&aliases2[i]),
                         name: to_opt(&names2[i]),
                         topic: to_opt(&topics2[i]),
@@ -997,7 +1204,7 @@ pub(crate) async fn room_leave(
     }
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        let jroomopt = client.get_joined_room(id);
+        let jroomopt = client.get_room(id);
         match jroomopt {
             Some(jroom) => match jroom.leave().await {
                 Ok(_) => {
@@ -1015,7 +1222,9 @@ pub(crate) async fn room_leave(
                 }
             },
             None => {
-                error!("Error: get_joined_room() returned error. Are you member of this room?");
+                error!(
+                    "Error: get_room() returned error. Only invited and joined rooms can be left."
+                );
                 err_count += 1;
             }
         }
@@ -1056,7 +1265,7 @@ pub(crate) async fn room_forget(
     }
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        let jroomopt = client.get_left_room(id);
+        let jroomopt = client.get_room(id);
         match jroomopt {
             Some(jroom) => match jroom.forget().await {
                 Ok(_) => {
@@ -1068,7 +1277,11 @@ pub(crate) async fn room_forget(
                 }
             },
             None => {
-                error!("Error: get_left_room() returned error. Have you been a member of this room? Have you left this room before? Leave the room before forgetting it.");
+                error!(
+                    "Error: get_room() returned error. Have you been a member of \
+                    this room? Have you left this room before? \
+                    Leave the room before forgetting it."
+                );
                 err_count += 1;
             }
         }
@@ -1138,7 +1351,7 @@ pub(crate) async fn room_invite(
     }
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        let jroomopt = client.get_joined_room(id);
+        let jroomopt = client.get_room(id);
         match jroomopt {
             Some(jroom) => {
                 for u in &userids {
@@ -1147,14 +1360,23 @@ pub(crate) async fn room_invite(
                             info!("Invited user {:?} to room {:?} successfully.", u, id);
                         }
                         Err(ref e) => {
-                            error!("Error: failed to invited user {:?} to room {:?}. invite_user_by_id() returned error {:?}.", u, id, e);
+                            error!(
+                                "Error: failed to invited user {:?} to room {:?}. \
+                                invite_user_by_id() returned error {:?}.",
+                                u, id, e
+                            );
                             err_count += 1;
                         }
                     }
                 }
             }
             None => {
-                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before inviting others to it.", id);
+                error!(
+                    "Error: get_room() returned error. \
+                    Are you a member of this room ({:?})? \
+                    Join the room before inviting others to it.",
+                    id
+                );
                 err_count += 1;
             }
         }
@@ -1277,7 +1499,7 @@ pub(crate) async fn room_ban(
     }
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        let jroomopt = client.get_joined_room(id);
+        let jroomopt = client.get_room(id);
         match jroomopt {
             Some(jroom) => {
                 for u in &userids {
@@ -1286,14 +1508,22 @@ pub(crate) async fn room_ban(
                             info!("Banned user {:?} from room {:?} successfully.", u, id);
                         }
                         Err(ref e) => {
-                            error!("Error: failed to ban user {:?} from room {:?}. ban_user() returned error {:?}.", u, id, e);
+                            error!(
+                                "Error: failed to ban user {:?} from room {:?}. \
+                                ban_user() returned error {:?}.",
+                                u, id, e
+                            );
                             err_count += 1;
                         }
                     }
                 }
             }
             None => {
-                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before banning others from it.", id);
+                error!(
+                    "Error: get_room() returned error. Are you a member of this room ({:?})? \
+                    Join the room before banning others from it.",
+                    id
+                );
                 err_count += 1;
             }
         }
@@ -1386,7 +1616,7 @@ pub(crate) async fn room_kick(
     }
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        let jroomopt = client.get_joined_room(id);
+        let jroomopt = client.get_room(id);
         match jroomopt {
             Some(jroom) => {
                 for u in &userids {
@@ -1395,14 +1625,22 @@ pub(crate) async fn room_kick(
                             info!("Kicked user {:?} from room {:?} successfully.", u, id);
                         }
                         Err(ref e) => {
-                            error!("Error: failed to kick user {:?} from room {:?}. kick_user() returned error {:?}.", u, id, e);
+                            error!(
+                                "Error: failed to kick user {:?} from room {:?}. \
+                                kick_user() returned error {:?}.",
+                                u, id, e
+                            );
                             err_count += 1;
                         }
                     }
                 }
             }
             None => {
-                error!("Error: get_joined_room() returned error. Are you a member of this room ({:?})? Join the room before kicking others from it.", id);
+                error!(
+                    "Error: get_room() returned error. Are you a member of this room ({:?})? \
+                    Join the room before kicking others from it.",
+                    id
+                );
                 err_count += 1;
             }
         }
@@ -1496,22 +1734,21 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
     // There are around 50 events for rooms
     // See https://docs.rs/ruma/0.7.4/ruma/?search=syncroom
     // We only do 4 as example to start with.
-    let room_member_evs: Vec<Raw<SyncRoomMemberEvent>> = room.get_state_events_static().await?;
-    let power_levels_ev: Raw<SyncRoomPowerLevelsEvent> = room
-        .get_state_event_static()
-        .await?
-        .ok_or(Error::RoomGetStateFailed)?;
-    let name_ev: Raw<SyncRoomNameEvent> = room
-        .get_state_event_static()
-        .await?
-        .ok_or(Error::RoomGetStateFailed)?;
-    let topic_ev: Raw<SyncRoomTopicEvent> = room
-        .get_state_event_static()
-        .await?
-        .ok_or(Error::RoomGetStateFailed)?;
+    let room_member_evs = room
+        .get_state_events_static::<RoomMemberEventContent>()
+        .await?;
+    let power_levels_ev = room
+        .get_state_events_static::<RoomPowerLevelsEventContent>()
+        .await?;
+    let name_ev = room
+        .get_state_events_static::<RoomNameEventContent>()
+        .await?;
+    let topic_ev = room
+        .get_state_events_static::<RoomTopicEventContent>()
+        .await?;
     match output {
         Output::Text => {
-            print!("Room:    {:?},    SyncRoomMemberEvents: [", room_id);
+            print!("Room:    {:?},    RoomMemberEventContent: [", room_id);
             let mut first: bool = true;
             for ev in room_member_evs {
                 if first {
@@ -1521,38 +1758,61 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
                 }
                 print!("\"{:?}\"", ev.deserialize());
             }
-            println!(
-                "],    SyncRoomTopicEvent: \"{:?}\",    SyncRoomPowerLevelsEvent: \"{:?}\",    SyncRoomNameEvent: \"{:?}\"",
-                topic_ev.deserialize(),
-                power_levels_ev.deserialize(),
-                name_ev.deserialize()
-            );
-        }
-        // Output::JsonSpec => (), // These events should be spec compliant
-        _ => {
-            print!("{{\"room_id\": {:?}, \"SyncRoomMemberEvents\": [", room_id);
+            println!("],    ");
+            print!("RoomPowerLevelsEventContent: [");
             let mut first: bool = true;
-            for ev in room_member_evs {
+            for ev in power_levels_ev {
                 if first {
                     first = false;
                 } else {
                     print!(", ");
                 }
-                print!(
-                    "{{ {} }}",
-                    serde_json::to_string(&ev.deserialize()?)
-                        .unwrap_or_else(|_| r#""""#.to_string())
-                );
+                print!("\"{:?}\"", ev.deserialize());
             }
-            println!(
-                "], \"SyncRoomTopicvent\": {}, \"SyncRoomPowerLevelsEvent\": {}, \"SyncRoomNameEvent\": {}}}",
-                serde_json::to_string(&topic_ev.deserialize()?)
-                    .unwrap_or_else(|_| r#""""#.to_string()),
-                serde_json::to_string(&power_levels_ev.deserialize()?)
-                    .unwrap_or_else(|_| r#""""#.to_string()),
-                serde_json::to_string(&name_ev.deserialize()?)
-                    .unwrap_or_else(|_| r#""""#.to_string()),
+            println!("],    ");
+            print!("RoomNameEventContent: [");
+            let mut first: bool = true;
+            for ev in name_ev {
+                if first {
+                    first = false;
+                } else {
+                    print!(", ");
+                }
+                print!("\"{:?}\"", ev.deserialize());
+            }
+            println!("],    ");
+            print!("RoomTopicEventContent: [");
+            let mut first: bool = true;
+            for ev in topic_ev {
+                if first {
+                    first = false;
+                } else {
+                    print!(", ");
+                }
+                print!("\"{:?}\"", ev.deserialize());
+            }
+            println!("]");
+        }
+        // Output::JsonSpec => (), // These events should be spec compliant
+        _ => {
+            print!("{{\"room_id\": {:?}, ", room_id);
+            print!(
+                "\"RoomMemberEventContent\": [ {{ {} }} ], ",
+                serde_json::to_string(&room_member_evs).unwrap_or_else(|_| r#""""#.to_string())
             );
+            print!(
+                "\"RoomPowerLevelsEventContent\": [ {{ {} }} ], ",
+                serde_json::to_string(&power_levels_ev).unwrap_or_else(|_| r#""""#.to_string())
+            );
+            print!(
+                "\"RoomNameEventContent\": [ {{ {} }} ], ",
+                serde_json::to_string(&name_ev).unwrap_or_else(|_| r#""""#.to_string())
+            );
+            print!(
+                "\"RoomTopicEventContent\": [ {{ {} }} ], ",
+                serde_json::to_string(&topic_ev).unwrap_or_else(|_| r#""""#.to_string())
+            );
+            println!(" }} ");
         }
     }
     Ok(())
@@ -1641,7 +1901,8 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                     print!(", ");
                 }
                 print!(
-                    "{{\"user_id\": {:?}, \"display_name\": {:?}, \"name\": {:?}, \"avatar_url\": {:?}, \"power_level\": {:?}, \"membership\": \"{:?}\"}}",
+                    "{{\"user_id\": {:?}, \"display_name\": {:?}, \"name\": {:?}, \
+                    \"avatar_url\": {:?}, \"power_level\": {:?}, \"membership\": \"{:?}\"}}",
                     m.user_id(),
                     m.display_name(), // .as_deref().unwrap_or(""),
                     m.name(),
@@ -1689,14 +1950,15 @@ pub(crate) async fn joined_members(
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
         match client.get_room(id) {
-            Some(r) => match r.members().await {
+            Some(r) => match r.members(RoomMemberships::JOIN).await {
                 Ok(ref m) => {
                     debug!("Members of room {:?} are {:?}.", id, m);
                     print_room_members(id, m, output);
                 }
                 Err(ref e) => {
                     error!(
-                        "Error: failed to get members of room {:?}. members() returned error {:?}.",
+                        "Error: failed to get members of room {:?}. \
+                        members() returned error {:?}.",
                         id, e
                     );
                     err_count += 1;
@@ -1797,11 +2059,12 @@ pub(crate) async fn room_enable_encryption(
         error!("No valid rooms. Cannot enable encryption anywhere. Giving up.");
         return Err(Error::EnableEncryptionFailed);
     }
-    // without sync() client will not know that it is in joined rooms list and it will fail, we must sync!
+    // without sync() client will not know that it is in joined rooms list and it will fail,
+    // we must sync!
     // client.sync_once(SyncSettings::new()).await?; we should have sync-ed before.
     for (i, id) in roomids.iter().enumerate() {
         debug!("In position {} we have room id {:?}.", i, id,);
-        match client.get_joined_room(id) {
+        match client.get_room(id) {
             Some(room) => match room.enable_encryption().await {
                 Ok(_) => {
                     debug!("enable_encryption succeeded for room {:?}.", id);
@@ -1816,9 +2079,12 @@ pub(crate) async fn room_enable_encryption(
             },
             None => {
                 err_count += 1;
-                error!(concat!(
-                    "get_joined_room failed for room {:?}, ",
-                    "Are you member of this room? If you are member of this room try syncing first."), id);
+                error!(
+                    "get_room failed for room {:?}, \
+                    Are you member of this room? \
+                    If you are member of this room try syncing first.",
+                    id
+                );
             }
         }
     }
@@ -1837,7 +2103,7 @@ pub(crate) async fn room_enable_encryption(
 pub(crate) async fn delete_devices_pre(client: &Client, ap: &mut Args) -> Result<(), Error> {
     debug!("Pre-processing for Deleting device(s)");
     get_password(ap);
-    if let Some(user) = ap.user.get(0) {
+    if let Some(user) = ap.user.first() {
         if let Some(password) = &ap.password {
             let mut hasstar = false;
             for i in &mut ap.delete_device {
@@ -1893,13 +2159,13 @@ pub(crate) async fn delete_devices(
         user, "******", deviceids
     );
     if let Err(e) = client.delete_devices(&deviceids, None).await {
-        if let Some(info) = e.uiaa_response() {
+        if let Some(info) = e.as_uiaa_response() {
             let mut password = uiaa::Password::new(
                 // full user id (@john:some.matrix.org), or just local part (john)
-                uiaa::UserIdentifier::UserIdOrLocalpart(user),
-                password,
+                uiaa::UserIdentifier::UserIdOrLocalpart(user.to_string()),
+                password.to_string(),
             );
-            password.session = info.session.as_deref();
+            password.session = info.session.clone();
 
             match client
                 .delete_devices(&deviceids, Some(uiaa::AuthData::Password(password)))
@@ -1985,12 +2251,9 @@ pub(crate) async fn message(
     for roomname in roomnames.iter() {
         let proom = RoomId::parse(roomname).unwrap();
         debug!("In message(): parsed room name is {:?}", proom);
-        let room = client.get_joined_room(&proom).ok_or(Error::InvalidRoom)?;
+        let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for fmsg in fmsgs.iter() {
-            match room
-                .send(RoomMessageEventContent::new(fmsg.clone()), None)
-                .await
-            {
+            match room.send(RoomMessageEventContent::new(fmsg.clone())).await {
                 Ok(response) => debug!("message send successful {:?}", response),
                 Err(ref e) => {
                     error!("message send returned error {:?}", e);
@@ -2033,7 +2296,7 @@ pub(crate) async fn file(
     for roomname in roomnames.iter() {
         let proom = RoomId::parse(roomname).unwrap();
         debug!("In file(): parsed room name is {:?}", proom);
-        let room = client.get_joined_room(&proom).ok_or(Error::InvalidRoom)?;
+        let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for mut filename in filenames.iter() {
             let data = if filename.to_str().unwrap() == "-" {
                 // read from stdin
@@ -2075,7 +2338,7 @@ pub(crate) async fn file(
                             &mime_guess::from_path(filename)
                                 .first_or(mime::APPLICATION_OCTET_STREAM),
                         ),
-                        &data,
+                        data,
                         AttachmentConfig::new(),
                     )
                     .await
@@ -2130,7 +2393,11 @@ pub(crate) async fn media_upload(
             mime = match mime_str.parse() {
                 Ok(m) => m,
                 Err(ref e) => {
-                    error!("Provided Mime {:?} is not valid; the upload of file {:?} will be skipped; returned error {:?}", mime_str, filename, e);
+                    error!(
+                        "Provided Mime {:?} is not valid; the upload of file {:?} \
+                        will be skipped; returned error {:?}",
+                        mime_str, filename, e
+                    );
                     err_count += 1;
                     i += 1;
                     continue;
@@ -2155,7 +2422,11 @@ pub(crate) async fn media_upload(
                 filename = PathBuf::from(r"-");
             }
             fs::read(&filename).unwrap_or_else(|e| {
-                error!("File {:?} was not found; the upload of file {:?} will be skipped; returned error {:?}", filename, filename, e);
+                error!(
+                    "File {:?} was not found; the upload of file {:?} \
+                    will be skipped; returned error {:?}",
+                    filename, filename, e
+                );
                 err_count += 1;
                 Vec::new()
             })
@@ -2167,7 +2438,7 @@ pub(crate) async fn media_upload(
             );
             err_count += 1;
         } else {
-            match client.media().upload(&mime, &data).await {
+            match client.media().upload(&mime, data).await {
                 Ok(response) => {
                     debug!("upload successful {:?}", response);
                     print_json(
@@ -2248,7 +2519,11 @@ pub(crate) async fn media_download(
                             );
                         }
                         Err(ref e) => {
-                            error!("The downloaded media data could not be written to stdout. write() returned error {:?}", e);
+                            error!(
+                                "The downloaded media data could not be written to stdout. \
+                                write() returned error {:?}",
+                                e
+                            );
                             err_count += 1;
                             continue;
                         }
@@ -2272,11 +2547,19 @@ pub(crate) async fn media_download(
                             );
                         }
                         Ok(Err(ref e)) => {
-                            error!("Writing downloaded media to file {:?} failed. Error returned is {:?}",filename,e);
+                            error!(
+                                "Writing downloaded media to file {:?} failed. \
+                                Error returned is {:?}",
+                                filename, e
+                            );
                             err_count += 1;
                         }
                         Err(ref e) => {
-                            error!("Could not create file {:?} for storing downloaded media. Returned error {:?}.",filename,e);
+                            error!(
+                                "Could not create file {:?} for storing downloaded media. \
+                                Returned error {:?}.",
+                                filename, e
+                            );
                             err_count += 1;
                         }
                     }

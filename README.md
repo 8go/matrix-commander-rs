@@ -13,6 +13,25 @@ alt="MC logo" height="150">
 # matrix-commander-rs
 simple but convenient CLI-based Matrix client app for sending, receiving, and much more
 
+# Incompatibilities
+
+Be forewarned.
+Version 0.4 is incompatible with previous versions.
+The default location of the store has changed.
+The directory name of the default store used to be `sledstore`.
+Now it is just `store`. The program attempts to rename
+the store's directory name automatically. E.g. on Linux it tries
+to automatically rename
+`~/.local/share/matrix-commander-rs/sledstore/` to
+`~/.local/share/matrix-commander-rs/store/`.
+If you have used the default store name in the past,
+and automatical renaming is failing for you, then rename the store's
+directory name from
+`sledstore` to `store` manually. Also, some JSON and
+text output is different than in previous version. If you are parsing
+the output you should do careful testing to adapt to the changed
+output.
+
 # Help create this Rust program!
 
 This project is currently only a vision. The Python package matrix-commander
@@ -34,11 +53,11 @@ Safe!
 - Login with password
 - Login with access token (restore login)
 - Encryption
-- Emoji verification
+- Manual and Emoji verification
 - Sending one or multiple text message to one or multiple rooms
 - Sending one or multiple text message to one or multiple rooms
 - Listening for new and incoming messages on one or multiple rooms
-- Getting and printing old messages 
+- Getting and printing old messages
 - Listing devices
 - Creating, leaving and forgetting rooms
 - Kicking, banning, etc. on rooms
@@ -91,7 +110,7 @@ Safe!
 ```
 Welcome to "matrix-commander-rs", a Matrix CLI client. ─── On the first run use
 --login to log in, to authenticate. On the second run we suggest to use
---verify to get verified. Emoji verification is built-in and can be used to
+--verify to get verified. Manual verification is built-in and can be used to
 verify devices. Or combine both --login and --verify in the first run. On
 further runs "matrix-commander-rs" implements a simple Matrix CLI client that
 can send messages or files, listen to messages, operate on rooms, etc.  ───
@@ -186,7 +205,7 @@ Options:
           permit logging into the correct Matrix account and sending messages
           to the preconfigured room. If this option is provided, the provided
           path to a file will be used as credentials file instead of the
-          default one
+          default one. E.g. ~/.local/share/matrix-commander-rs/credentials.json
           
           [default:
           /home/user/.local/share/matrix-commander-rs/credentials.json]
@@ -200,7 +219,7 @@ Options:
           the same store for the same device. The store directory can be shared
           between multiple different devices and users
           
-          [default: /home/user/.local/share/matrix-commander-rs/sledstore/]
+          [default: /home/user/.local/share/matrix-commander-rs/store/]
 
       --login <LOGIN_METHOD>
           Login to and authenticate with the Matrix homeserver. Details:: This
@@ -234,9 +253,13 @@ Options:
 
       --verify <VERIFICATION_METHOD>
           Perform account verification. Details:: By default, no verification
-          is performed. Verification is currently only offered via Emojis.
-          Hence, specify '--verify emoji'. If verification is desired, run this
-          program in the foreground (not as a service) and without a pipe.
+          is performed. Verification is currently offered via Manual and Emoji.
+          Manual verification is simpler but does less. Try: --bootstrap
+          --password mypassword --verify manual. Manual only verfies devices
+          one-directionally. See
+          https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
+          for more info on Manual verification. If verification is desired, run
+          this program in the foreground (not as a service) and without a pipe.
           While verification is optional it is highly recommended, and it is
           recommended to be done right after (or together with) the --login
           action. Verification is always interactive, i.e. it required keyboard
@@ -248,27 +271,41 @@ Options:
           of the *same* user. For that, open (e.g.) Element in a browser, make
           sure Element is using the same user account as the
           "matrix-commander-rs" user (specified with --user-login at --login).
-          Now in the Element webpage go to the room that is the
+          On older versions of the Element webpage go to the room that is the
           "matrix-commander-rs" default room (specified with --room-default at
           --login). OK, in the web-browser you are now the same user and in the
           same room as "matrix-commander-rs". Now click the round 'i' 'Room
           Info' icon, then click 'People', click the appropriate user (the
           "matrix-commander-rs" user), click red 'Not Trusted' text which
           indicated an untrusted device, then click the square 'Interactively
-          verify by Emoji' button (one of 3 button choices). At this point both
-          web-page and "matrix-commander-rs" in terminal show a set of emoji
-          icons and names. Compare them visually. Confirm on both sides (Yes,
-          They Match, Got it), finally click OK. You should see a green shield
-          and also see that the "matrix-commander-rs" device is now green and
-          verified in the webpage. In the terminal you should see a text
-          message indicating success. You should now be verified across all
-          devices and across all users
+          verify by Emoji' button (one of 3 button choices). On newer versions
+          of Element, now go to the main menu (click your personal icon top
+          left), go into All Settings, go into Sessions. Select the currently
+          unverified session, click Verify With Other Device, and that will
+          bring up the emojis. At this point both web-page and
+          "matrix-commander-rs" in terminal show a set of emoji icons and
+          names. Compare them visually. Confirm on both sides (Yes, They Match,
+          Got it), finally click OK. You should see a green shield and also see
+          that the "matrix-commander-rs" device is now green and verified in
+          the webpage. In the terminal you should see a text message indicating
+          success. You can do something similar to verify with other users on
+          other rooms
           
           [default: none]
 
           Possible values:
-          - none:  None: option not used, no verification done
-          - emoji: Emoji: verify via emojis
+          - none:   None: option not used, no verification done
+          - manual: Manual: manual verification See also:
+            https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
+          - emoji:  Emoji: verify via emojis
+
+      --bootstrap
+          Details:: By default, no bootstrapping is performed. Bootstrapping is
+          useful for verification. --bootstrap creates cross sogning keys. If
+          you have trouble verifying with --verify manual, use --bootstrap
+          before. Use --password to provide password. If --password is not
+          given it will read password from command line (stdin). See also
+          https://docs.rs/matrix-sdk/0.7.1/matrix_sdk/encryption/struct.CrossSigningStatus.html#fields
 
       --logout <DEVICE>
           Logout this or all devices from the Matrix homeserver. Details:: This
@@ -311,9 +348,9 @@ Options:
       --password <PASSWORD>
           Specify a password for use by certain actions. Details:: It is an
           optional argument. By default --password is ignored and not used. It
-          is used by '--login password' and '--delete-device' actions. If not
-          provided for --login or --delete-device the user will be queried for
-          the password via keyboard interactively
+          is used by '--login password' and '--delete-device' and --bootstrap
+          actions. If not provided for --login, --delete-device or --bootstrap
+          the user will be queried for the password via keyboard interactively
 
       --device <DEVICE>
           Specify a device name, for use by certain actions. Details:: It is an

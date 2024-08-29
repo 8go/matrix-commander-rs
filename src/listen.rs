@@ -27,7 +27,7 @@ use tracing::{debug, error, info, warn};
 use matrix_sdk::{
     config::SyncSettings,
     event_handler::Ctx,
-    // Session,
+    // SessionMeta,
     room::MessagesOptions,
     // room,
     room::Room,
@@ -58,7 +58,9 @@ use matrix_sdk::{
             TextMessageEventContent,
             VideoMessageEventContent,
         },
-        events::room::redaction::SyncRoomRedactionEvent,
+        events::room::redaction::{
+            OriginalSyncRoomRedactionEvent, RedactedSyncRoomRedactionEvent, SyncRoomRedactionEvent,
+        },
         events::{
             AnyMessageLikeEvent,
             AnyTimelineEvent,
@@ -193,12 +195,18 @@ async fn handle_redactedsyncroommessageevent(
     }
     if !context.output.is_text() {
         // Serialize it to a JSON string.
-        let j = match serde_json::to_string(&ev) {
+        let j = match serde_json::to_string(&ev.content) {
             Ok(jsonstr) => {
                 // this event does not contain the room_id, other events do.
                 // People are missing the room_id in output.
                 // Nasty hack: inserting the room_id into the JSON string.
-                let mut s = String::from(jsonstr);
+                let mut s = jsonstr;
+                s.insert_str(s.len() - 1, ",\"event_id\":\"\"");
+                s.insert_str(s.len() - 2, ev.event_id.as_str());
+                s.insert_str(s.len() - 1, ",\"sender\":\"\"");
+                s.insert_str(s.len() - 2, ev.sender.as_str());
+                s.insert_str(s.len() - 1, ",\"origin_server_ts\":\"\"");
+                s.insert_str(s.len() - 2, &ev.origin_server_ts.0.to_string());
                 s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
                 s.insert_str(s.len() - 2, room.room_id().as_str());
                 s
@@ -212,6 +220,60 @@ async fn handle_redactedsyncroommessageevent(
         "Received a message for RedactedSyncRoomMessageEvent. Not implemented yet for text format, try --output json. {:?}",
         ev
     );
+}
+
+fn handle_originalsyncroomredactionevent(ev: OriginalSyncRoomRedactionEvent, room: Room) {
+    debug!(
+        "Received a message for OriginalSyncRoomRedactionEvent. {:?}",
+        ev
+    );
+    // Serialize it to a JSON string.
+    let j = match serde_json::to_string(&ev.content) {
+        Ok(jsonstr) => {
+            // this event does not contain the room_id, other events do.
+            // People are missing the room_id in output.
+            // Nasty hack: inserting the room_id into the JSON string.
+            let mut s = jsonstr;
+            s.insert_str(s.len() - 1, ",\"event_id\":\"\"");
+            s.insert_str(s.len() - 2, ev.event_id.as_str());
+            s.insert_str(s.len() - 1, ",\"sender\":\"\"");
+            s.insert_str(s.len() - 2, ev.sender.as_str());
+            s.insert_str(s.len() - 1, ",\"origin_server_ts\":\"\"");
+            s.insert_str(s.len() - 2, &ev.origin_server_ts.0.to_string());
+            s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
+            s.insert_str(s.len() - 2, room.room_id().as_str());
+            s
+        }
+        Err(e) => e.to_string(),
+    };
+    println!("{}", j);
+}
+
+fn handle_redactedsyncroomredactionevent(ev: RedactedSyncRoomRedactionEvent, room: Room) {
+    debug!(
+        "Received a message for RedactedSyncRoomRedactionEvent. {:?}",
+        ev
+    );
+    // Serialize it to a JSON string.
+    let j = match serde_json::to_string(&ev.content) {
+        Ok(jsonstr) => {
+            // this event does not contain the room_id, other events do.
+            // People are missing the room_id in output.
+            // Nasty hack: inserting the room_id into the JSON string.
+            let mut s = jsonstr;
+            s.insert_str(s.len() - 1, ",\"event_id\":\"\"");
+            s.insert_str(s.len() - 2, ev.event_id.as_str());
+            s.insert_str(s.len() - 1, ",\"sender\":\"\"");
+            s.insert_str(s.len() - 2, ev.sender.as_str());
+            s.insert_str(s.len() - 1, ",\"origin_server_ts\":\"\"");
+            s.insert_str(s.len() - 2, &ev.origin_server_ts.0.to_string());
+            s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
+            s.insert_str(s.len() - 2, room.room_id().as_str());
+            s
+        }
+        Err(e) => e.to_string(),
+    };
+    println!("{}", j);
 }
 
 /// Utility function to handle SyncRoomRedactionEvent events.
@@ -229,19 +291,14 @@ async fn handle_syncroomredactedevent(
     }
     if !context.output.is_text() {
         // Serialize it to a JSON string.
-        let j = match serde_json::to_string(&ev) {
-            Ok(jsonstr) => {
-                // this event does not contain the room_id, other events do.
-                // People are missing the room_id in output.
-                // Nasty hack: inserting the room_id into the JSON string.
-                let mut s = String::from(jsonstr);
-                s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
-                s.insert_str(s.len() - 2, room.room_id().as_str());
-                s
+        match ev {
+            SyncRoomRedactionEvent::Original(evi) => {
+                handle_originalsyncroomredactionevent(evi, room)
             }
-            Err(e) => e.to_string(),
-        };
-        println!("{}", j);
+            SyncRoomRedactionEvent::Redacted(evi) => {
+                handle_redactedsyncroomredactionevent(evi, room)
+            }
+        }
         return;
     }
     debug!(
@@ -327,12 +384,18 @@ async fn handle_syncroommessageevent(
     }
     if !context.output.is_text() {
         // Serialize it to a JSON string.
-        let j = match serde_json::to_string(&ev) {
+        let j = match serde_json::to_string("") {
             Ok(jsonstr) => {
                 // this event does not contain the room_id, other events do.
                 // People are missing the room_id in output.
                 // Nasty hack: inserting the room_id into the JSON string.
-                let mut s = String::from(jsonstr);
+                let mut s = jsonstr;
+                s.insert_str(s.len() - 1, ",\"event_id\":\"\"");
+                s.insert_str(s.len() - 2, ev.event_id().as_str());
+                s.insert_str(s.len() - 1, ",\"sender\":\"\"");
+                s.insert_str(s.len() - 2, ev.sender().as_str());
+                s.insert_str(s.len() - 1, ",\"origin_server_ts\":\"\"");
+                s.insert_str(s.len() - 2, &ev.origin_server_ts().0.to_string());
                 s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
                 s.insert_str(s.len() - 2, room.room_id().as_str());
                 s
@@ -438,7 +501,7 @@ pub(crate) async fn listen_once(
 
     // get the current sync state from server before syncing
     // This gets all rooms but ignores msgs from itself.
-    let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
+    let settings = SyncSettings::default();
 
     client.sync_once(settings).await?;
     Ok(())
@@ -507,7 +570,7 @@ pub(crate) async fn listen_forever(
     info!("Once done listening, kill the process manually with Control-C.");
 
     // get the current sync state from server before syncing
-    let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
+    let settings = SyncSettings::default();
 
     match client.sync(settings).await {
         Ok(()) => Ok(()),
@@ -563,15 +626,15 @@ pub(crate) async fn listen_tail(
             }
         });
     }
-    let ownedroomidarraysliceoption: Option<&[OwnedRoomId]> = Some(roomids.as_slice());
+    let ownedroomidvecoption: Option<Vec<OwnedRoomId>> = Some(roomids.clone());
     // // old code, when there was only 1 roomname
     // let roomclone = roomnames[0].clone();
     // let ownedroomid: OwnedRoomId = RoomId::parse(&roomclone).unwrap();
-    // let ownedroomidarrayslice = &[ownedroomid][0..1]; // from 0 to 1 exl, ie. from 0 to 1-1, ie from 0 to 0
-    // let ownedroomidarraysliceoption: Option<&[OwnedRoomId]> = Some(ownedroomidarrayslice);
+    // let ownedroomidvec = ownedroomid
+    // let ownedroomidvecoption: Option<Vec<OwnedRoomId>> = Some(ownedroomid);
     let mut filter = FilterDefinition::default();
     let mut roomfilter = RoomFilter::empty();
-    roomfilter.rooms = ownedroomidarraysliceoption;
+    roomfilter.rooms = ownedroomidvecoption;
     filter.room = roomfilter;
 
     // Filter by limit. This works.
@@ -598,7 +661,7 @@ pub(crate) async fn listen_tail(
     for roomid in roomids.iter() {
         let mut options = MessagesOptions::backward(); // .from("t47429-4392820_219380_26003_2265");
         options.limit = UInt::new(number).unwrap();
-        let jroom = client.get_joined_room(roomid).unwrap();
+        let jroom = client.get_room(roomid.clone().as_ref()).unwrap();
         let msgs = jroom.messages(options).await;
         // debug!("\n\nmsgs = {:?} \n\n", msgs);
         let chunk = msgs.unwrap().chunk;
@@ -775,11 +838,11 @@ pub(crate) async fn listen_all(
     for roomname in roomnames {
         roomids.push(RoomId::parse(roomname.clone()).unwrap());
     }
-    let ownedroomidarraysliceoption: Option<&[OwnedRoomId]> = Some(roomids.as_slice());
+    let ownedroomidvecoption: Option<Vec<OwnedRoomId>> = Some(roomids);
     // Filter by rooms. This works.
     let mut filter = FilterDefinition::default();
     let mut roomfilter = RoomFilter::empty();
-    roomfilter.rooms = ownedroomidarraysliceoption;
+    roomfilter.rooms = ownedroomidvecoption;
     filter.room = roomfilter;
 
     // // Let's enable member lazy loading. This filter is enabled by default.
@@ -826,9 +889,7 @@ pub(crate) async fn listen_all(
 
     let mut err_count = 0u32;
     let filterclone = filter.clone();
-    let sync_settings = SyncSettings::default()
-        .token(client.sync_token().await.unwrap())
-        .filter(Filter::FilterDefinition(filterclone));
+    let sync_settings = SyncSettings::default().filter(Filter::FilterDefinition(filterclone));
 
     match client.sync_once(sync_settings).await {
         Ok(response) => debug!("listen_all successful {:?}", response),
