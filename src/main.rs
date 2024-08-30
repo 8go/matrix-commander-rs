@@ -870,10 +870,11 @@ pub struct Args {
     /// verification is performed.
     /// Verification is currently offered via Manual and Emoji.
     /// Manual verification is simpler but does less.
-    /// Try: --bootstrap --password mypassword --verify manual.
+    /// Try: '--bootstrap --password mypassword --verify manual'.
     /// Manual only verfies devices one-directionally. See
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
     /// for more info on Manual verification.
+    /// One can first do 'manual' verification and then 'emoji' verification.
     /// If verification is desired, run this program in the
     /// foreground (not as a service) and without a pipe.
     /// While verification is optional it is highly recommended, and it
@@ -884,32 +885,27 @@ pub struct Args {
     /// will be printed on stdout and the user has to respond
     /// via the keyboard to accept or reject verification.
     /// Once verification is complete, the program may be
-    /// run as a service. Verification is best done as follows:
-    /// Perform a cross-device verification, that means, perform a
-    /// verification between two devices of the *same* user. For that,
-    /// open (e.g.) Element in a browser, make sure Element is using the
-    /// same user account as the "matrix-commander-rs" user (specified with
-    /// --user-login at --login).
-    /// On older versions of the Element webpage go to the room
-    /// that is the "matrix-commander-rs" default room (specified with
-    /// --room-default at --login). OK, in the web-browser you are now the
-    /// same user and in the same room as "matrix-commander-rs".
-    /// Now click the round 'i' 'Room Info' icon, then click 'People',
-    /// click the appropriate user (the "matrix-commander-rs" user),
-    /// click red 'Not Trusted' text
-    /// which indicated an untrusted device, then click the square
-    /// 'Interactively verify by Emoji' button (one of 3 button choices).
-    /// On newer versions of Element, now go to the main menu (click
-    /// your personal icon top left), go into All Settings, go into Sessions.
-    /// Select the currently unverified session, click Verify With Other Device,
-    /// and that will bring up the emojis.
-    /// At this point both web-page and "matrix-commander-rs" in terminal
+    /// run as a service.
+    /// Different Matrix clients (like Element app on cell phone,
+    /// Element website in browser, other clients) have the
+    /// "Verification" button hidden in different menus or GUI
+    /// elements. Sometimes it is labelled "Not trusted", sometimes "Verify"
+    /// or "Verify by emoji", sometimes "Verify With Other Device".
+    /// Verification is best done as follows:
+    /// Run 'matrix-commander-rs --verify emoji ...' and have the
+    /// program waiting for inputs and for invitations.
+    /// Find the appropriate "verify" button on your other client, click it,
+    /// and thereby publish a "verification invitation". Once received by
+    /// "matrix-commander-rs"
+    /// it will print the emojis in the terminal.
+    /// At this point both your client as well as "matrix-commander-rs" in the terminal
     /// show a set of emoji icons and names. Compare them visually.
     /// Confirm on both sides (Yes, They Match, Got it), finally click OK.
     /// You should see a green shield and also see that the
-    /// "matrix-commander-rs" device is now green and verified in the webpage.
+    /// matrix-commander-rs device is now green and verified.
     /// In the terminal you should see a text message indicating success.
-    /// You can do something similar to verify with other users on other rooms.
+    /// It has been tested with Element app on cell phone and Element webpage in
+    /// browser. Verification is done one device at a time.
     #[arg(long, value_enum,
         value_name = "VERIFICATION_METHOD",
         default_value_t = Verify::default(), ignore_case = true, )]
@@ -919,7 +915,7 @@ pub struct Args {
     /// Details::
     /// By default, no
     /// bootstrapping is performed. Bootstrapping is useful for verification.
-    /// --bootstrap creates cross sogning keys.
+    /// --bootstrap creates cross signing keys.
     /// If you have trouble verifying with --verify manual, use --bootstrap before.
     /// Use --password to provide password. If --password is not given it will read
     /// password from command line (stdin). See also
@@ -2820,7 +2816,11 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
             } else {
                 io::stdin().read_to_string(&mut line)?;
             }
-            line
+            // line.trim_end().to_string() // remove /n at end of string
+            line.strip_suffix("\r\n")
+                .or(line.strip_suffix("\n"))
+                .unwrap_or(&line)
+                .to_string() // remove /n at end of string
         } else if msg == r"_" {
             let mut eof = false;
             while !eof {
@@ -3382,6 +3382,21 @@ async fn main() -> Result<(), Error> {
         crate::readme().await;
         return Ok(());
     };
+
+    // -m not used but data being piped into stdin?
+    if ap.message.is_empty() && !stdin().is_terminal() {
+        // make it more compatible with the Python version of this tool
+        debug!(
+            "-m is empty, but there is something piped into stdin. Let's assume '-m -' \
+            and read and send the information piped in on stdin."
+        );
+        ap.message.push("-".to_string());
+    };
+    debug!(
+        "message {:?}, is_terminal() = {:?} (if it not the terminal than it is a pipe on stdin)",
+        ap.message,
+        stdin().is_terminal()
+    );
 
     if !(!ap.login.is_none()
         // get actions

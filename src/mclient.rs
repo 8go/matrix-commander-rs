@@ -152,8 +152,18 @@ pub(crate) async fn convert_to_full_room_id(
     if room.starts_with('!') {
         return;
     }
+    if room.starts_with("\\!") {
+        room.remove(0); // remove escape
+        return;
+    }
+    if room.starts_with("\\#") {
+        room.remove(0); // remove escape
+        return;
+    }
+
     if room.starts_with('#') {
-        match RoomAliasId::parse(room.clone()) {
+        match RoomAliasId::parse(room.clone().replace("\\#", "#")) {
+            //remove possible escape
             Ok(id) => match client.resolve_room_alias(&id).await {
                 Ok(res) => {
                     room.clear();
@@ -867,7 +877,8 @@ pub(crate) async fn get_room_info(
     debug!("Getting room info");
     for (i, roomstr) in rooms.iter().enumerate() {
         debug!("Room number {} with room id {}", i, roomstr);
-        let room_id = match RoomId::parse(roomstr) {
+        let room_id = match RoomId::parse(roomstr.replace("\\!", "!")) {
+            // remove possible escape
             Ok(ref inner) => inner.clone(),
             Err(ref e) => {
                 error!("Invalid room id: {:?} {:?}", roomstr, e);
@@ -1127,7 +1138,10 @@ pub(crate) async fn room_create(
         let vis = Visibility::Private;
         let mut invites = vec![];
         if is_dm {
-            usr = match UserId::parse(<std::string::String as AsRef<str>>::as_ref(&users2[i])) {
+            usr = match UserId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &users2[i].replace("\\@", "@"),
+            )) {
+                // remove possible escape
                 Ok(u) => u,
                 Err(ref e) => {
                     err_count += 1;
@@ -1190,7 +1204,8 @@ pub(crate) async fn room_leave(
     // convert Vec of strings into a slice of array of OwnedRoomIds
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
-        roomids.push(match RoomId::parse(room_id.clone()) {
+        roomids.push(match RoomId::parse(room_id.clone().replace("\\!", "!")) {
+            //remove possible escape
             Ok(id) => id,
             Err(ref e) => {
                 error!(
@@ -1251,7 +1266,8 @@ pub(crate) async fn room_forget(
     // convert Vec of strings into a slice of array of OwnedRoomIds
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
-        roomids.push(match RoomId::parse(room_id.clone()) {
+        roomids.push(match RoomId::parse(room_id.clone().replace("\\!", "!")) {
+            // remove possible escape
             Ok(id) => id,
             Err(ref e) => {
                 error!(
@@ -1311,7 +1327,10 @@ pub(crate) async fn room_invite(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escapes
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1328,7 +1347,10 @@ pub(crate) async fn room_invite(
     let mut userids: Vec<OwnedUserId> = Vec::new();
     for user_id in user_ids {
         userids.push(
-            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &user_id.replace("\\@", "@"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1402,7 +1424,10 @@ pub(crate) async fn room_join(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1459,7 +1484,10 @@ pub(crate) async fn room_ban(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1476,7 +1504,10 @@ pub(crate) async fn room_ban(
     let mut userids: Vec<OwnedUserId> = Vec::new();
     for user_id in user_ids {
         userids.push(
-            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &user_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1576,7 +1607,10 @@ pub(crate) async fn room_kick(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1593,7 +1627,10 @@ pub(crate) async fn room_kick(
     let mut userids: Vec<OwnedUserId> = Vec::new();
     for user_id in user_ids {
         userids.push(
-            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(user_id)) {
+            match UserId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &user_id.replace("\\@", "@"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1690,7 +1727,10 @@ pub(crate) async fn room_get_visibility(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1831,7 +1871,10 @@ pub(crate) async fn room_get_state(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1930,7 +1973,10 @@ pub(crate) async fn joined_members(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                //remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -1992,16 +2038,19 @@ pub(crate) async fn room_resolve_alias(
     // convert Vec of strings into a slice of array of OwnedRoomAliasIds
     let mut aliasids: Vec<OwnedRoomAliasId> = Vec::new();
     for alias_id in alias_ids {
-        aliasids.push(match RoomAliasId::parse(alias_id.clone()) {
-            Ok(id) => id,
-            Err(ref e) => {
-                error!(
-                    "Error: invalid alias id {:?}. Error reported is {:?}.",
-                    alias_id, e
-                );
-                continue;
-            }
-        });
+        aliasids.push(
+            match RoomAliasId::parse(alias_id.clone().replace("\\#", "#")) {
+                // remove possible escape
+                Ok(id) => id,
+                Err(ref e) => {
+                    error!(
+                        "Error: invalid alias id {:?}. Error reported is {:?}.",
+                        alias_id, e
+                    );
+                    continue;
+                }
+            },
+        );
     }
     for (i, id) in aliasids.iter().enumerate() {
         debug!("In position {} we have room alias id {:?}.", i, id,);
@@ -2042,7 +2091,10 @@ pub(crate) async fn room_enable_encryption(
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for room_id in room_ids {
         roomids.push(
-            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(room_id)) {
+            match RoomId::parse(<std::string::String as AsRef<str>>::as_ref(
+                &room_id.replace("\\!", "!"),
+            )) {
+                // remove possible escape
                 Ok(id) => id,
                 Err(ref e) => {
                     error!(
@@ -2249,7 +2301,7 @@ pub(crate) async fn message(
     }
     let mut err_count = 0u32;
     for roomname in roomnames.iter() {
-        let proom = RoomId::parse(roomname).unwrap();
+        let proom = RoomId::parse(roomname.replace("\\!", "!")).unwrap(); // remove possible escape
         debug!("In message(): parsed room name is {:?}", proom);
         let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for fmsg in fmsgs.iter() {
@@ -2294,7 +2346,7 @@ pub(crate) async fn file(
     let mut err_count = 0u32;
     let mut pb: PathBuf;
     for roomname in roomnames.iter() {
-        let proom = RoomId::parse(roomname).unwrap();
+        let proom = RoomId::parse(roomname.replace("\\!", "!")).unwrap(); // remove possible escape
         debug!("In file(): parsed room name is {:?}", proom);
         let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for mut filename in filenames.iter() {
