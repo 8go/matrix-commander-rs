@@ -200,7 +200,7 @@ jobs:
       # https://github.com/softprops/action-gh-release
       # do wildcards like * work in files?
       - name: Release
-        uses: "softprops/action-gh-release@v1"
+        uses: "softprops/action-gh-release@v2"
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
