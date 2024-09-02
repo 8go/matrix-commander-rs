@@ -424,8 +424,10 @@ enum Verify {
     /// Manual: manual verification
     /// See also: https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
     Manual,
-    /// Emoji: verify via emojis
+    /// Emoji: verify via emojis as the recipient
     Emoji,
+    /// Emoji: verify via emojis as the initiator
+    EmojiReq,
 }
 
 /// is_ functions for the enum
@@ -439,6 +441,9 @@ impl Verify {
     pub fn is_emoji(&self) -> bool {
         self == &Self::Emoji
     }
+    pub fn is_emoji_req(&self) -> bool {
+        self == &Self::EmojiReq
+    }
 }
 
 /// Converting from String to Verify for --verify option
@@ -449,6 +454,7 @@ impl FromStr for Verify {
             "none" => Ok(Verify::None),
             "manual" => Ok(Verify::Manual),
             "emoji" => Ok(Verify::Emoji),
+            "emojireq" => Ok(Verify::EmojiReq),
             _ => Err(()),
         };
     }
@@ -868,13 +874,16 @@ pub struct Args {
     /// Details::
     /// By default, no
     /// verification is performed.
-    /// Verification is currently offered via Manual and Emoji.
+    /// Verification is currently offered via Manual, Emoji and EmojiReq.
     /// Manual verification is simpler but does less.
     /// Try: '--bootstrap --password mypassword --verify manual'.
     /// Manual only verfies devices one-directionally. See
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
     /// for more info on Manual verification.
-    /// One can first do 'manual' verification and then 'emoji' verification.
+    /// One can first do 'manual' verification and then 'emoji' or 'emojireq' verification.
+    /// Both 'emoji' as well as 'emojireq' perform emoji verification.
+    /// With 'emoji' we send a request to some other client to request verification from their device.
+    /// With 'emojireq' we wait for some other client to request verification from us.
     /// If verification is desired, run this program in the
     /// foreground (not as a service) and without a pipe.
     /// While verification is optional it is highly recommended, and it
@@ -906,6 +915,12 @@ pub struct Args {
     /// In the terminal you should see a text message indicating success.
     /// It has been tested with Element app on cell phone and Element webpage in
     /// browser. Verification is done one device at a time.
+    /// 'emojireq' is similar. You must specify a user with --user and
+    /// a device with --device to specify to which device you want to send the
+    /// verification request. On the other device you get a pop up and you
+    /// must accept the verification request.
+    /// 'emojireq' seems to have problems, e.g. 'emojireq' does not seem to
+    /// work with Element phone app.
     #[arg(long, value_enum,
         value_name = "VERIFICATION_METHOD",
         default_value_t = Verify::default(), ignore_case = true, )]
@@ -2764,13 +2779,14 @@ pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> 
     if ap.verify.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if !ap.verify.is_manual() && !ap.verify.is_emoji() {
+    if !ap.verify.is_manual() && !ap.verify.is_emoji() && !ap.verify.is_emoji_req() {
         error!(
             "Verify option '{:?}' currently not supported. \
-            Use '{:?}' or {:?}' for the time being.",
+            Use '{:?}', '{:?}' or {:?}' for the time being.",
             ap.verify,
             Verify::Manual,
-            Verify::Emoji
+            Verify::Emoji,
+            Verify::EmojiReq
         );
         return Err(Error::UnsupportedCliParameter);
     }

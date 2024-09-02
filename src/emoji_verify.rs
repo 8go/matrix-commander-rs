@@ -7,7 +7,7 @@
 //! It implements the emoji-verification protocol.
 
 use std::io::Write;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use futures_util::StreamExt;
 
@@ -29,7 +29,7 @@ use matrix_sdk::{
             },
             room::message::{MessageType, OriginalSyncRoomMessageEvent},
         },
-        UserId,
+        OwnedDeviceId, OwnedUserId, UserId,
     },
     Client,
 };
@@ -169,10 +169,11 @@ async fn request_verification_handler(client: Client, request: VerificationReque
 }
 
 /// Go into the event loop and implement the emoji verification protocol.
+/// We are waiting for someone else to request the verification.
 /// This is the main function, the access point, to emoji verification.
 /// Remember it is interactive and will remain in the event loop until user
 /// leaves with Control-C.
-pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
+pub async fn sync_wait_for_verification_request(client: &Client) -> matrix_sdk::Result<()> {
     client.add_event_handler(
         |ev: ToDeviceKeyVerificationRequestEvent, client: Client| async move {
             debug!("ToDeviceKeyVerificationRequestEvent");
@@ -312,6 +313,189 @@ pub async fn sync(client: &Client) -> matrix_sdk::Result<()> {
     println!("Go to other Matrix client like Element and initiate Emoji verification there.");
     println!("Best to have the other Matrix client ready and waiting before you start");
     println!("{}.", get_prog_without_ext());
+    client.sync(SyncSettings::new()).await?;
+
+    Ok(())
+}
+
+// ###############################################################################################
+
+/// Go into the event loop and implement the emoji verification protocol.
+/// We are initiating the verification witn device recipient_device.
+/// This is the main function, the access point, to emoji verification.
+/// Remember it is interactive and will remain in the event loop until user
+/// leaves with Control-C.
+pub async fn sync_request_verification(
+    client: &Client,
+    recipient_user: String,
+    recipient_device: String,
+) -> matrix_sdk::Result<()> {
+    client.add_event_handler(
+        |ev: ToDeviceKeyVerificationRequestEvent, client: Client| async move {
+            debug!("ToDeviceKeyVerificationRequestEvent");
+            let request = client
+                .encryption()
+                .get_verification_request(&ev.sender, &ev.content.transaction_id)
+                .await
+                .expect("Request object wasn't created");
+
+            tokio::spawn(request_verification_handler(client, request));
+
+            // request
+            //     .accept()
+            //     .await
+            //     .expect("Can't accept verification request");
+        },
+    );
+
+    client.add_event_handler(
+        |ev: OriginalSyncRoomMessageEvent, client: Client| async move {
+            debug!("OriginalSyncRoomMessageEvent");
+            if let MessageType::VerificationRequest(_) = &ev.content.msgtype {
+                let request = client
+                    .encryption()
+                    .get_verification_request(&ev.sender, &ev.event_id)
+                    .await
+                    .expect("Request object wasn't created");
+
+                tokio::spawn(request_verification_handler(client, request));
+
+                // request
+                //     .accept()
+                //     .await
+                //     .expect("Can't accept verification request");
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: ToDeviceKeyVerificationStartEvent, client: Client| async move {
+            debug!("ToDeviceKeyVerificationStartEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.transaction_id.as_str())
+                .await
+            {
+                info!(
+                    "Starting verification with {} {}",
+                    &sas.other_device().user_id(),
+                    &sas.other_device().device_id()
+                );
+                print_devices(&ev.sender, &client).await;
+                sas.accept().await.unwrap();
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: ToDeviceKeyVerificationKeyEvent, client: Client| async move {
+            debug!("ToDeviceKeyVerificationKeyEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.transaction_id.as_str())
+                .await
+            {
+                tokio::spawn(sas_verification_handler(client, sas));
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: ToDeviceKeyVerificationDoneEvent, client: Client| async move {
+            debug!("ToDeviceKeyVerificationDoneEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.transaction_id.as_str())
+                .await
+            {
+                if sas.is_done() {
+                    print_result(&sas);
+                    print_devices(&ev.sender, &client).await;
+                }
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: OriginalSyncKeyVerificationStartEvent, client: Client| async move {
+            debug!("OriginalSyncKeyVerificationStartEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.relates_to.event_id.as_str())
+                .await
+            {
+                println!(
+                    "Starting verification with {} {}",
+                    &sas.other_device().user_id(),
+                    &sas.other_device().device_id()
+                );
+                print_devices(&ev.sender, &client).await;
+                sas.accept().await.unwrap();
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: OriginalSyncKeyVerificationKeyEvent, client: Client| async move {
+            debug!("OriginalSyncKeyVerificationKeyEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.relates_to.event_id.as_str())
+                .await
+            {
+                tokio::spawn(sas_verification_handler(client, sas));
+            }
+        },
+    );
+
+    client.add_event_handler(
+        |ev: OriginalSyncKeyVerificationDoneEvent, client: Client| async move {
+            debug!("OriginalSyncKeyVerificationDoneEvent");
+            if let Some(Verification::SasV1(sas)) = client
+                .encryption()
+                .get_verification(&ev.sender, ev.content.relates_to.event_id.as_str())
+                .await
+            {
+                if sas.is_done() {
+                    print_result(&sas);
+                    print_devices(&ev.sender, &client).await;
+                }
+            }
+        },
+    );
+
+    // go into event loop to sync and to execute verify protocol
+    println!("Ready and waiting ...");
+    println!("We send request to other Matrix client like Element and initiate Emoji ");
+    println!("verification with them. Best to have the other Matrix client ready and ");
+    println!("waiting before you start {}.", get_prog_without_ext());
+    println!(
+        "\n ### THIS IS PARTIALLY BROKEN. DOES NOT SEEM TO WORK WITH ELEMENT ANDROID APP. ###\n"
+    );
+    println!(
+        "Sending request to user's {:?} device {:?}.",
+        recipient_user, recipient_device
+    );
+
+    let encryption = client.encryption();
+    let userid: OwnedUserId = UserId::parse(recipient_user).unwrap();
+    let deviceid: OwnedDeviceId = OwnedDeviceId::from(recipient_device);
+    match encryption.get_device(&userid, &deviceid).await {
+        Ok(Some(device)) => {
+            // -> Result<Option<Device>, CryptoStoreError>
+            debug!("already verified? {:?}", device.is_verified());
+
+            // if !device.is_verified() {
+            let verification = device.request_verification().await?;
+            debug!(
+                "verification: we_started is {:?}",
+                verification.we_started()
+            );
+            // }
+        }
+        Ok(None) => error!("Error: device not found: {:?}", deviceid),
+        Err(e) => error!("Error: could not get device: {:?}", e),
+    }
     client.sync(SyncSettings::new()).await?;
 
     Ok(())

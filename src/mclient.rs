@@ -610,7 +610,25 @@ pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
             }
         }
     } else if ap.verify.is_emoji() {
-        emoji_verify::sync(client).await?; // wait in sync for other party to initiate emoji verify
+        emoji_verify::sync_wait_for_verification_request(client).await?; // wait in sync for other party to initiate emoji verify
+    } else if ap.verify.is_emoji_req() {
+        if ap.user.len() != 1 {
+            error!(
+                "Error: for requesting verification exactly 1 user must be specified with --user. Found {:?}.",
+                ap.user
+            )
+        } else {
+            match &ap.device {
+                None => error!(
+                    "Error: for requesting verification exactly 1 device must be specified with --device. Found {:?}.",
+                    ap.device
+                ),
+                Some(device) => {
+                    emoji_verify::sync_request_verification(client, ap.user[0].to_string(), device.to_string()).await?;
+                    // request verification from other device
+                }
+            }
+        }
     } else {
         error!("Error: {:?}", Error::UnsupportedCliParameter);
     }
@@ -628,7 +646,10 @@ pub(crate) async fn logout(client: &Client, ap: &Args) -> Result<(), Error> {
 pub(crate) fn logout_local(ap: &Args) -> Result<(), Error> {
     if credentials_exist(ap) {
         match fs::remove_file(&ap.credentials) {
-            Ok(()) => info!("Credentials file successfully remove {:?}", &ap.credentials),
+            Ok(()) => info!(
+                "Credentials file successfully removed {:?}",
+                &ap.credentials
+            ),
             Err(e) => error!(
                 "Error: credentials file not removed. {:?} {:?}",
                 &ap.credentials, e
