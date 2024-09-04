@@ -133,15 +133,16 @@ done
 
 PS3='Please enter your choice: '
 OPT1="git status           # what is the current status"
-OPT2="cargo package --list # show files containing changes"
+OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help.manual.txt src/main.rs src/mclient.rs"
+OPT3="cargo package --list # show files containing changes"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
     if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
     if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
     case ${opt} in
-    "$OPT1" | "$OPT2" )
+    "$OPT1" | "$OPT2" | "$OPT3" )
         OPTE=${opt%%#*} # remove everything after first #
         echo "Performing: $OPTE"
         $OPTE

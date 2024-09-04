@@ -111,10 +111,10 @@ Safe!
 Welcome to "matrix-commander-rs", a Matrix CLI client. ─── On the first run use
 --login to log in, to authenticate. On the second run we suggest to use
 --verify to get verified. Manual verification is built-in and can be used to
-verify devices. Or combine both --login and --verify in the first run. On
-further runs "matrix-commander-rs" implements a simple Matrix CLI client that
-can send messages or files, listen to messages, operate on rooms, etc.  ───
-─── This project is currently only a vision. The Python package
+verify devices and users. Or combine both --login and --verify in the first
+run. On further runs "matrix-commander-rs" implements a simple Matrix CLI
+client that can send messages or files, listen to messages, operate on rooms,
+etc.  ───  ─── This project is currently only a vision. The Python package
 "matrix-commander" exists. The vision is to have a compatible program in Rust.
 I cannot do it myself, but I can coordinate and merge your pull requests. Have
 a look at the repo "https://github.com/8go/matrix-commander-rs/". Please help!
@@ -253,16 +253,23 @@ Options:
 
       --verify <VERIFICATION_METHOD>
           Perform account verification. Details:: By default, no verification
-          is performed. Verification is currently offered via Manual, Emoji and
-          EmojiReq. Manual verification is simpler but does less. Try:
-          '--bootstrap --password mypassword --verify manual'. Manual only
-          verfies devices one-directionally. See
+          is performed. Verification is currently offered via Manual-Device,
+          Manual-User, Emoji and Emoji-Req. Manual verification is simpler but
+          does less. Try: '--bootstrap --password mypassword --verify
+          manual-device' or '--bootstrap --password mypassword --verify
+          manual-user'. Manual only verfies devices or users one-directionally.
+          See
           https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
-          for more info on Manual verification. One can first do 'manual'
-          verification and then 'emoji' or 'emojireq' verification. Both
-          'emoji' as well as 'emojireq' perform emoji verification. With
+          and
+          https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
+          for more info on Manual verification. manual-device can only verify
+          its own devices, notother users' devices. manual-user can trust other
+          users. So, with verify-user also use the --user option to specify one
+          or multiple users. One can first do 'manual-device' and 'manual-user'
+          verification and then 'emoji' or 'emoji-req' verification. Both
+          'emoji' as well as 'emoji-req' perform emoji verification. With
           'emoji' we send a request to some other client to request
-          verification from their device. With 'emojireq' we wait for some
+          verification from their device. With 'emoji-req' we wait for some
           other client to request verification from us. If verification is
           desired, run this program in the foreground (not as a service) and
           without a pipe. While verification is optional it is highly
@@ -288,28 +295,31 @@ Options:
           that the matrix-commander-rs device is now green and verified. In the
           terminal you should see a text message indicating success. It has
           been tested with Element app on cell phone and Element webpage in
-          browser. Verification is done one device at a time. 'emojireq' is
+          browser. Verification is done one device at a time. 'emoji-req' is
           similar. You must specify a user with --user and a device with
           --device to specify to which device you want to send the verification
           request. On the other device you get a pop up and you must accept the
-          verification request. 'emojireq' seems to have problems, e.g.
-          'emojireq' does not seem to work with Element phone app
+          verification request. 'emoji-req' seems to have problems, e.g.
+          'emoji-req' does not seem to work with Element phone app
           
           [default: none]
 
           Possible values:
-          - none:      None: option not used, no verification done
-          - manual:    Manual: manual verification See also:
+          - none:          None: option not used, no verification done
+          - manual-device: ManualDevice: manual device verification See also:
             https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
-          - emoji:     Emoji: verify via emojis as the recipient
-          - emoji-req: Emoji: verify via emojis as the initiator
+          - manual-user:   ManualUser: manual user verification See also:
+            https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
+          - emoji:         Emoji: verify via emojis as the recipient
+          - emoji-req:     Emoji: verify via emojis as the initiator
 
       --bootstrap
           Details:: By default, no bootstrapping is performed. Bootstrapping is
           useful for verification. --bootstrap creates cross signing keys. If
-          you have trouble verifying with --verify manual, use --bootstrap
-          before. Use --password to provide password. If --password is not
-          given it will read password from command line (stdin). See also
+          you have trouble verifying with --verify manual-device or --verify
+          manual-user, use --bootstrap before. Use --password to provide
+          password. If --password is not given it will read password from
+          command line (stdin). See also
           https://docs.rs/matrix-sdk/0.7.1/matrix_sdk/encryption/struct.CrossSigningStatus.html#fields
 
       --logout <DEVICE>

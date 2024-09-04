@@ -579,7 +579,47 @@ pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
         }
     }
 
-    if ap.verify.is_manual() {
+    if ap.verify.is_manual_user() {
+        debug!("Will attempt to verify users '{:?}'.", ap.user);
+        let mut errcount = 0;
+        for userid in ap.user.clone() {
+            match UserId::parse(userid.clone()) {
+                Ok(uid) => match client.encryption().get_user_identity(&uid).await {
+                    Ok(user) => {
+                        if let Some(user) = user {
+                            match user.verify().await {
+                                Ok(()) => {
+                                    info!(
+                                        "Successfully verified user {:?} in one direction.",
+                                        userid
+                                    )
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Error: verify failed. Are you logged in? User exists? \
+                                        Do you have cross-signing keys available? {:?} {:?}",
+                                        userid, e
+                                    );
+                                    errcount += 1;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error: {:?}", e);
+                        errcount += 1;
+                    }
+                },
+                Err(e) => {
+                    error!("Error: invalid user id {:?}, Error: {:?}", userid, e);
+                    errcount += 1;
+                }
+            }
+        }
+        if errcount > 0 {
+            return Err(Error::VerifyFailed);
+        }
+    } else if ap.verify.is_manual_device() {
         let response = client.devices().await?;
         for device in response.devices {
             let deviceid = device.device_id;

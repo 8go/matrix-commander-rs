@@ -22,12 +22,12 @@
 //!
 //! Usage:
 //! - matrix-commander-rs --login password # first time only
-//! - matrix-commander-rs --bootstrap --verify manual # manual verification
+//! - matrix-commander-rs --bootstrap --verify manual-device # manual verification
 //! - matrix-commander-rs --verify emoji # emoji verification
 //! - matrix-commander-rs --message "Hello World" "Good Bye!"
 //! - matrix-commander-rs --file test.txt
 //! - or do many things at a time:
-//! - matrix-commander-rs --login password --verify manual
+//! - matrix-commander-rs --login password --verify manual-device
 //! - matrix-commander-rs --message Hi --file test.txt --devices --get-room-info
 //!
 //! For more information, see the README.md
@@ -142,7 +142,7 @@ pub enum Error {
     #[error("Login Failed")]
     LoginFailed,
 
-    #[error("Verify Failed")]
+    #[error("Verify Failed or Partially Failed")]
     VerifyFailed,
 
     #[error("Bootstrap Failed")]
@@ -421,9 +421,12 @@ enum Verify {
     /// None: option not used, no verification done
     #[default]
     None,
-    /// Manual: manual verification
+    /// ManualDevice: manual device verification
     /// See also: https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
-    Manual,
+    ManualDevice,
+    /// ManualUser: manual user verification
+    /// See also: https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
+    ManualUser,
     /// Emoji: verify via emojis as the recipient
     Emoji,
     /// Emoji: verify via emojis as the initiator
@@ -435,8 +438,11 @@ impl Verify {
     pub fn is_none(&self) -> bool {
         self == &Self::None
     }
-    pub fn is_manual(&self) -> bool {
-        self == &Self::Manual
+    pub fn is_manual_device(&self) -> bool {
+        self == &Self::ManualDevice
+    }
+    pub fn is_manual_user(&self) -> bool {
+        self == &Self::ManualUser
     }
     pub fn is_emoji(&self) -> bool {
         self == &Self::Emoji
@@ -452,9 +458,10 @@ impl FromStr for Verify {
     fn from_str(src: &str) -> Result<Verify, ()> {
         return match src.to_lowercase().trim() {
             "none" => Ok(Verify::None),
-            "manual" => Ok(Verify::Manual),
+            "manual-device" => Ok(Verify::ManualDevice),
+            "manual-user" => Ok(Verify::ManualUser),
             "emoji" => Ok(Verify::Emoji),
-            "emojireq" => Ok(Verify::EmojiReq),
+            "emoji-req" => Ok(Verify::EmojiReq),
             _ => Err(()),
         };
     }
@@ -687,7 +694,7 @@ impl fmt::Display for Output {
 /// On the first run use --login to log in, to authenticate.
 /// On the second run we suggest to use --verify to get verified.
 /// Manual verification is built-in and can be used
-/// to verify devices.
+/// to verify devices and users.
 /// Or combine both --login and --verify in the first run.
 /// On further runs "matrix-commander-rs" implements a simple Matrix CLI
 /// client that can send messages or files, listen to messages,
@@ -874,16 +881,23 @@ pub struct Args {
     /// Details::
     /// By default, no
     /// verification is performed.
-    /// Verification is currently offered via Manual, Emoji and EmojiReq.
+    /// Verification is currently offered via Manual-Device, Manual-User, Emoji and Emoji-Req.
     /// Manual verification is simpler but does less.
-    /// Try: '--bootstrap --password mypassword --verify manual'.
-    /// Manual only verfies devices one-directionally. See
+    /// Try: '--bootstrap --password mypassword --verify manual-device' or
+    /// '--bootstrap --password mypassword --verify manual-user'.
+    /// Manual only verfies devices or users one-directionally. See
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
+    /// and
+    /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
     /// for more info on Manual verification.
-    /// One can first do 'manual' verification and then 'emoji' or 'emojireq' verification.
-    /// Both 'emoji' as well as 'emojireq' perform emoji verification.
+    /// manual-device can only verify its own devices, notother users' devices.
+    /// manual-user can trust other users. So, with verify-user also use the --user option
+    /// to specify one or multiple users.
+    /// One can first do 'manual-device' and 'manual-user' verification and
+    /// then 'emoji' or 'emoji-req' verification.
+    /// Both 'emoji' as well as 'emoji-req' perform emoji verification.
     /// With 'emoji' we send a request to some other client to request verification from their device.
-    /// With 'emojireq' we wait for some other client to request verification from us.
+    /// With 'emoji-req' we wait for some other client to request verification from us.
     /// If verification is desired, run this program in the
     /// foreground (not as a service) and without a pipe.
     /// While verification is optional it is highly recommended, and it
@@ -915,11 +929,11 @@ pub struct Args {
     /// In the terminal you should see a text message indicating success.
     /// It has been tested with Element app on cell phone and Element webpage in
     /// browser. Verification is done one device at a time.
-    /// 'emojireq' is similar. You must specify a user with --user and
+    /// 'emoji-req' is similar. You must specify a user with --user and
     /// a device with --device to specify to which device you want to send the
     /// verification request. On the other device you get a pop up and you
     /// must accept the verification request.
-    /// 'emojireq' seems to have problems, e.g. 'emojireq' does not seem to
+    /// 'emoji-req' seems to have problems, e.g. 'emoji-req' does not seem to
     /// work with Element phone app.
     #[arg(long, value_enum,
         value_name = "VERIFICATION_METHOD",
@@ -931,7 +945,8 @@ pub struct Args {
     /// By default, no
     /// bootstrapping is performed. Bootstrapping is useful for verification.
     /// --bootstrap creates cross signing keys.
-    /// If you have trouble verifying with --verify manual, use --bootstrap before.
+    /// If you have trouble verifying with --verify manual-device or
+    /// --verify manual-user, use --bootstrap before.
     /// Use --password to provide password. If --password is not given it will read
     /// password from command line (stdin). See also
     /// https://docs.rs/matrix-sdk/0.7.1/matrix_sdk/encryption/struct.CrossSigningStatus.html#fields.
@@ -2779,12 +2794,17 @@ pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> 
     if ap.verify.is_none() {
         return Err(Error::UnsupportedCliParameter);
     }
-    if !ap.verify.is_manual() && !ap.verify.is_emoji() && !ap.verify.is_emoji_req() {
+    if !ap.verify.is_manual_device()
+        && !ap.verify.is_manual_user()
+        && !ap.verify.is_emoji()
+        && !ap.verify.is_emoji_req()
+    {
         error!(
             "Verify option '{:?}' currently not supported. \
-            Use '{:?}', '{:?}' or {:?}' for the time being.",
+            Use '{:?}', '{:?}', '{:?}' or {:?}' for the time being.",
             ap.verify,
-            Verify::Manual,
+            Verify::ManualDevice,
+            Verify::ManualUser,
             Verify::Emoji,
             Verify::EmojiReq
         );
@@ -3614,7 +3634,7 @@ async fn main() -> Result<(), Error> {
 
         // remove in version 0.5 : todo
         warn!(
-            "Version 0.4 is incompatible with previous versions. \
+            "Versions 0.4+ are incompatible with previous versions v0.3-. \
             The default location of the store has changed. \
             The directory name of the default store used to be 'sledstore'. \
             Now it is just 'store'. The program attempts to rename \
