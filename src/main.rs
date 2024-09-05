@@ -77,13 +77,13 @@ mod mclient;
 use crate::mclient::{
     bootstrap, convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_id,
     convert_to_full_room_ids, convert_to_full_user_ids, delete_devices_pre, devices, file,
-    get_avatar, get_avatar_url, get_display_name, get_profile, get_room_info, invited_rooms,
-    joined_members, joined_rooms, left_rooms, login, logout, logout_local, media_delete,
-    media_download, media_mxc_to_http, media_upload, message, replace_star_with_rooms,
-    restore_credentials, restore_login, room_ban, room_create, room_enable_encryption, room_forget,
-    room_get_state, room_get_visibility, room_invite, room_join, room_kick, room_leave,
-    room_resolve_alias, room_unban, rooms, set_avatar, set_avatar_url, set_display_name,
-    unset_avatar_url, verify,
+    get_avatar, get_avatar_url, get_display_name, get_masterkey, get_profile, get_room_info,
+    invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local,
+    media_delete, media_download, media_mxc_to_http, media_upload, message,
+    replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
+    room_enable_encryption, room_forget, room_get_state, room_get_visibility, room_invite,
+    room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar,
+    set_avatar_url, set_display_name, unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -222,6 +222,9 @@ pub enum Error {
 
     #[error("Get Profile Failed")]
     GetProfileFailed,
+
+    #[error("Get Masterkey Failed")]
+    GetMasterkeyFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1919,6 +1922,14 @@ pub struct Args {
     // This works without a server or without being logged in.
     #[arg(long, alias = "mxc-to-http", value_name = "MXC_URI", num_args(0..), )]
     media_mxc_to_http: Vec<OwnedMxcUri>,
+
+    /// Get your own master key.
+    /// Details::
+    /// Get the master key of itself, i.e. of the
+    /// 'matrix-commander-rs' user account. Keep
+    /// this key private and safe.
+    #[arg(long)]
+    get_masterkey: bool,
 }
 
 impl Default for Args {
@@ -2005,6 +2016,7 @@ impl Args {
             media_delete: Vec::new(),
             media_mxc_to_http: Vec::new(),
             mime: Vec::new(),
+            get_masterkey: false,
         }
     }
 }
@@ -3234,6 +3246,17 @@ pub(crate) async fn cli_get_profile(client: &Client, ap: &Args) -> Result<(), Er
     crate::get_profile(client, ap.output).await
 }
 
+/// Handle the --get-masterkey CLI argument
+pub(crate) async fn cli_get_masterkey(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Get-masterkey chosen.");
+    crate::get_masterkey(
+        client,
+        ap.creds.as_ref().unwrap().user_id.clone(),
+        ap.output,
+    )
+    .await
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -3393,6 +3416,7 @@ async fn main() -> Result<(), Error> {
     debug!("media-delete option is {:?}", ap.media_delete);
     debug!("media-mxc-to-http option is {:?}", ap.media_mxc_to_http);
     debug!("mime option is {:?}", ap.mime);
+    debug!("get-masterkey option is {:?}", ap.get_masterkey);
 
     match ap.version {
         None => (),                     // do nothing
@@ -3455,6 +3479,7 @@ async fn main() -> Result<(), Error> {
         || ap.get_profile
         || !ap.media_download.is_empty()
         || !ap.media_mxc_to_http.is_empty()
+        || ap.get_masterkey
         // set actions
         || !ap.room_create.is_empty()
         || !ap.room_dm_create.is_empty()
@@ -3764,6 +3789,13 @@ async fn main() -> Result<(), Error> {
             match crate::cli_get_profile(&client, &ap).await {
                 Ok(ref _n) => debug!("crate::get_profile successful"),
                 Err(ref e) => error!("Error: crate::get_profile reported {}", e),
+            };
+        };
+
+        if ap.get_masterkey {
+            match crate::cli_get_masterkey(&client, &ap).await {
+                Ok(ref _n) => debug!("crate::get_masterkey successful"),
+                Err(ref e) => error!("Error: crate::get_masterkey reported {}", e),
             };
         };
 

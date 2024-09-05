@@ -943,6 +943,11 @@ Options:
           the last slash. The syntax of the provided MXC URIs will be verified.
           The existance of content for the XMC URI will not be checked
 
+      --get-masterkey
+          Get your own master key. Details:: Get the master key of itself, i.e.
+          of the 'matrix-commander-rs' user account. Keep this key private and
+          safe
+
 PS: Also have a look at scripts/matrix-commander-rs-tui.
 
 ```

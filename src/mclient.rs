@@ -813,7 +813,11 @@ pub(crate) async fn get_avatar_url(client: &Client, output: Output) -> Result<()
             "Avatar MXC URI obtained successfully. MXC_URI is {:?}",
             mxc_uri
         );
-        print_json(&json::object!(avatar_mxc_uri: mxc_uri.to_string()), output);
+        print_json(
+            &json::object!(avatar_mxc_uri: mxc_uri.to_string()),
+            output,
+            false,
+        );
         Ok(())
     } else {
         Err(Error::GetAvatarUrlFailed)
@@ -849,6 +853,7 @@ pub(crate) async fn set_avatar(
         print_json(
             &json::object!(filename: path.to_str(), avatar_mxc_uri: mxc_uri.to_string()),
             output,
+            false,
         );
         Ok(())
     } else {
@@ -891,7 +896,7 @@ pub(crate) async fn get_display_name(client: &Client, output: Output) -> Result<
             "Display name obtained successfully. Display name is {:?}",
             name
         );
-        print_json(&json::object!(display_name: name), output);
+        print_json(&json::object!(display_name: name), output, false);
         Ok(())
     } else {
         Err(Error::GetDisplaynameFailed)
@@ -921,10 +926,62 @@ pub(crate) async fn get_profile(client: &Client, output: Output) -> Result<(), E
         print_json(
             &json::object!(display_name: profile.displayname, avatar_url: profile.avatar_url.as_ref().map(|x| x.as_str())),
             output,
+            false,
         );
         Ok(())
     } else {
         Err(Error::GetProfileFailed)
+    }
+}
+
+fn obfuscate(text: &str, count: usize) -> String {
+    let s = text.chars();
+    let mut head: String = s.into_iter().take(count).collect::<String>();
+    head.push_str("****");
+    head.clone()
+}
+
+/// Get masterkey of the current user.
+/// See: https://docs.rs/matrix-sdk/0.7.1/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.master_key
+pub(crate) async fn get_masterkey(
+    client: &Client,
+    userid: OwnedUserId,
+    output: Output,
+) -> Result<(), Error> {
+    debug!("Get masterkey");
+
+    match client.encryption().get_user_identity(&userid).await {
+        Ok(Some(user)) => {
+            // we fetch the first public key we
+            // can find, there's currently only a single key allowed so this is
+            // fine.
+            match user.master_key().get_first_key().map(|k| k.to_base64()) {
+                Some(masterkey) => {
+                    debug!(
+                        "get_masterkey obtained masterkey successfully. \
+                        Masterkey {:?} (Obfuscated for privacy)",
+                        obfuscate(&masterkey, 4)
+                    );
+                    print_json(&json::object!(masterkey: masterkey), output, true);
+                    Ok(())
+                }
+                None => {
+                    error!("No masterkey available user {:?}", userid);
+                    Err(Error::GetMasterkeyFailed)
+                }
+            }
+        }
+        Ok(None) => {
+            error!("Error: user identity for user {:?} not found.", userid);
+            Err(Error::GetMasterkeyFailed)
+        }
+        Err(e) => {
+            error!(
+                "Error: getting user identity for user {:?} failed. Error: {:?}",
+                userid, e
+            );
+            Err(Error::GetMasterkeyFailed)
+        }
     }
 }
 
@@ -979,8 +1036,14 @@ pub(crate) async fn get_room_info(
 }
 
 /// Utility function to print JSON object as JSON or as plain text
-pub(crate) fn print_json(json_data: &json::JsonValue, output: Output) {
-    debug!("{:?}", json_data);
+/// Sometimes private sensitive data is being printed.
+/// To avoid printing private keys or passwords, set obfuscated to true.
+pub(crate) fn print_json(json_data: &json::JsonValue, output: Output, obfuscate: bool) {
+    if obfuscate {
+        debug!("Skipping printing this object due to privacy.")
+    } else {
+        debug!("{:?}", json_data);
+    }
     match output {
         Output::Text => {
             let mut first = true;
@@ -993,7 +1056,7 @@ pub(crate) fn print_json(json_data: &json::JsonValue, output: Output) {
                 print!("{}:", key);
                 if val.is_object() {
                     // if it is an object, check recursively
-                    print_json(val, output);
+                    print_json(val, output, obfuscate);
                 } else if val.is_boolean() {
                     print!("    {}", val);
                 } else if val.is_null() {
@@ -1235,6 +1298,7 @@ pub(crate) async fn room_create(
                         visibility: vis.to_string()
                     ),
                     output,
+                    false,
                 );
                 // room_enable_encryption(): no longer needed, already done by setting request.initial_state
             }
@@ -2559,6 +2623,7 @@ pub(crate) async fn media_upload(
                         upload_mxc_uri: response.content_uri.as_str(),
                         mime: mime.to_string()),
                         output,
+                        false,
                     );
                 }
                 Err(ref e) => {
@@ -2629,6 +2694,7 @@ pub(crate) async fn media_download(
                             print_json(
                                 &json::object!(download_mxc_uri: mxc_uri.as_str(), file_name: "-", size: response.len()),
                                 output,
+                                false,
                             );
                         }
                         Err(ref e) => {
@@ -2657,6 +2723,7 @@ pub(crate) async fn media_download(
                             print_json(
                                 &json::object!(download_mxc_uri: mxc_uri.as_str(), file_name: filename.to_str(), size: response.len()),
                                 output,
+                                false,
                             );
                         }
                         Ok(Err(ref e)) => {
@@ -2771,6 +2838,7 @@ pub(crate) async fn media_mxc_to_http(
                 print_json(
                     &json::object!(mxc_uri: mxc.as_str(), http: http, media_id: media_id),
                     output,
+                    false,
                 );
             }
             Err(ref e) => {
