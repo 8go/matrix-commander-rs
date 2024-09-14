@@ -1,10 +1,10 @@
 Welcome to "matrix-commander-rs", a Matrix CLI client. ─── On the first run use
 --login to log in, to authenticate. On the second run we suggest to use
 --verify to get verified. Manual verification is built-in and can be used to
-verify devices. Or combine both --login and --verify in the first run. On
-further runs "matrix-commander-rs" implements a simple Matrix CLI client that
-can send messages or files, listen to messages, operate on rooms, etc.  ───
-─── This project is currently only a vision. The Python package
+verify devices and users. Or combine both --login and --verify in the first
+run. On further runs "matrix-commander-rs" implements a simple Matrix CLI
+client that can send messages or files, listen to messages, operate on rooms,
+etc.  ───  ─── This project is currently only a vision. The Python package
 "matrix-commander" exists. The vision is to have a compatible program in Rust.
 I cannot do it myself, but I can coordinate and merge your pull requests. Have
 a look at the repo "https://github.com/8go/matrix-commander-rs/". Please help!
@@ -163,5 +163,7 @@ Options:
           repository.
       --media-mxc-to-http [<MXC_URI>...]
           Convert URIs to HTTP URLs.
+      --get-masterkey
+          Get your own master key.
 PS: Also have a look at scripts/matrix-commander-rs-tui.
 Use --manual to get more detailed help information.

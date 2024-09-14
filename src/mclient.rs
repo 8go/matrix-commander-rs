@@ -565,7 +565,10 @@ pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
     debug!("Client logged in: {}", client.logged_in());
     debug!("Client user id: {}", userid);
     debug!("Client device id: {}", deviceid);
-    debug!("Client access token used: {:?}", client.access_token());
+    debug!(
+        "Client access token used: {:?}",
+        obfuscate(&client.access_token().unwrap(), 4)
+    );
 
     let css = client.encryption().cross_signing_status().await;
     debug!("Client cross signing status {:?}", css);

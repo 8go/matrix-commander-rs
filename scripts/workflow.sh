@@ -133,7 +133,7 @@ done
 
 PS3='Please enter your choice: '
 OPT1="git status           # what is the current status"
-OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help.manual.txt src/main.rs src/mclient.rs"
+OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help.manual.txt help.help.txt help.usage.txt src/emoji_verify.rs src/main.rs src/mclient.rs"
 OPT3="cargo package --list # show files containing changes"
 OPTC="Continue"
 OPTQ="Quit"

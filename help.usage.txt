@@ -74,3 +74,4 @@ Options:
       --mime [<MIME_TYPE>...]
       --media-delete [<MXC_URI>...]
       --media-mxc-to-http [<MXC_URI>...]
+      --get-masterkey
