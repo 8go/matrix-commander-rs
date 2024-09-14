@@ -60,7 +60,11 @@ Options:
       --log-level <LOG_LEVEL>
           Set the log level by overwriting the default log level. Details:: If
           not used, then the default log level set with environment variable
-          'RUST_LOG' will be used. See also '--debug' and '--verbose'
+          'RUST_LOG' will be used. See also '--debug' and '--verbose'. An
+          example use of RUST_LOG is to use neither --log-level nor --debug,
+          and to set RUST_LOG="error,matrix_commander_rs=debug" which turns off
+          debugging on all lower level modules and turns debugging on only for
+          matrix-commander-rs
           
           [default: none]
 
@@ -144,7 +148,15 @@ Options:
       --verify <VERIFICATION_METHOD>
           Perform account verification. Details:: By default, no verification
           is performed. Verification is currently offered via Manual-Device,
-          Manual-User, Emoji and Emoji-Req. Manual verification is simpler but
+          Manual-User, Emoji and Emoji-Req. Do verification in this order: 1)
+          bottstrap first with -bootstrap, 2) perform both manual
+          verifications, and 3) perform emoji verification. --verify emoji has
+          been tested against Element in Firefox browser and against Element
+          app on Android phone. Both has been working successfully in Sept
+          2024. In Element web page it was important NOT to click the device in
+          the device list, but to click the underscored link "Verify" just
+          above the device list. In the Element on cell phone case, accept the
+          emojis first on the cell phone. Manual verification is simpler but
           does less. Try: '--bootstrap --password mypassword --verify
           manual-device' or '--bootstrap --password mypassword --verify
           manual-user'. Manual only verfies devices or users one-directionally.
@@ -153,14 +165,16 @@ Options:
           and
           https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
           for more info on Manual verification. manual-device can only verify
-          its own devices, notother users' devices. manual-user can trust other
-          users. So, with verify-user also use the --user option to specify one
-          or multiple users. One can first do 'manual-device' and 'manual-user'
-          verification and then 'emoji' or 'emoji-req' verification. Both
-          'emoji' as well as 'emoji-req' perform emoji verification. With
-          'emoji' we send a request to some other client to request
-          verification from their device. With 'emoji-req' we wait for some
-          other client to request verification from us. If verification is
+          its own devices, not other users' devices. manual-user can trust
+          other users. So, with manual-user also use the --user option to
+          specify one or multiple users. With manual-user first trust yourself,
+          by setting --user to yourself, or omitting -user in which case it
+          will default to itself. One should first do 'manual-device' and
+          'manual-user' verification and then 'emoji' or 'emoji-req'
+          verification. Both 'emoji' as well as 'emoji-req' perform emoji
+          verification. With 'emoji' we send a request to some other client to
+          request verification from their device. With 'emoji-req' we wait for
+          some other client to request verification from us. If verification is
           desired, run this program in the foreground (not as a service) and
           without a pipe. While verification is optional it is highly
           recommended, and it is recommended to be done right after (or
@@ -189,8 +203,9 @@ Options:
           similar. You must specify a user with --user and a device with
           --device to specify to which device you want to send the verification
           request. On the other device you get a pop up and you must accept the
-          verification request. 'emoji-req' seems to have problems, e.g.
-          'emoji-req' does not seem to work with Element phone app
+          verification request. 'emoji-req' currently seems to have problems,
+          while it does work with Element web page in browser, 'emoji-req' does
+          not seem to work with Element phone app
           
           [default: none]
 

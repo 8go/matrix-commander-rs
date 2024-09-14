@@ -54,6 +54,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, enabled, error, info, warn, Level};
+use tracing_subscriber::EnvFilter;
 use update_informer::{registry, Check};
 use url::Url;
 
@@ -784,6 +785,10 @@ pub struct Args {
     /// If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
     /// See also '--debug' and '--verbose'.
+    /// An example use of RUST_LOG is to use neither --log-level nor --debug,
+    /// and to set RUST_LOG="error,matrix_commander_rs=debug" which turns
+    /// off debugging on all lower level modules and turns debugging on only
+    /// for matrix-commander-rs.
     // Possible values are
     // '{trace}', '{debug}', '{info}', '{warn}', and '{error}'.
     #[arg(long, value_enum, default_value_t = LogLevel::default(), ignore_case = true, )]
@@ -885,6 +890,13 @@ pub struct Args {
     /// By default, no
     /// verification is performed.
     /// Verification is currently offered via Manual-Device, Manual-User, Emoji and Emoji-Req.
+    /// Do verification in this order: 1) bottstrap first with -bootstrap,
+    /// 2) perform both manual verifications, and 3) perform emoji verification.
+    /// --verify emoji has been tested against Element in Firefox browser and against
+    /// Element app on Android phone. Both has been working successfully in Sept 2024.
+    /// In Element web page it was important NOT to click the device in the device list,
+    /// but to click the underscored link "Verify" just above the device list.
+    /// In the Element on cell phone case, accept the emojis first on the cell phone.
     /// Manual verification is simpler but does less.
     /// Try: '--bootstrap --password mypassword --verify manual-device' or
     /// '--bootstrap --password mypassword --verify manual-user'.
@@ -893,10 +905,11 @@ pub struct Args {
     /// and
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
     /// for more info on Manual verification.
-    /// manual-device can only verify its own devices, notother users' devices.
-    /// manual-user can trust other users. So, with verify-user also use the --user option
-    /// to specify one or multiple users.
-    /// One can first do 'manual-device' and 'manual-user' verification and
+    /// manual-device can only verify its own devices, not other users' devices.
+    /// manual-user can trust other users. So, with manual-user also use the --user option
+    /// to specify one or multiple users. With manual-user first trust yourself, by
+    /// setting --user to yourself, or omitting -user in which case it will default to itself.
+    /// One should first do 'manual-device' and 'manual-user' verification and
     /// then 'emoji' or 'emoji-req' verification.
     /// Both 'emoji' as well as 'emoji-req' perform emoji verification.
     /// With 'emoji' we send a request to some other client to request verification from their device.
@@ -936,7 +949,8 @@ pub struct Args {
     /// a device with --device to specify to which device you want to send the
     /// verification request. On the other device you get a pop up and you
     /// must accept the verification request.
-    /// 'emoji-req' seems to have problems, e.g. 'emoji-req' does not seem to
+    /// 'emoji-req' currently seems to have problems, while it does work with Element
+    /// web page in browser, 'emoji-req' does not seem to
     /// work with Element phone app.
     #[arg(long, value_enum,
         value_name = "VERIFICATION_METHOD",
@@ -3315,20 +3329,19 @@ async fn main() -> Result<(), Error> {
         // -d overwrites --log-level
         ap.log_level = LogLevel::Debug
     }
+    // .with_env_filter("matrix_commander_rs=debug") // Todo : add 2nd --log-level arg for lower-level modules
+    // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-comander-rs debug info, and erors for all other modules
     if ap.log_level.is_none() {
-        ap.log_level = LogLevel::from_str(&env_org_rust_log, true).unwrap_or(LogLevel::Error);
+        tracing_subscriber::fmt()
+            .with_writer(io::stderr)
+            .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_writer(io::stderr)
+            .with_max_level(Level::from_str(&ap.log_level.to_string()).unwrap_or(Level::ERROR))
+            .init();
     }
-    unsafe {
-        // overwrite environment variable, important because it might have been empty/unset
-        env::set_var("RUST_LOG", ap.log_level.to_string());
-    }
-
-    // set log level e.g. via RUST_LOG=DEBUG cargo run, use newly set venv var value
-    // Send *all* output from Debug to Error to stderr
-    tracing_subscriber::fmt()
-        .with_writer(io::stderr)
-        .with_max_level(Level::from_str(&ap.log_level.to_string()).unwrap_or(Level::ERROR))
-        .init();
     debug!("Original RUST_LOG env var is {}", env_org_rust_log);
     debug!(
         "Final RUST_LOG env var is {}",
@@ -3336,9 +3349,15 @@ async fn main() -> Result<(), Error> {
     );
     debug!("Final log_level option is {:?}", ap.log_level);
     if enabled!(Level::TRACE) {
-        debug!("Log level is set to TRACE.");
+        debug!(
+            "Log level of module {} is set to TRACE.",
+            get_prog_without_ext()
+        );
     } else if enabled!(Level::DEBUG) {
-        debug!("Log level is set to DEBUG.");
+        debug!(
+            "Log level of module {} is set to DEBUG.",
+            get_prog_without_ext()
+        );
     }
     debug!("Version is {}", get_version());
     debug!("Package name is {}", get_pkg_name());
@@ -3635,7 +3654,7 @@ async fn main() -> Result<(), Error> {
         replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
         convert_to_full_room_ids(&client, &mut ap.joined_members, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        convert_to_full_user_ids(&mut ap.room_dm_create, hostname);
+        ap.room_dm_create = convert_to_full_user_ids(ap.room_dm_create, hostname);
         ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
         convert_to_full_alias_ids(&mut ap.alias, hostname);

@@ -94,6 +94,56 @@ use crate::{
     Args, Credentials, Error, Listen, Output, Sync,
 };
 
+// implement a 'simple' extension to Iterator So we can do side effects (like logging) while filtering,
+trait IteratorExt: Iterator {
+    // filter_with_effect: Filters elements based on a predicate and applies an effect for each item that passes
+    fn filter_or_effect(
+        self,
+        predicate: impl Fn(&Self::Item) -> bool,
+        effect: impl Fn(&Self::Item) -> (),
+    ) -> FilterOrEffect<Self, impl Fn(&Self::Item) -> bool, impl Fn(&Self::Item) -> ()>
+    where
+        Self: Sized, // Ensure the iterator can be sized
+    {
+        FilterOrEffect {
+            iter: self,
+            predicate,
+            effect,
+        }
+    }
+}
+
+// Implement the custom trait for all iterators
+impl<I: Iterator> IteratorExt for I {}
+
+// Define the custom iterator adapter struct
+struct FilterOrEffect<I, P, E> {
+    iter: I,
+    predicate: P,
+    effect: E,
+}
+
+// Implement the Iterator trait for the custom struct
+impl<I, P, E> Iterator for FilterOrEffect<I, P, E>
+where
+    I: Iterator,
+    P: Fn(&I::Item) -> bool, // Predicate to filter items
+    E: Fn(&I::Item) -> (),   // Effect to apply on each filtered item
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(item) = self.iter.next() {
+            if (self.predicate)(&item) {
+                return Some(item);
+            }
+            (self.effect)(&item);
+            // Apply the effect if filtered
+        }
+        None
+    }
+}
+
 // import verification code
 #[path = "emoji_verify.rs"]
 mod emoji_verify;
@@ -253,38 +303,29 @@ pub(crate) async fn convert_to_full_mxc_uris(vecstr: &mut Vec<OwnedMxcUri>, defa
     vecstr.retain(|x| !x.as_str().trim().is_empty());
 }
 
+static U_EXCL_ETEXT: &str = "This user id {:?} starts with an exclamation mark. \
+                         ! are used for rooms, not users. This will fail later.";
+static U_HASH_ETEXT: &str = "This user id {:?} starts with a hash tag. \
+                         # are used for room aliases, not users. This will fail later.";
 /// Convert partial user ids to full user ids.
 /// john => @john:matrix.server.com
 /// @john => @john:matrix.server.com
 /// @john:matrix.server.com => @john:matrix.server.com
-pub(crate) fn convert_to_full_user_ids(vecstr: &mut Vec<String>, default_host: &str) {
-    vecstr.retain(|x| !x.trim().is_empty());
-    for el in vecstr {
-        el.retain(|c| !c.is_whitespace());
-        if el.starts_with('!') {
-            error!(
-                "This user id {:?} starts with an exclamation mark. \
-                ! are used for rooms, not users. This will fail later.",
-                el
-            );
-            continue;
-        }
-        if el.starts_with('#') {
-            error!(
-                "This user id {:?} starts with a hash tag.
-            # are used for room aliases, not users. This will fail later.",
-                el
-            );
-            continue;
-        }
-        if !el.starts_with('@') {
-            el.insert(0, '@');
-        }
-        if !el.contains(':') {
-            el.push(':');
-            el.push_str(default_host);
-        }
-    }
+pub(crate) fn convert_to_full_user_ids(user_ids: Vec<String>, default_host: &str) -> Vec<String> {
+    user_ids
+        .into_iter()
+        .filter(|id| id.is_empty())
+        .filter_or_effect(|id| id.starts_with("!"), |id| error!(U_EXCL_ETEXT, id))
+        .filter_or_effect(|id| id.starts_with("#"), |id| error!(U_HASH_ETEXT, id))
+        .map(|id| match id.starts_with("@") {
+            true => id,
+            _ => format!("@{}", id),
+        })
+        .map(|id| match id.contains(":") {
+            true => id,
+            _ => format!("{}:{}", id, default_host),
+        })
+        .collect()
 }
 
 /// Convert partial room alias ids to full room alias ids.
@@ -565,7 +606,10 @@ pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
     debug!("Client logged in: {}", client.logged_in());
     debug!("Client user id: {}", userid);
     debug!("Client device id: {}", deviceid);
-    debug!("Client access token used: {:?}", client.access_token());
+    debug!(
+        "Client access token used: {:?}",
+        obfuscate(&client.access_token().unwrap(), 4)
+    );
 
     let css = client.encryption().cross_signing_status().await;
     debug!("Client cross signing status {:?}", css);
