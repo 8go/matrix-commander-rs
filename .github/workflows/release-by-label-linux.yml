@@ -95,7 +95,7 @@ jobs:
           cp help.help.txt  help.manual.txt  help.usage.txt matrix-commander-rs/
           tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
           # tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
-          sha256sum ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
+          sha256sum ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz > ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
           echo "sha256 checksum: "
           cat ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
           ls
@@ -127,4 +127,4 @@ jobs:
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             README.md
             LICENSE
-            help.txt
+            help.help.txt  help.manual.txt  help.usage.txt 
