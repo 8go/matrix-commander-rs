@@ -31,7 +31,7 @@ text output is different than in previous version. If you are parsing
 the output you should do careful testing to adapt to the changed
 output.
 
-# Help create this Rust program!
+# Help create this Rust program
 
 This Rust project is currently bare essentials. 
 A more feature-rich Python package `matrix-commander`
