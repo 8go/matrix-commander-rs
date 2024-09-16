@@ -118,6 +118,7 @@ jobs:
         #          cat tag.txt
         #          echo $TAG_NAME
         uses: "softprops/action-gh-release@v2"
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
