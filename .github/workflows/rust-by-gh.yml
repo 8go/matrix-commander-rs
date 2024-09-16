@@ -6,7 +6,8 @@ name: Rust-by-gh
 on:
   # fires when there is a git push with version tag
   push:
-    branches: [ "main" ]
+    # this would trigger twice, once for tag v, once for branch main
+    # branches: [ "main" ]
     tags:
       - "v*"
   # pull_request:
