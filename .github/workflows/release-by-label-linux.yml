@@ -106,8 +106,9 @@ jobs:
         with:
           name: plain-linux
           path: |
-            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
-            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
+            # ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz 
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
           retention-days: 1
 
       # https://github.com/softprops/action-gh-release
@@ -124,8 +125,9 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
-            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
+            #  ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz
+            ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
             README.md
             LICENSE
             help.help.txt  help.manual.txt  help.usage.txt 
