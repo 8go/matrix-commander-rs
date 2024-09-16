@@ -92,7 +92,7 @@ jobs:
           cp ./target/release/matrix-commander-rs matrix-commander-rs/
           cp README.md matrix-commander-rs/
           cp LICENSE matrix-commander-rs/
-          cp help.txt matrix-commander-rs/
+          cp help.help.txt  help.manual.txt  help.usage.txt matrix-commander-rs/
           tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
           # tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
           sha256sum ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
