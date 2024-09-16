@@ -22,7 +22,8 @@ jobs:
           cargo build
           ls
           ls *
-          cp ./*/matrix-commander-rs .
+          cp ./target/*/matrix-commander-rs .
+          ls -l ./matrix-commander-rs
 
     - uses: actions/upload-artifact@v4
       with:
