@@ -15,7 +15,6 @@ simple but convenient CLI-based Matrix client app for sending, receiving, and mu
 
 # Incompatibilities
 
-Be forewarned.
 Version 0.4 is incompatible with previous versions.
 The default location of the store has changed.
 The directory name of the default store used to be `sledstore`.
@@ -34,15 +33,14 @@ output.
 
 # Help create this Rust program!
 
-This project is currently only a vision. The Python package matrix-commander
+This Rust project is currently bare essentials. 
+A more feature-rich Python package `matrix-commander`
 exists. See [matrix-commander](https://github.com/8go/matrix-commander/).
-The vision is to have a compatible program in Rust. I cannot do it myself,
-but I can coordinate and merge your pull requests.
+The vision is to have a compatible program in Rust.
 This project depends on you. The project will only advance if you provide
-the code. Have a look at the repo
+some code. Have a look at the repo
 [matrix-commander-rs](https://github.com/8go/matrix-commander-rs/).
-Please help! :pray: Please contribute code to make this vision a reality,
-and to one day have a fully functional and feature-rich
+Please help! :pray: Please contribute code to enhance this
 [matrix-commander](https://crates.io/crates/matrix-commander) crate.
 Safe!
 
@@ -65,6 +63,11 @@ Safe!
 - Getting room info
 - Logout and removal of device
 - Things like argument parsing, logging, output in JSON format, etc.
+- Creating a brand new client, sending a message and destroying the client
+  all in a single command. This send-and-forget command is:
+  `matrix-commander-rs --login password --user-login @john:some.homeserver.org
+  --password secret --device matrix-commander-rs --room-default
+  \!someRoomId:some.homeserver.org --message Hello --logout me`.
 
 # What you can do
 
@@ -73,33 +76,14 @@ Safe!
 - Talk about it to your friends, post it in chatrooms, Hacker News, etc.
   This will give exposure and help find people willing to provide code,
   contributions, and PRs.
-- Write code yourself. :rocket:
-
-# Ideas
-
-- Make it compatible with the Python version of `matrix-commander`, i.e.
-  same config file, same CLI, etc. The user should be able to run
-  the Python `matrix-commander` in the morning, and the Rust
-  `matrix-commander-rs` in the afternoon.
-- Use [matrix-rust-sdk](https://crates.io/crates/matrix-sdk).
-- Use [ruma](https://crates.io/crates/ruma) if and only if and where needed.
-- Make it so as much as possible can be done in a single call.
-  Currently the send-and-forget is already working:
-  `matrix-commander-rs --login password --user-login @john:some.homeserver.org
-  --password secret --device matrix-commander-rs --room-default
-  \!someRoomId:some.homeserver.org --message Hello --logout me`.
-
-# Immediate action items
-- revise existing code, where is it inefficient?
-- improve the quality of the existing code. Make it more Rust-esque
-  while keeping it simple.
-- implement `login` via SSO
-- add --proxy (see Python documentation)
-- add --nossl (see Python documentation)
-- add --event (see Python documentation and JSON config file in Pythom repo)
-- add --download-media (see Python documentation)
-- add other features found in the Python version to the Rust version
-- ...
+- Write code yourself. :rocket: Features that you might want to code: 
+  - implement `login` via SSO
+  - add --proxy (see Python documentation)
+  - add --nossl (see Python documentation)
+  - add --event (see Python documentation and JSON config file in Pythom repo)
+  - add --download-media (see Python documentation)
+  - add other features found in the Python version to the Rust version
+  - ...
 
 # Contributors :clap:
 - _Add your name here._
