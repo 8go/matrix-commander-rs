@@ -51,7 +51,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
-    container: ubuntu:18.04
+    container: ubuntu:24.04
     needs: tagname
     env:
       RELEASE_TAG_NAME: ${{ needs.tagname.outputs.tag_name }}
