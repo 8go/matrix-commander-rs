@@ -355,7 +355,12 @@ pub(crate) fn convert_to_short_canonical_alias_ids(vecstr: &mut Vec<String>) {
 pub(crate) fn restore_credentials(ap: &Args) -> Result<Credentials, Error> {
     if ap.credentials.is_file() {
         let credentials = Credentials::load(&ap.credentials)?;
-        debug!("restore_credentials: credentials are {:?}", &credentials);
+        let mut credentialsfiltered = credentials.clone();
+        credentialsfiltered.access_token = "***".to_string();
+        debug!(
+            "restore_credentials: loaded credentials are: {:?}",
+            credentialsfiltered
+        );
         Ok(credentials)
     } else {
         Err(Error::NoCredentialsFound)
@@ -673,7 +678,11 @@ pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
             }
         }
     } else {
-        error!("Error: {:?}", Error::UnsupportedCliParameter);
+        error!(
+            "Error: {:?}",
+            Error::UnsupportedCliParameter("Option used for --verify is not supported.")
+        );
+        return Err(Error::VerifyFailed);
     }
     Ok(())
 }
