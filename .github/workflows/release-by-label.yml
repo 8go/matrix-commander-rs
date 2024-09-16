@@ -5,9 +5,11 @@
 name: "tagged-release"
 
 on:
-  push:
-    tags:
-      - "v*"
+  # TURNED IT OFF IN SEPT 2024
+  # fires when there is a git push with version tag
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -51,7 +53,7 @@ jobs:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
     needs: tagname
-    container: ubuntu:18.04
+    container: ubuntu:24.04
     env:
       RELEASE_TAG_NAME: ${{ needs.tagname.outputs.tag_name }}
       DEBIAN_FRONTEND: noninteractive
