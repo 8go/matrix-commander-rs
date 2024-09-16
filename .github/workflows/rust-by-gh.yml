@@ -4,14 +4,15 @@ name: Rust-by-gh
 # cannot start it manually
 
 on:
-  # push:
-  #   branches: [ "main" ]
-  #   tags:
-  #     - "v*"
-  pull_request:
+  # fires when there is a git push with version tag
+  push:
     branches: [ "main" ]
     tags:
       - "v*"
+  # pull_request:
+  #   branches: [ "main" ]
+  #   tags:
+  #     - "v*"
 
 env:
   CARGO_TERM_COLOR: always
