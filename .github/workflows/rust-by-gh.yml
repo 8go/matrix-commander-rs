@@ -25,6 +25,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      # Don't build if we dont have a version tag tag, cannot create release without a version tag anyways
+      if: startsWith(github.ref, 'refs/tags/')
     
     - name: Build
       run: |
