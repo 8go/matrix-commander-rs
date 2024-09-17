@@ -57,7 +57,7 @@ jobs:
           # ls -l ./matrix-commander-rs*
           # cargo clean
           # # now cross compile
-          CCARCH=x86_64-apple-darwin
+          CCARCH=x86_64-pc-windows-msvc
           cross build --target $CCARCH --release
           ls -l target target/*
           find . -name "matrix*commander*"
@@ -66,6 +66,8 @@ jobs:
           cargo clean
           # cannot build for aarch64-apple-darwin
           # [cross] warning: `cross` does not provide a Docker image for target aarch64-apple-darwin, specify a custom image in `Cross.toml`.
+          # cannot build for x86_64-apple-darwin
+          # [cross] warning: `cross` does not provide a Docker image for target x86_64-apple-darwin, specify a custom image in `Cross.toml`.
           
 
     # - uses: actions/upload-artifact@v4
