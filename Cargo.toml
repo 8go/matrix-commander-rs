@@ -36,6 +36,8 @@ matrix-sdk = { version = "0.7", features = [
 ] }
 mime = "0.3"
 mime_guess = "2.0"
+# create openssl dependency for cross compilation
+openssl = { version = '0.10', features = ["vendored"] }
 regex = "1.10"
 reqwest = "0.12"
 rpassword = "7.3"
