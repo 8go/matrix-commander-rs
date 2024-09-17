@@ -4279,8 +4279,12 @@ async fn main() -> Result<(), Error> {
             };
         } // Err(e) =>
     } // match clientres
-    let plural = if errcount > 1 { "s" } else { "" };
-    error!("Encountered {} error{}.", errcount, plural);
+    let plural = if errcount == 1 { "" } else { "s" };
+    if errcount > 0 {
+        error!("Encountered {} error{}.", errcount, plural);
+    } else {
+        debug!("Encountered {} error{}.", errcount, plural);
+    }
     debug!("Good bye");
     result
 }
