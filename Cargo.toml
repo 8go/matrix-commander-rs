@@ -36,7 +36,12 @@ matrix-sdk = { version = "0.7", features = [
 ] }
 mime = "0.3"
 mime_guess = "2.0"
-# create openssl dependency for cross compilation
+#
+# create openssl dependency for cross compilation.
+# this removes dependencies on architecture specific openssl files.
+# see: https://stackoverflow.com/questions/54775076/how-to-cross-compile-a-rust-project-with-openssl
+# see: https://github.com/cross-rs/cross/issues/229
+# see: https://stackoverflow.com/questions/68871193/pkg-config-error-during-rust-cross-compilation
 openssl = { version = '0.10', features = ["vendored"] }
 regex = "1.10"
 reqwest = "0.12"
