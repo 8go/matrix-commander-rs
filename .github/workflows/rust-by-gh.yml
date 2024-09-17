@@ -36,29 +36,36 @@ jobs:
     
     - name: Build
       run: |
+          echo "Rust says: "
           rustc -vV
+          echo "uname says: $(uname -m)" 
+          CCARCH=x86_64-unknown-linux-gnu
           # cargo build --release
           # ls -l target target/*
           # find . -name "matrix*commander*"
-          # mv ./target/*/matrix-commander-rs matrix-commander-rs.linux-$(uname -m)
+          # mv ./target/*/matrix-commander-rs matrix-commander-rs.$CCARCH
           # ls -l ./matrix-commander-rs*
           cargo clean
           # now cross compile
           sudo apt-get install podman
           cargo install cross
-          cross build --target aarch64-unknown-linux-gnu --release
+          # CCARCH=aarch64-unknown-linux-gnu
+          # cross build --target $CCARCH --release
+          # ls -l target target/*
+          # find . -name "matrix*commander*"
+          # mv ./target/$CCARCH/*/matrix-commander-rs matrix-commander-rs.$CCARCH
+          # ls -l ./matrix-commander-rs*
+          # cargo clean
+          # # now cross compile
+          CCARCH=x86_64-apple-darwin
+          cross build --target $CCARCH --release
           ls -l target target/*
           find . -name "matrix*commander*"
-          mv ./target/aarch64-unknown-linux-gnu/*/matrix-commander-rs matrix-commander-rs.aarch64-unknown-linux-gnu
+          mv ./target/$CCARCH/*/matrix-commander-rs matrix-commander-rs.$CCARCH
           ls -l ./matrix-commander-rs*
           cargo clean
-          # now cross compile
-          cross build --target aarch64-apple-darwin --release
-          ls -l target target/*
-          find . -name "matrix*commander*"
-          mv ./target/aarch64-apple-darwin/*/matrix-commander-rs matrix-commander-rs.aarch64-apple-darwin
-          ls -l ./matrix-commander-rs*
-          cargo clean
+          # cannot build for aarch64-apple-darwin
+          # [cross] warning: `cross` does not provide a Docker image for target aarch64-apple-darwin, specify a custom image in `Cross.toml`.
           
 
     # - uses: actions/upload-artifact@v4
