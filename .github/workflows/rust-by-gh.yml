@@ -37,10 +37,10 @@ jobs:
     - name: Build
       run: |
           rustc -vV
-          cargo build --release
-          ls -l target target/*
-          mv ./target/*/matrix-commander-rs matrix-commander-rs.linux-$(uname -m)
-          ls -l ./matrix-commander-rs*
+          # cargo build --release
+          # ls -l target target/*
+          # mv ./target/*/matrix-commander-rs matrix-commander-rs.linux-$(uname -m)
+          # ls -l ./matrix-commander-rs*
           cargo clean
           # now cross compile
           sudo apt-get install podman
