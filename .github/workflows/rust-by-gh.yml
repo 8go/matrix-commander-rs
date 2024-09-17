@@ -14,7 +14,13 @@ on:
   #   branches: [ "main" ]
   #   tags:
   #     - "v*"
-
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: nightly
+        
 env:
   CARGO_TERM_COLOR: always
 
