@@ -39,6 +39,7 @@ jobs:
           rustc -vV
           # cargo build --release
           # ls -l target target/*
+          # find . -name "matrix*commander*"
           # mv ./target/*/matrix-commander-rs matrix-commander-rs.linux-$(uname -m)
           # ls -l ./matrix-commander-rs*
           cargo clean
@@ -47,7 +48,15 @@ jobs:
           cargo install cross
           cross build --target aarch64-unknown-linux-gnu --release
           ls -l target target/*
-          mv ./target/*/matrix-commander-rs matrix-commander-rs.aarch64-unknown-linux-gnu
+          find . -name "matrix*commander*"
+          mv ./target/aarch64-unknown-linux-gnu/*/matrix-commander-rs matrix-commander-rs.aarch64-unknown-linux-gnu
+          ls -l ./matrix-commander-rs*
+          cargo clean
+          # now cross compile
+          cross build --target aarch64-apple-darwin --release
+          ls -l target target/*
+          find . -name "matrix*commander*"
+          mv ./target/aarch64-apple-darwin/*/matrix-commander-rs matrix-commander-rs.aarch64-apple-darwin
           ls -l ./matrix-commander-rs*
           cargo clean
           
