@@ -648,7 +648,7 @@ impl fmt::Display for LogLevel {
 
 /// Enumerator used for --output option
 #[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
-enum Output {
+pub enum Output {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
     // We do not need to know if user used the option or not,
@@ -2455,30 +2455,41 @@ pub async fn readme() {
 }
 
 /// Prints the version information
-pub fn version() {
+pub fn version(output: Output) {
     let version = if stdout().is_terminal() {
         get_version().green()
     } else {
         get_version().normal()
     };
-    println!();
-    println!(
-        "  _|      _|      _|_|_|                     {}",
-        get_prog_without_ext()
-    );
-    print!("  _|_|  _|_|    _|             _~^~^~_       ");
-    println!("a rusty vision of a Matrix CLI client");
-    println!(
-        "  _|  _|  _|    _|         \\) /  o o  \\ (/   version {}",
-        version
-    );
-    println!(
-        "  _|      _|    _|           '_   -   _'     repo {}",
-        get_pkg_repository()
-    );
-    print!("  _|      _|      _|_|_|     / '-----' \\     ");
-    println!("please submit PRs to make the vision a reality");
-    println!();
+    match output {
+        Output::Text => {
+            println!();
+            println!(
+                "  _|      _|      _|_|_|                     {}",
+                get_prog_without_ext()
+            );
+            print!("  _|_|  _|_|    _|             _~^~^~_       ");
+            println!("a rusty vision of a Matrix CLI client");
+            println!(
+                "  _|  _|  _|    _|         \\) /  o o  \\ (/   version {}",
+                version
+            );
+            println!(
+                "  _|      _|    _|           '_   -   _'     repo {}",
+                get_pkg_repository()
+            );
+            print!("  _|      _|      _|_|_|     / '-----' \\     ");
+            println!("please submit PRs to make the vision a reality");
+            println!();
+        }
+        Output::JsonSpec => (),
+        _ => println!(
+            "{{\"program\": {:?}, \"version\": {:?}, \"repo\": {:?}}}",
+            get_prog_without_ext(),
+            get_version(),
+            get_pkg_repository()
+        ),
+    }
 }
 
 /// Prints the installed version and the latest crates.io-available version
@@ -3521,8 +3532,8 @@ async fn main() -> Result<(), Error> {
     debug!("get-masterkey option is {:?}", ap.get_masterkey);
 
     match ap.version {
-        None => (),                     // do nothing
-        Some(None) => crate::version(), // print version
+        None => (),                              // do nothing
+        Some(None) => crate::version(ap.output), // print version
         Some(Some(Version::Check)) => crate::version_check(),
     }
     if ap.contribute {
@@ -4295,9 +4306,43 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
+    // for testing async functions
+    // see: https://blog.x5ff.xyz/blog/async-tests-tokio-rust/
+    macro_rules! aw {
+        ($e:expr) => {
+            tokio_test::block_on($e)
+        };
+    }
+
+    #[test]
+    fn test_usage() {
+        assert_eq!(usage(), ());
+    }
+
+    #[test]
+    fn test_help() {
+        assert_eq!(help(), ());
+    }
+
+    #[test]
+    fn test_manual() {
+        assert_eq!(manual(), ());
+    }
+
+    #[test]
+    fn test_readme() {
+        assert_eq!(aw!(readme()), ());
+    }
+
     #[test]
     fn test_version() {
-        assert_eq!(version(), ());
+        assert_eq!(version(Output::Text), ());
+        assert_eq!(version(Output::Json), ());
+    }
+
+    #[test]
+    fn test_version_check() {
+        assert_eq!(version_check(), ());
     }
 
     #[test]

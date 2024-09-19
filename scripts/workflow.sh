@@ -64,20 +64,21 @@ select opt in "${options[@]}"; do
 done
 
 PS3='Please enter your choice: '
-OPT1="cargo test         # run this testcase"
-OPT2="tests/test-send.sh # run this testcase"
-OPT3="tests/test-send.sh # run this testcase"
-OPT4="tests/test-send.sh # run this testcase"
-OPT5="tests/test-send.sh # run this testcase"
-OPT6="tests/test-send.sh # run this testcase"
+OPT1="cargo test                     # run this testcase"
+OPT2="tests/test-version.sh          # run this testcase"
+OPT3="tests/test-send.sh             # run this testcase"
+OPT4="tests/test-devices.sh          # run this testcase"
+OPT5="tests/test-rooms.sh            # run this testcase"
+OPT6="tests/test-get-profile.sh      # run this testcase"
+OPT7="tests/test-get-display-name.sh # run this testcase"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
     if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
     if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
     case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6")
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7")
         OPTE=${opt%%#*} # remove everything after first #
         echo "Performing: $OPTE"
         $OPTE

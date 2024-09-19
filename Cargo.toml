@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.9.5"
+version = "0.9.6"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -60,10 +60,13 @@ url = { version = "2.5", features = ["serde"] }
 
 
 [dev-dependencies]
+# "matrix-commander-rs" will be the Rust program
+# to perform tests on async functions
+tokio-test = "0.4"
+
 # this is to distinguish it from "matrix-commander" which is the Python program
 # For people that have both Python and Rust installed:
 # "matrix-commander" will remain the Python program
-# "matrix-commander-rs" will be the Rust program
 [[bin]]
 name = "matrix-commander-rs"
 path = "src/main.rs"
