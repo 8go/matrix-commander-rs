@@ -453,7 +453,7 @@ pub(crate) async fn login<'a>(
     }
     let _ = client
         .session()
-        .expect("error: client not logged in correctly. No session.");
+        .expect("Error: client not logged in correctly. No session.");
     info!("device id = {}", client.session_meta().unwrap().device_id);
     info!("credentials file = {:?}", ap.credentials);
 
@@ -518,7 +518,7 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
         .sqlite_store(sqlitestorehome, None)
         .build()
         .await
-        .expect("error: ClientBuilder build failed. error: cannot add store to ClientBuilder."); // no password for store!
+        .expect("Error: ClientBuilder build failed. Error: cannot add store to ClientBuilder."); // no password for store!
     Ok(client)
 }
 
@@ -545,7 +545,7 @@ pub(crate) async fn bootstrap(client: &Client, ap: &mut Args) -> Result<(), Erro
                     .encryption()
                     .bootstrap_cross_signing(Some(uiaa::AuthData::Password(password)))
                     .await
-                    .expect("Couldn't bootstrap cross signing")
+                    .expect("Error: Couldn't bootstrap cross signing.")
             } else {
                 error!("Error: {:?}", e);
                 return Err(Error::BootstrapFailed);
@@ -2492,9 +2492,7 @@ pub(crate) async fn file(
                 let mut buffer = Vec::new();
                 if stdin().is_terminal() {
                     print!("Waiting for data to be piped into stdin. Enter data now: ");
-                    std::io::stdout()
-                        .flush()
-                        .expect("error: could not flush stdout");
+                    std::io::stdout().flush()?;
                 }
                 // read the whole file
                 io::stdin().read_to_end(&mut buffer)?;
@@ -2599,9 +2597,7 @@ pub(crate) async fn media_upload(
             let mut buffer = Vec::new();
             if stdin().is_terminal() {
                 eprint!("Waiting for data to be piped into stdin. Enter data now: ");
-                std::io::stdout()
-                    .flush()
-                    .expect("error: could not flush stderr");
+                std::io::stdout().flush()?;
             }
             // read the whole file
             io::stdin().read_to_end(&mut buffer)?;

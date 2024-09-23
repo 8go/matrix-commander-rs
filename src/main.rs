@@ -2065,15 +2065,6 @@ pub struct Credentials {
     refresh_token: Option<String>,
 }
 
-// credentials = Credentials::new(
-//     Url::from_file_path("/a").expect("url bad"), // homeserver: Url,
-//     user_id!(r"@a:a").to_owned(), // user_id: OwnedUserId,
-//     String::new().to_owned(), // access_token: String,
-//     device_id!("").to_owned(), // device_id: OwnedDeviceId,
-//     String::new(), // room_id: String,
-//     None, // refresh_token: Option<String>
-// ),
-
 impl AsRef<Credentials> for Credentials {
     fn as_ref(&self) -> &Self {
         self
@@ -2520,9 +2511,9 @@ pub fn version_check() {
             available, name, version
         ),
         Ok(None) => {
-            println!("{} You already have the latest version.", uptodate)
+            println!("{uptodate} You already have the latest version.")
         }
-        Err(ref e) => println!("{} Error reported: {:?}.", couldnotget, e),
+        Err(ref e) => println!("{couldnotget} Error reported: {e}."),
     };
 }
 
@@ -2545,31 +2536,25 @@ pub fn contribute() {
 fn get_homeserver(ap: &mut Args) {
     while ap.homeserver.is_none() {
         print!("Enter your Matrix homeserver (e.g. https://some.homeserver.org): ");
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty homeserver name is not allowed!");
-            }
-            // Todo: check format, e.g. starts with http, etc.
-            _ => {
-                ap.homeserver = Url::parse(input.trim()).ok();
-                if ap.homeserver.is_none() {
-                    error!(concat!(
-                        "The syntax is incorrect. homeserver must be a URL! ",
-                        "Start with 'http://' or 'https://'."
-                    ));
-                } else {
-                    debug!("homeserver is {:?}", ap.homeserver);
-                }
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty homeserver name is not allowed!");
+        } else if let Err(e) = Url::parse(trimmed_input) {
+            error!(
+                "Error: The syntax is incorrect. Homeserver must be a valid URL! \
+                Start with 'http://' or 'https://'. Details: {e}"
+            );
+        } else {
+            ap.homeserver = Some(Url::parse(trimmed_input).unwrap()); // Safe to unwrap since we validated it
+            debug!("homeserver is {}", ap.homeserver.as_ref().unwrap());
         }
     }
 }
@@ -2579,26 +2564,30 @@ fn get_homeserver(ap: &mut Args) {
 fn get_user_login(ap: &mut Args) {
     while ap.user_login.is_none() {
         print!("Enter your full Matrix username (e.g. @john:some.homeserver.org): ");
-        std::io::stdout()
-            .flush()
-            .expect("error; could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty user name is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.user_login = Some(input.trim().to_string());
-                debug!("user_login is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty username is not allowed!");
+        } else if !is_valid_username(trimmed_input) {
+            error!("Error: Invalid username format!");
+        } else {
+            ap.user_login = Some(trimmed_input.to_string());
+            debug!("user_login is {trimmed_input}");
         }
     }
+}
+
+// validation function for username format
+fn is_valid_username(username: &str) -> bool {
+    // Check if it starts with '@', contains ':', etc.
+    username.starts_with('@') && username.contains(':')
 }
 
 /// If necessary reads password for login and puts it into the Args.
@@ -2606,19 +2595,24 @@ fn get_user_login(ap: &mut Args) {
 fn get_password(ap: &mut Args) {
     while ap.password.is_none() {
         print!("Enter Matrix password for this user: ");
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-        let password = read_password().unwrap();
-        match password.trim() {
-            "" => {
-                error!("Empty password is not allowed!");
+        // Flush stdout to ensure the prompt is displayed
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
+        // Handle potential errors from read_password
+        match read_password() {
+            Ok(password) => {
+                let trimmed_password = password.trim();
+                if trimmed_password.is_empty() {
+                    error!("Error: Empty password is not allowed!");
+                } else {
+                    ap.password = Some(password);
+                    // Hide password from debug log files
+                    debug!("password is {}", "******");
+                }
             }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.password = Some(password);
-                // hide password from debug log files // password
-                debug!("password is {}", "******"); // password
+            Err(e) => {
+                error!("Error reading password: {e}");
             }
         }
     }
@@ -2629,30 +2623,24 @@ fn get_password(ap: &mut Args) {
 fn get_device(ap: &mut Args) {
     while ap.device.is_none() {
         print!(
-            concat!(
-                "Enter your desired name for the Matrix device ",
-                "that is going to be created for you (e.g. {}): "
-            ),
+            "Enter your desired name for the Matrix device that \
+            is going to be created for you (e.g. {}): ",
             get_prog_without_ext()
         );
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty device is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.device = Some(input.trim().to_string());
-                debug!("device is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty device name is not allowed!");
+        } else {
+            ap.device = Some(trimmed_input.to_string());
+            debug!("device is {trimmed_input}");
         }
     }
 }
@@ -2661,30 +2649,33 @@ fn get_device(ap: &mut Args) {
 /// If already set via --room_default option, then it does nothing.
 fn get_room_default(ap: &mut Args) {
     while ap.room_default.is_none() {
-        print!(concat!(
-            "Enter name of one of your Matrix rooms that you want to use as default room  ",
-            "(e.g. !someRoomId:some.homeserver.org): "
-        ));
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        print!(
+            "Enter name of one of your Matrix rooms that you want to use as default room  \
+            (e.g. !someRoomId:some.homeserver.org): "
+        );
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty name of default room is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.room_default = Some(input.trim().to_string());
-                debug!("room_default is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty name of default room is not allowed!");
+        } else if !is_valid_room_name(trimmed_input) {
+            error!("Error: Invalid room name format for '{trimmed_input}'! Room name must start with '!' and contain exactly one ':'.");
+        } else {
+            ap.room_default = Some(trimmed_input.to_string());
+            debug!("room_default is '{trimmed_input}'");
         }
     }
+}
+
+// Validation function for room name format
+fn is_valid_room_name(name: &str) -> bool {
+    name.starts_with('!') && name.matches(':').count() == 1
 }
 
 /// A room is either specified with --room or the default from credentials file is used
@@ -2904,9 +2895,7 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
             let mut line = String::new();
             if stdin().is_terminal() {
                 print!("Message: ");
-                std::io::stdout()
-                    .flush()
-                    .expect("error: could not flush stdout");
+                io::stdout().flush()?;
                 io::stdin().read_line(&mut line)?;
             } else {
                 io::stdin().read_to_string(&mut line)?;
