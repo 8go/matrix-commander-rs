@@ -1194,6 +1194,7 @@ pub(crate) async fn room_create(
     names: &[String],        // list of room names, optional
     room_topics: &[String],  // list of room topics, optional
     output: Output,          // how to format output
+    visibility: Visibility,  // visibility of the newly created room
 ) -> Result<(), Error> {
     debug!("Creating room(s)");
     debug!(
@@ -1270,8 +1271,6 @@ pub(crate) async fn room_create(
         request.topic = Some(topics2[i].clone());
         request.is_direct = is_dm;
         let usr: OwnedUserId;
-        // Visibility defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
-        let vis = Visibility::Private;
         let mut invites = vec![];
         if is_dm {
             usr = match UserId::parse(<std::string::String as AsRef<str>>::as_ref(
@@ -1292,22 +1291,63 @@ pub(crate) async fn room_create(
             };
             invites.push(usr);
             request.invite = invites;
-            request.visibility = vis.clone();
-            request.preset = Some(RoomPreset::PrivateChat);
+            // Visibility defaults to "Private" by matrix-sdk API, so "Private" for both normal rooms and DM rooms.
+            request.visibility = visibility.clone();
+            request.preset = match visibility {
+                Visibility::Public => {
+                    warn!(
+                        "Creating a public room for a DM user is not allowed. Setting to private."
+                    );
+                    Some(RoomPreset::PrivateChat)
+                }
+                Visibility::Private => Some(RoomPreset::PrivateChat),
+                _ => None,
+            };
+        } else {
+            request.visibility = visibility.clone();
+            request.preset = match visibility {
+                Visibility::Public => {
+                    info!(
+                        "Creating a public {} room.",
+                        if is_encrypted {
+                            "encrypted"
+                        } else {
+                            "unencrypted"
+                        }
+                    );
+                    Some(RoomPreset::PublicChat)
+                }
+                Visibility::Private => {
+                    info!(
+                        "Creating a private {} room.",
+                        if is_encrypted {
+                            "encrypted"
+                        } else {
+                            "unencrypted"
+                        }
+                    );
+                    Some(RoomPreset::PrivateChat)
+                }
+                _ => None,
+            };
         }
         match client.create_room(request).await {
-            Ok(response) => {
-                debug!("create_room succeeded, result is {:?}.", response);
+            Ok(created_room) => {
+                debug!("create_room succeeded, result is {:?}.", created_room);
                 print_json(
                     &json::object!(
-                        room_id: response.room_id().to_string(),
+                        room_id: created_room.room_id().to_string(),
                         alias: to_opt(&aliases2[i]),
                         name: to_opt(&names2[i]),
                         topic: to_opt(&topics2[i]),
                         invited: <std::string::String as AsRef<str>>::as_ref(&users2[i]),
-                        direct: is_dm,
-                        encrypted: is_encrypted,
-                        visibility: vis.to_string()
+                        direct: created_room.is_direct().await.unwrap_or(is_dm),
+                        encrypted: created_room.is_encrypted().await.unwrap_or(is_encrypted),
+                        visibility: if created_room.is_public() {
+                            "Public"
+                        } else {
+                            "Private"
+                        },
                     ),
                     output,
                     false,
