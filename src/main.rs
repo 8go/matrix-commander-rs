@@ -824,12 +824,13 @@ pub struct Args {
     // Todo
     /// Disable encryption for a specific action.
     /// Details::
-    /// By default encryption is turned on for all private rooms and DMs.
-    /// E.g. Newly created DMs and private rooms will have encryption enabled
-    /// by default. To explicitly turn encryption off for a
-    /// specific action use --plain. Currently --plain is supported by
-    /// --room-create and --room-dm-create. See also --room-enable-encryption
-    /// which sort of does the opossite for rooms.
+    /// By default encryption is turned on for all private rooms and DMs
+    /// and turned off for all public rooms. E.g. Created DM or private room
+    /// will have encryption enabled by default.
+    /// To explicitly turn encryption off for a specific action use --plain.
+    /// Currently --plain is supported by --room-create and --room-dm-create.
+    /// See also --room-enable-encryption which sort of does the opossite for rooms.
+    /// See also --visibility which allows setting the visibility of the room.
     #[arg(long)]
     plain: Option<bool>,
 
@@ -1438,8 +1439,10 @@ pub struct Args {
     /// Set the visibility of the newly created room.
     /// Details::
     /// Default room visibility is 'private'.
-    /// If you want to create a new room with public visibility,
-    /// use this option.
+    /// To create a public room, use
+    /// '--room-create <room-name> --visibility public'.
+    /// To create a private room, use
+    /// '--room-create <room-name> --visibility private'.
     #[arg(long, value_enum,
         value_name = "VISIBILITY",
         default_value = Visibility::Private.as_str(), ignore_case = true, )]
