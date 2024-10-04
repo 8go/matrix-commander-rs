@@ -1902,85 +1902,60 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
     // There are around 50 events for rooms
     // See https://docs.rs/ruma/0.7.4/ruma/?search=syncroom
     // We only do 4 as example to start with.
-    let room_member_evs = room
+    let member_evs = room
         .get_state_events_static::<RoomMemberEventContent>()
         .await?;
-    let power_levels_ev = room
+    let power_level_evs = room
         .get_state_events_static::<RoomPowerLevelsEventContent>()
         .await?;
-    let name_ev = room
+    let name_evs = room
         .get_state_events_static::<RoomNameEventContent>()
         .await?;
-    let topic_ev = room
+    let topic_evs = room
         .get_state_events_static::<RoomTopicEventContent>()
         .await?;
+
     match output {
         Output::Text => {
-            print!("Room:    {:?},    RoomMemberEventContent: [", room_id);
-            let mut first: bool = true;
-            for ev in room_member_evs {
-                if first {
-                    first = false;
-                } else {
-                    print!(", ");
-                }
-                print!("\"{:?}\"", ev.deserialize());
-            }
-            println!("],    ");
-            print!("RoomPowerLevelsEventContent: [");
-            let mut first: bool = true;
-            for ev in power_levels_ev {
-                if first {
-                    first = false;
-                } else {
-                    print!(", ");
-                }
-                print!("\"{:?}\"", ev.deserialize());
-            }
-            println!("],    ");
-            print!("RoomNameEventContent: [");
-            let mut first: bool = true;
-            for ev in name_ev {
-                if first {
-                    first = false;
-                } else {
-                    print!(", ");
-                }
-                print!("\"{:?}\"", ev.deserialize());
-            }
-            println!("],    ");
-            print!("RoomTopicEventContent: [");
-            let mut first: bool = true;
-            for ev in topic_ev {
-                if first {
-                    first = false;
-                } else {
-                    print!(", ");
-                }
-                print!("\"{:?}\"", ev.deserialize());
-            }
-            println!("]");
+            print!(
+                "Room:    \"{}\",\n\
+                 RoomMemberEventContent: [{}],\n\
+                 RoomPowerLevelsEventContent: [{}],\n\
+                 RoomNameEventContent: [{}],\n\
+                 RoomTopicEventContent: [{}]\n",
+                room_id,
+                member_evs.iter()
+                    .map(|value| format!("{:?}",value.deserialize()))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                power_level_evs.iter()
+                    .map(|value| format!("{:?}",value.deserialize()))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                name_evs.into_iter()
+                    .map(|value| format!("{:?}",value.deserialize()))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                topic_evs.iter()
+                    .map(|value| format!("{:?}",value.deserialize()))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+            );
         }
         // Output::JsonSpec => (), // These events should be spec compliant
         _ => {
-            print!("{{\"room_id\": {:?}, ", room_id);
-            print!(
-                "\"RoomMemberEventContent\": [ {{ {} }} ], ",
-                serde_json::to_string(&room_member_evs).unwrap_or_else(|_| r#""""#.to_string())
+            println!(
+                "{{  \"room_id\": {:?}, \n\
+                     \"RoomMemberEventContent\": [ {{ {} }} ], \n\
+                     \"RoomPowerLevelsEventContent\": [ {{ {} }} ],\n\
+                     \"RoomNameEventContent\": [ {{ {} }} ],\n\
+                     \"RoomTopicEventContent\": [ {{ {} }} ] }}",
+                room_id,
+                serde_json::to_string(&member_evs).unwrap_or_else(|_| r#""""#.to_string()),
+                serde_json::to_string(&power_level_evs).unwrap_or_else(|_| r#""""#.to_string()),
+                serde_json::to_string(&name_evs).unwrap_or_else(|_| r#""""#.to_string()),
+                serde_json::to_string(&topic_evs).unwrap_or_else(|_| r#""""#.to_string()),
             );
-            print!(
-                "\"RoomPowerLevelsEventContent\": [ {{ {} }} ], ",
-                serde_json::to_string(&power_levels_ev).unwrap_or_else(|_| r#""""#.to_string())
-            );
-            print!(
-                "\"RoomNameEventContent\": [ {{ {} }} ], ",
-                serde_json::to_string(&name_ev).unwrap_or_else(|_| r#""""#.to_string())
-            );
-            print!(
-                "\"RoomTopicEventContent\": [ {{ {} }} ], ",
-                serde_json::to_string(&topic_ev).unwrap_or_else(|_| r#""""#.to_string())
-            );
-            println!(" }} ");
         }
     }
     Ok(())
