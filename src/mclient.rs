@@ -1924,20 +1924,24 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
                  RoomNameEventContent: [{}],\n\
                  RoomTopicEventContent: [{}]\n",
                 room_id,
-                member_evs.iter()
-                    .map(|value| format!("{:?}",value.deserialize()))
+                member_evs
+                    .iter()
+                    .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
-                power_level_evs.iter()
-                    .map(|value| format!("{:?}",value.deserialize()))
+                power_level_evs
+                    .iter()
+                    .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
-                name_evs.into_iter()
-                    .map(|value| format!("{:?}",value.deserialize()))
+                name_evs
+                    .into_iter()
+                    .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
-                topic_evs.iter()
-                    .map(|value| format!("{:?}",value.deserialize()))
+                topic_evs
+                    .iter()
+                    .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
             );
