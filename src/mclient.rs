@@ -1935,7 +1935,7 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
                     .collect::<Vec<String>>()
                     .join(", "),
                 name_evs
-                    .into_iter()
+                    .into()
                     .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
