@@ -1945,10 +1945,10 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
         // Output::JsonSpec => (), // These events should be spec compliant
         _ => {
             println!(
-                "{{  \"room_id\": {:?}, \n\
-                     \"RoomMemberEventContent\": [ {{ {} }} ], \n\
-                     \"RoomPowerLevelsEventContent\": [ {{ {} }} ],\n\
-                     \"RoomNameEventContent\": [ {{ {} }} ],\n\
+                "{{\"room_id\": {:?}, \
+                     \"RoomMemberEventContent\": [ {{ {} }} ], \
+                     \"RoomPowerLevelsEventContent\": [ {{ {} }} ], \
+                     \"RoomNameEventContent\": [ {{ {} }} ], \
                      \"RoomTopicEventContent\": [ {{ {} }} ] }}",
                 room_id,
                 serde_json::to_string(&member_evs).unwrap_or_else(|_| r#""""#.to_string()),
