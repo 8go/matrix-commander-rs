@@ -3654,7 +3654,7 @@ async fn main() -> Result<(), Error> {
         replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
         convert_to_full_room_ids(&client, &mut ap.joined_members, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        convert_to_full_user_ids(&mut ap.room_dm_create, hostname);
+        ap.room_dm_create = convert_to_full_user_ids(ap.room_dm_create, hostname);
         ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
         convert_to_full_alias_ids(&mut ap.alias, hostname);
