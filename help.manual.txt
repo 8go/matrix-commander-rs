@@ -53,20 +53,27 @@ Options:
           default log level set with environment variable 'RUST_LOG' will be
           used. If used, log level will be set to 'DEBUG' and debugging
           information will be printed. '-d' is a shortcut for '--log-level
-          DEBUG'. See also '--log-level'. '-d' takes precedence over
-          '--log-level'. Additionally, have a look also at the option
-          '--verbose'
+          DEBUG'. If used once as in '-d' it will set and/or overwrite
+          --log-level to '--log-level debug'. If used twice as in '-d -d' it
+          will set and/or overwrite --log-level to '--log-level debug debug'.
+          And third or futher occurance of '-d' will be ignored. See also
+          '--log-level'. '-d' takes precedence over '--log-level'.
+          Additionally, have a look also at the option '--verbose'
 
-      --log-level <LOG_LEVEL>
+      --log-level <LOG_LEVEL>...
           Set the log level by overwriting the default log level. Details:: If
           not used, then the default log level set with environment variable
-          'RUST_LOG' will be used. See also '--debug' and '--verbose'. An
+          'RUST_LOG' will be used. If used with one value specified this value
+          is assigned to the log level of matrix-commander-rs. If used with two
+          values specified the first value is assigned to the log level of
+          matrix-commander-rs. The second value is asigned to the lower level
+          modules. More than two values should not be specified. --debug
+          overwrites -log-level. See also '--debug' and '--verbose'.
+          Alternatively you can use the RUST_LOG environment variable. An
           example use of RUST_LOG is to use neither --log-level nor --debug,
           and to set RUST_LOG="error,matrix_commander_rs=debug" which turns off
           debugging on all lower level modules and turns debugging on only for
           matrix-commander-rs
-          
-          [default: none]
 
           Possible values:
           - none:  None: not set, default

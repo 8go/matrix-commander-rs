@@ -1,0 +1,92 @@
+name: Rust-by-gh
+
+# only works on tags, if there is no tag it will not work
+# cannot start it manually
+
+on:
+  # fires when there is a git push with version tag
+  push:
+    # this would trigger twice, once for tag v, once for branch main
+    # branches: [ "main" ]
+    tags:
+      - "v*"
+  # pull_request:
+  #   branches: [ "main" ]
+  #   tags:
+  #     - "v*"
+  # workflow_dispatch: just for local testing of the Rust comiles, but it will never create a Github release 
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: nightly
+        
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      # Don't build if we dont have a version tag tag, cannot create release without a version tag anyways
+      # if: startsWith(github.ref, 'refs/tags/')
+    
+    - name: Build
+      run: |
+          echo "Rust says: "
+          rustc -vV
+          echo "uname says: $(uname -m)" 
+          CCARCH=x86_64-unknown-linux-gnu
+          cargo build --release
+          ls -l target target/*
+          find . -name "matrix*commander*"
+          mv ./target/*/matrix-commander-rs matrix-commander-rs.$CCARCH
+          ls -l ./matrix-commander-rs*
+          cargo clean
+          # now cross compile
+          sudo apt-get install podman
+          cargo install cross
+          CCARCH=aarch64-unknown-linux-gnu
+          cross build --target $CCARCH --release
+          ls -l target target/*
+          find . -name "matrix*commander*"
+          mv ./target/$CCARCH/*/matrix-commander-rs matrix-commander-rs.$CCARCH
+          ls -l ./matrix-commander-rs*
+          cargo clean
+          # now cross compile
+          CCARCH=armv7-linux-androideabi
+          cross build --target $CCARCH --release
+          ls -l target target/*
+          find . -name "matrix*commander*"
+          mv ./target/$CCARCH/*/matrix-commander-rs matrix-commander-rs.$CCARCH
+          ls -l ./matrix-commander-rs*
+          cargo clean
+          # cannot build for aarch64-apple-darwin
+          # [cross] warning: `cross` does not provide a Docker image for target aarch64-apple-darwin, specify a custom image in `Cross.toml`.
+          # cannot build for x86_64-apple-darwin
+          # [cross] warning: `cross` does not provide a Docker image for target x86_64-apple-darwin, specify a custom image in `Cross.toml`.
+          # cannot build for Windows
+          # [cross] warning: `cross` does not provide a Docker image for target x86_64-pc-windows-msvc, specify a custom image in `Cross.toml`.
+          
+
+    # - uses: actions/upload-artifact@v4
+    #   with:
+    #     name: plain-linux
+    #     path: |
+    #         ./matrix-commander-rs*
+    #     retention-days: 1
+
+    # https://github.com/softprops/action-gh-release
+    - name: Release
+      uses: "softprops/action-gh-release@v2"
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        token: "${{ secrets.GITHUB_TOKEN }}"
+        prerelease: false
+        generate_release_notes: true
+        files: |
+            ./matrix-commander-rs*

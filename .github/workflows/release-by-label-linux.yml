@@ -51,7 +51,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
-    container: ubuntu:18.04
+    container: ubuntu:24.04
     needs: tagname
     env:
       RELEASE_TAG_NAME: ${{ needs.tagname.outputs.tag_name }}
@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get -y update
-          apt-get -y install cmake pkg-config libfontconfig-dev libgtk-3-dev libssl-dev libolm-dev
+          apt-get -y install cmake pkg-config libfontconfig-dev libgtk-3-dev libssl-dev libolm-dev libc6 curl wget
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -92,12 +92,13 @@ jobs:
           cp ./target/release/matrix-commander-rs matrix-commander-rs/
           cp README.md matrix-commander-rs/
           cp LICENSE matrix-commander-rs/
-          cp help.txt matrix-commander-rs/
-          tar -zcvf ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz matrix-commander-rs
+          cp help.help.txt  help.manual.txt  help.usage.txt matrix-commander-rs/
+          tar -zcvf ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz matrix-commander-rs
           # tar -zcvf ./matrix-commander-rs_linux.tar.gz matrix-commander-rs
-          sha256sum ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
+          sha256sum ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz > ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
           echo "sha256 checksum: "
-          cat ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
+          # cat ./matrix-commander-rs_${TAG_NAME}_linux.tar.gz.sha256sum
+          cat ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
           ls
           ls -l
           echo ${TAG_NAME} > tag.txt
@@ -106,7 +107,7 @@ jobs:
         with:
           name: plain-linux
           path: |
-            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz
+            ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz 
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
           retention-days: 1
 
@@ -118,6 +119,7 @@ jobs:
         #          cat tag.txt
         #          echo $TAG_NAME
         uses: "softprops/action-gh-release@v2"
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
@@ -127,4 +129,4 @@ jobs:
             ./matrix-commander-rs_${{ env.RELEASE_TAG_NAME }}_linux.tar.gz.sha256sum
             README.md
             LICENSE
-            help.txt
+            help.help.txt  help.manual.txt  help.usage.txt 

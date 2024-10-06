@@ -46,6 +46,7 @@ use directories::ProjectDirs;
 use regex::Regex;
 use rpassword::read_password;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::env;
 use std::fmt::{self, Debug};
 use std::fs::{self, File};
@@ -103,6 +104,8 @@ const PKG_NAME: &str = "matrix-commander";
 const BIN_NAME_O: Option<&str> = option_env!("CARGO_BIN_NAME");
 /// fallback if static compile time value is None
 const BIN_NAME: &str = "matrix-commander-rs";
+/// fallback if static compile time value is None
+const BIN_NAME_UNDERSCORE: &str = "matrix_commander_rs";
 /// he repo name from Cargo.toml at compile time,
 /// e.g. string `https://github.com/8go/matrix-commander-rs/`
 const PKG_REPOSITORY_O: Option<&str> = option_env!("CARGO_PKG_REPOSITORY");
@@ -248,8 +251,8 @@ pub enum Error {
     #[error("Unknown CLI parameter")]
     UnknownCliParameter,
 
-    #[error("Unsupported CLI parameter")]
-    UnsupportedCliParameter,
+    #[error("Unsupported CLI parameter: {0}")]
+    UnsupportedCliParameter(&'static str),
 
     #[error("Missing Room")]
     MissingRoom,
@@ -618,7 +621,7 @@ impl LogLevel {
 }
 
 // No longer used, as ValueEnum from clap crate provides similar function.
-// /// Converting from String to Listen for --listen option
+// /// Converting from String to LogLevel for --log-level option
 // impl FromStr for LogLevel {
 //     type Err = ();
 //     fn from_str(src: &str) -> Result<LogLevel, ()> {
@@ -645,7 +648,7 @@ impl fmt::Display for LogLevel {
 
 /// Enumerator used for --output option
 #[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
-enum Output {
+pub enum Output {
     // None: only useful if one needs to know if option was used or not.
     // Sort of like an or instead of an Option<Sync>.
     // We do not need to know if user used the option or not,
@@ -775,6 +778,11 @@ pub struct Args {
     /// If used, log level will be set to 'DEBUG' and debugging information
     /// will be printed.
     /// '-d' is a shortcut for '--log-level DEBUG'.
+    /// If used once as in '-d' it will set and/or overwrite
+    /// --log-level to '--log-level debug'.
+    /// If used twice as in '-d -d' it will set and/or overwrite
+    /// --log-level to '--log-level debug debug'.
+    /// And third or futher occurance of '-d' will be ignored.
     /// See also '--log-level'. '-d' takes precedence over '--log-level'.
     /// Additionally, have a look also at the option '--verbose'.
     #[arg(short, long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
@@ -784,15 +792,23 @@ pub struct Args {
     /// Details::
     /// If not used, then the default
     /// log level set with environment variable 'RUST_LOG' will be used.
+    /// If used with one value specified this value is assigned to the
+    /// log level of matrix-commander-rs.
+    /// If used with two values specified the first value is assigned to the
+    /// log level of matrix-commander-rs. The second value is asigned to the
+    /// lower level modules.
+    /// More than two values should not be specified.
+    /// --debug overwrites -log-level.
     /// See also '--debug' and '--verbose'.
+    /// Alternatively you can use the RUST_LOG environment variable.
     /// An example use of RUST_LOG is to use neither --log-level nor --debug,
     /// and to set RUST_LOG="error,matrix_commander_rs=debug" which turns
     /// off debugging on all lower level modules and turns debugging on only
     /// for matrix-commander-rs.
     // Possible values are
     // '{trace}', '{debug}', '{info}', '{warn}', and '{error}'.
-    #[arg(long, value_enum, default_value_t = LogLevel::default(), ignore_case = true, )]
-    log_level: LogLevel,
+    #[arg(long, value_delimiter = ' ', num_args = 1..3, ignore_case = true, )]
+    log_level: Option<Vec<LogLevel>>,
 
     /// Set the verbosity level.
     /// Details::
@@ -1963,7 +1979,7 @@ impl Args {
             contribute: false,
             version: None,
             debug: 0u8,
-            log_level: LogLevel::None,
+            log_level: None,
             verbose: 0u8,
             plain: false,
             credentials: get_credentials_default_path(),
@@ -2048,15 +2064,6 @@ pub struct Credentials {
     room_id: String,
     refresh_token: Option<String>,
 }
-
-// credentials = Credentials::new(
-//     Url::from_file_path("/a").expect("url bad"), // homeserver: Url,
-//     user_id!(r"@a:a").to_owned(), // user_id: OwnedUserId,
-//     String::new().to_owned(), // access_token: String,
-//     device_id!("").to_owned(), // device_id: OwnedDeviceId,
-//     String::new(), // room_id: String,
-//     None, // refresh_token: Option<String>
-// ),
 
 impl AsRef<Credentials> for Credentials {
     fn as_ref(&self) -> &Self {
@@ -2439,30 +2446,41 @@ pub async fn readme() {
 }
 
 /// Prints the version information
-pub fn version() {
+pub fn version(output: Output) {
     let version = if stdout().is_terminal() {
         get_version().green()
     } else {
         get_version().normal()
     };
-    println!();
-    println!(
-        "  _|      _|      _|_|_|                     {}",
-        get_prog_without_ext()
-    );
-    print!("  _|_|  _|_|    _|             _~^~^~_       ");
-    println!("a rusty vision of a Matrix CLI client");
-    println!(
-        "  _|  _|  _|    _|         \\) /  o o  \\ (/   version {}",
-        version
-    );
-    println!(
-        "  _|      _|    _|           '_   -   _'     repo {}",
-        get_pkg_repository()
-    );
-    print!("  _|      _|      _|_|_|     / '-----' \\     ");
-    println!("please submit PRs to make the vision a reality");
-    println!();
+    match output {
+        Output::Text => {
+            println!();
+            println!(
+                "  _|      _|      _|_|_|                     {}",
+                get_prog_without_ext()
+            );
+            print!("  _|_|  _|_|    _|             _~^~^~_       ");
+            println!("a rusty vision of a Matrix CLI client");
+            println!(
+                "  _|  _|  _|    _|         \\) /  o o  \\ (/   version {}",
+                version
+            );
+            println!(
+                "  _|      _|    _|           '_   -   _'     repo {}",
+                get_pkg_repository()
+            );
+            print!("  _|      _|      _|_|_|     / '-----' \\     ");
+            println!("please submit PRs to make the vision a reality");
+            println!();
+        }
+        Output::JsonSpec => (),
+        _ => println!(
+            "{{\"program\": {:?}, \"version\": {:?}, \"repo\": {:?}}}",
+            get_prog_without_ext(),
+            get_version(),
+            get_pkg_repository()
+        ),
+    }
 }
 
 /// Prints the installed version and the latest crates.io-available version
@@ -2493,9 +2511,9 @@ pub fn version_check() {
             available, name, version
         ),
         Ok(None) => {
-            println!("{} You already have the latest version.", uptodate)
+            println!("{uptodate} You already have the latest version.")
         }
-        Err(ref e) => println!("{} Error reported: {:?}.", couldnotget, e),
+        Err(ref e) => println!("{couldnotget} Error reported: {e}."),
     };
 }
 
@@ -2518,31 +2536,25 @@ pub fn contribute() {
 fn get_homeserver(ap: &mut Args) {
     while ap.homeserver.is_none() {
         print!("Enter your Matrix homeserver (e.g. https://some.homeserver.org): ");
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty homeserver name is not allowed!");
-            }
-            // Todo: check format, e.g. starts with http, etc.
-            _ => {
-                ap.homeserver = Url::parse(input.trim()).ok();
-                if ap.homeserver.is_none() {
-                    error!(concat!(
-                        "The syntax is incorrect. homeserver must be a URL! ",
-                        "Start with 'http://' or 'https://'."
-                    ));
-                } else {
-                    debug!("homeserver is {:?}", ap.homeserver);
-                }
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty homeserver name is not allowed!");
+        } else if let Err(e) = Url::parse(trimmed_input) {
+            error!(
+                "Error: The syntax is incorrect. Homeserver must be a valid URL! \
+                Start with 'http://' or 'https://'. Details: {e}"
+            );
+        } else {
+            ap.homeserver = Some(Url::parse(trimmed_input).unwrap()); // Safe to unwrap since we validated it
+            debug!("homeserver is {}", ap.homeserver.as_ref().unwrap());
         }
     }
 }
@@ -2552,26 +2564,30 @@ fn get_homeserver(ap: &mut Args) {
 fn get_user_login(ap: &mut Args) {
     while ap.user_login.is_none() {
         print!("Enter your full Matrix username (e.g. @john:some.homeserver.org): ");
-        std::io::stdout()
-            .flush()
-            .expect("error; could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty user name is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.user_login = Some(input.trim().to_string());
-                debug!("user_login is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty username is not allowed!");
+        } else if !is_valid_username(trimmed_input) {
+            error!("Error: Invalid username format!");
+        } else {
+            ap.user_login = Some(trimmed_input.to_string());
+            debug!("user_login is {trimmed_input}");
         }
     }
+}
+
+// validation function for username format
+fn is_valid_username(username: &str) -> bool {
+    // Check if it starts with '@', contains ':', etc.
+    username.starts_with('@') && username.contains(':')
 }
 
 /// If necessary reads password for login and puts it into the Args.
@@ -2579,19 +2595,24 @@ fn get_user_login(ap: &mut Args) {
 fn get_password(ap: &mut Args) {
     while ap.password.is_none() {
         print!("Enter Matrix password for this user: ");
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-        let password = read_password().unwrap();
-        match password.trim() {
-            "" => {
-                error!("Empty password is not allowed!");
+        // Flush stdout to ensure the prompt is displayed
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
+        // Handle potential errors from read_password
+        match read_password() {
+            Ok(password) => {
+                let trimmed_password = password.trim();
+                if trimmed_password.is_empty() {
+                    error!("Error: Empty password is not allowed!");
+                } else {
+                    ap.password = Some(password);
+                    // Hide password from debug log files
+                    debug!("password is {}", "******");
+                }
             }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.password = Some(password);
-                // hide password from debug log files // password
-                debug!("password is {}", "******"); // password
+            Err(e) => {
+                error!("Error reading password: {e}");
             }
         }
     }
@@ -2602,30 +2623,24 @@ fn get_password(ap: &mut Args) {
 fn get_device(ap: &mut Args) {
     while ap.device.is_none() {
         print!(
-            concat!(
-                "Enter your desired name for the Matrix device ",
-                "that is going to be created for you (e.g. {}): "
-            ),
+            "Enter your desired name for the Matrix device that \
+            is going to be created for you (e.g. {}): ",
             get_prog_without_ext()
         );
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty device is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.device = Some(input.trim().to_string());
-                debug!("device is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty device name is not allowed!");
+        } else {
+            ap.device = Some(trimmed_input.to_string());
+            debug!("device is {trimmed_input}");
         }
     }
 }
@@ -2634,30 +2649,33 @@ fn get_device(ap: &mut Args) {
 /// If already set via --room_default option, then it does nothing.
 fn get_room_default(ap: &mut Args) {
     while ap.room_default.is_none() {
-        print!(concat!(
-            "Enter name of one of your Matrix rooms that you want to use as default room  ",
-            "(e.g. !someRoomId:some.homeserver.org): "
-        ));
-        std::io::stdout()
-            .flush()
-            .expect("error: could not flush stdout");
-
+        print!(
+            "Enter name of one of your Matrix rooms that you want to use as default room  \
+            (e.g. !someRoomId:some.homeserver.org): "
+        );
+        if let Err(e) = io::stdout().flush() {
+            warn!("Warning: Failed to flush stdout: {e}");
+        }
         let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("error: unable to read user input");
-
-        match input.trim() {
-            "" => {
-                error!("Empty name of default room is not allowed!");
-            }
-            // Todo: check format, e.g. starts with letter, has @, has :, etc.
-            _ => {
-                ap.room_default = Some(input.trim().to_string());
-                debug!("room_default is {}", input);
-            }
+        if io::stdin().read_line(&mut input).is_err() {
+            error!("Error: Unable to read user input");
+            continue; // Skip to the next iteration if reading input fails
+        }
+        let trimmed_input = input.trim();
+        if trimmed_input.is_empty() {
+            error!("Error: Empty name of default room is not allowed!");
+        } else if !is_valid_room_name(trimmed_input) {
+            error!("Error: Invalid room name format for '{trimmed_input}'! Room name must start with '!' and contain exactly one ':'.");
+        } else {
+            ap.room_default = Some(trimmed_input.to_string());
+            debug!("room_default is '{trimmed_input}'");
         }
     }
+}
+
+// Validation function for room name format
+fn is_valid_room_name(name: &str) -> bool {
+    name.starts_with('!') && name.matches(':').count() == 1
 }
 
 /// A room is either specified with --room or the default from credentials file is used
@@ -2755,7 +2773,7 @@ fn replace_minus_with_default_room(vecstr: &mut Vec<String>, default_room: &str)
 /// Handle the --login CLI argument
 pub(crate) async fn cli_login(ap: &mut Args) -> Result<(Client, Credentials), Error> {
     if ap.login.is_none() {
-        return Err(Error::UnsupportedCliParameter);
+        return Err(Error::UnsupportedCliParameter("--login cannot be empty"));
     }
     if credentials_exist(ap) {
         error!(concat!(
@@ -2773,7 +2791,9 @@ pub(crate) async fn cli_login(ap: &mut Args) -> Result<(Client, Credentials), Er
             ap.login,
             Login::Password
         );
-        return Err(Error::UnsupportedCliParameter);
+        return Err(Error::UnsupportedCliParameter(
+            "Used login option currently not supported. Use 'password' for the time being.",
+        ));
     }
     // login is Login::Password
     get_homeserver(ap);
@@ -2818,7 +2838,9 @@ pub(crate) async fn cli_bootstrap(client: &Client, ap: &mut Args) -> Result<(), 
 pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Verify chosen.");
     if ap.verify.is_none() {
-        return Err(Error::UnsupportedCliParameter);
+        return Err(Error::UnsupportedCliParameter(
+            "Argument --verify cannot be empty",
+        ));
     }
     if !ap.verify.is_manual_device()
         && !ap.verify.is_manual_user()
@@ -2834,7 +2856,9 @@ pub(crate) async fn cli_verify(client: &Client, ap: &Args) -> Result<(), Error> 
             Verify::Emoji,
             Verify::EmojiReq
         );
-        return Err(Error::UnsupportedCliParameter);
+        return Err(Error::UnsupportedCliParameter(
+            "Used --verify option is currently not supported",
+        ));
     }
     crate::verify(client, ap).await
 }
@@ -2871,9 +2895,7 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
             let mut line = String::new();
             if stdin().is_terminal() {
                 print!("Message: ");
-                std::io::stdout()
-                    .flush()
-                    .expect("error: could not flush stdout");
+                io::stdout().flush()?;
                 io::stdin().read_line(&mut line)?;
             } else {
                 io::stdin().read_to_string(&mut line)?;
@@ -3320,34 +3342,95 @@ pub(crate) async fn cli_logout(client: &Client, ap: &mut Args) -> Result<(), Err
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let mut ap = Args::parse();
+    let mut errcount = 0;
+    let mut result: Result<(), Error> = Ok(());
 
     // handle log level and debug options
     let env_org_rust_log = env::var("RUST_LOG").unwrap_or_default().to_uppercase();
     // println!("Original log_level option is {:?}", ap.log_level);
     // println!("Original RUST_LOG is {:?}", &env_org_rust_log);
+    match ap.debug.cmp(&1) {
+        Ordering::Equal => {
+            // -d overwrites --log-level
+            let llvec = vec![LogLevel::Debug];
+            ap.log_level = Some(llvec);
+        }
+        Ordering::Greater => {
+            // -d overwrites --log-level
+            let mut llvec = vec![LogLevel::Debug];
+            llvec.push(LogLevel::Debug);
+            ap.log_level = Some(llvec);
+        }
+        Ordering::Less => (),
+    }
+    match ap.log_level.clone() {
+        None => {
+            tracing_subscriber::fmt()
+                .with_writer(io::stderr)
+                .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
+                .init();
+            debug!("Neither --debug nor --log-level was used. Using environment vaiable RUST_LOG.");
+        }
+        Some(llvec) => {
+            if llvec.len() == 1 {
+                if llvec[0].is_none() {
+                    return Err(Error::UnsupportedCliParameter(
+                        "Value 'none' not allowed for --log-level argument",
+                    ));
+                }
+                // .with_env_filter("matrix_commander_rs=debug") // only set matrix_commander_rs
+                let mut rlogstr: String = BIN_NAME_UNDERSCORE.to_owned();
+                rlogstr.push('='); // add char
+                rlogstr.push_str(&llvec[0].to_string());
+                tracing_subscriber::fmt()
+                    .with_writer(io::stderr)
+                    .with_env_filter(rlogstr.clone()) // support the standard RUST_LOG env variable for default value
+                    .init();
+                debug!(
+                    "The --debug or --log-level was used once or with one value. \
+                    Specifying logging equivalent to RUST_LOG seting of '{}'.",
+                    rlogstr
+                );
+            } else {
+                if llvec[0].is_none() || llvec[1].is_none() {
+                    return Err(Error::UnsupportedCliParameter(
+                        "Value 'none' not allowed for --log-level argument",
+                    ));
+                }
+                // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-comander-rs
+                // debug info, and erors for all other modules
+                let mut rlogstr: String = llvec[1].to_string().to_owned();
+                rlogstr.push(','); // add char
+                rlogstr.push_str(BIN_NAME_UNDERSCORE);
+                rlogstr.push('=');
+                rlogstr.push_str(&llvec[0].to_string());
+                tracing_subscriber::fmt()
+                    .with_writer(io::stderr)
+                    .with_env_filter(rlogstr.clone())
+                    .init();
+                debug!(
+                    "The --debug or --log-level was used twice or with two values. \
+                    Specifying logging equivalent to RUST_LOG seting of '{}'.",
+                    rlogstr
+                );
+            }
+            if llvec.len() > 2 {
+                debug!("The --log-level option was incorrectly used more than twice. Ignoring third and further use.")
+            }
+        }
+    }
     if ap.debug > 0 {
-        // -d overwrites --log-level
-        ap.log_level = LogLevel::Debug
+        info!("The --debug option overwrote the --log-level option.")
     }
-    // .with_env_filter("matrix_commander_rs=debug") // Todo : add 2nd --log-level arg for lower-level modules
-    // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-comander-rs debug info, and erors for all other modules
-    if ap.log_level.is_none() {
-        tracing_subscriber::fmt()
-            .with_writer(io::stderr)
-            .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
-            .init();
-    } else {
-        tracing_subscriber::fmt()
-            .with_writer(io::stderr)
-            .with_max_level(Level::from_str(&ap.log_level.to_string()).unwrap_or(Level::ERROR))
-            .init();
+    if ap.debug > 2 {
+        debug!("The --debug option was incorrectly used more than twice. Ignoring third and further use.")
     }
-    debug!("Original RUST_LOG env var is {}", env_org_rust_log);
+    debug!("Original RUST_LOG env var is '{}'", env_org_rust_log);
     debug!(
-        "Final RUST_LOG env var is {}",
+        "Final RUST_LOG env var is '{}'",
         env::var("RUST_LOG").unwrap_or_default().to_uppercase()
     );
-    debug!("Final log_level option is {:?}", ap.log_level);
+    debug!("Final log-level option is {:?}", ap.log_level);
     if enabled!(Level::TRACE) {
         debug!(
             "Log level of module {} is set to TRACE.",
@@ -3438,8 +3521,8 @@ async fn main() -> Result<(), Error> {
     debug!("get-masterkey option is {:?}", ap.get_masterkey);
 
     match ap.version {
-        None => (),                     // do nothing
-        Some(None) => crate::version(), // print version
+        None => (),                              // do nothing
+        Some(None) => crate::version(ap.output), // print version
         Some(Some(Version::Check)) => crate::version_check(),
     }
     if ap.contribute {
@@ -3563,7 +3646,11 @@ async fn main() -> Result<(), Error> {
     if ap.whoami {
         match crate::cli_whoami(&ap) {
             Ok(ref _n) => debug!("crate::whoami successful"),
-            Err(ref e) => error!("Error: crate::whoami reported {}", e),
+            Err(e) => {
+                error!("Error: crate::whoami reported {}", e);
+                errcount += 1;
+                result = Err(e);
+            }
         };
     };
 
@@ -3577,108 +3664,100 @@ async fn main() -> Result<(), Error> {
     if !ap.media_mxc_to_http.is_empty() {
         match crate::cli_media_mxc_to_http(&ap).await {
             Ok(ref _n) => debug!("crate::media_mxc_to_http successful"),
-            Err(ref e) => error!("Error: crate::media_mxc_to_http reported {}", e),
+            Err(e) => {
+                error!("Error: crate::media_mxc_to_http reported {}", e);
+                errcount += 1;
+                result = Err(e);
+            }
         };
     };
 
+    // match clientres() {
+    //     Ok(ref _n) => {
+    //     }
+    //     Err(ref e) => {
+    //     }
+    // };
+
     match clientres {
-        Ok(ref _n) => {
+        Ok(client) => {
             debug!("A valid client connection has been established with server.");
-        }
-        Err(ref e) => {
-            info!(
-                "Most operations will be skipped because you don't have a valid client connection."
-            );
-            error!("Error: {}", e);
-            // don't quit yet, don't return Err(Error::LoginFailed);
-            // whoami still works without server connection
-            // whoami already called above
-            // logout can partially be done without server connection
-            if !ap.logout.is_none() {
-                match logout_local(&ap) {
-                    Ok(ref _n) => debug!("crate::logout_local successful"),
-                    Err(ref e) => error!("Error: crate::logout_local reported {}", e),
-                };
-            };
-        }
-    };
+            // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
+            let default_room =
+                get_room_default_from_credentials(&client, ap.creds.as_ref().unwrap()).await;
+            // Todo: port number is not handled in hostrname, could be matrix.server.org:90
+            let creds = ap.creds.clone().unwrap();
+            let hostname = creds.homeserver.host_str().unwrap(); // matrix.server.org
+            set_rooms(&mut ap, &default_room); // if no rooms in --room, set rooms to default room from credentials file
+            set_users(&mut ap); // if no users in --user, set users to default user from credentials file
 
-    if let Ok(client) = clientres {
-        // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
-        let default_room =
-            get_room_default_from_credentials(&client, ap.creds.as_ref().unwrap()).await;
-        // Todo: port number is not handled in hostrname, could be matrix.server.org:90
-        let creds = ap.creds.clone().unwrap();
-        let hostname = creds.homeserver.host_str().unwrap(); // matrix.server.org
-        set_rooms(&mut ap, &default_room); // if no rooms in --room, set rooms to default room from credentials file
-        set_users(&mut ap); // if no users in --user, set users to default user from credentials file
+            replace_minus_with_default_room(&mut ap.room_leave, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_leave, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_leave, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_leave, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_forget, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_forget, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_forget, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_forget, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            convert_to_full_room_aliases(&mut ap.room_resolve_alias, hostname); // convert short aliases to full aliases
 
-        convert_to_full_room_aliases(&mut ap.room_resolve_alias, hostname); // convert short aliases to full aliases
+            replace_minus_with_default_room(&mut ap.room_enable_encryption, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_enable_encryption, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_enable_encryption, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_enable_encryption, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.get_room_info, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.get_room_info, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.get_room_info, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.get_room_info, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_invite, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_invite, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_invite, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_invite, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_join, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_join, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_join, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_join, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_ban, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_ban, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_ban, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_ban, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_unban, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_unban, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_unban, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_unban, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_kick, &default_room); // convert '-' to default room
+            convert_to_full_room_ids(&client, &mut ap.room_kick, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_kick, &default_room); // convert '-' to default room
-        convert_to_full_room_ids(&client, &mut ap.room_kick, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_get_visibility, &default_room); // convert '-' to default room
+            replace_star_with_rooms(&client, &mut ap.room_get_visibility); // convert '*' to full list of rooms
+            convert_to_full_room_ids(&client, &mut ap.room_get_visibility, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_get_visibility, &default_room); // convert '-' to default room
-        replace_star_with_rooms(&client, &mut ap.room_get_visibility); // convert '*' to full list of rooms
-        convert_to_full_room_ids(&client, &mut ap.room_get_visibility, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.room_get_state, &default_room); // convert '-' to default room
+            replace_star_with_rooms(&client, &mut ap.room_get_state); // convert '*' to full list of rooms
+            convert_to_full_room_ids(&client, &mut ap.room_get_state, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.room_get_state, &default_room); // convert '-' to default room
-        replace_star_with_rooms(&client, &mut ap.room_get_state); // convert '*' to full list of rooms
-        convert_to_full_room_ids(&client, &mut ap.room_get_state, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            replace_minus_with_default_room(&mut ap.joined_members, &default_room); // convert '-' to default room
+            replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
+            convert_to_full_room_ids(&client, &mut ap.joined_members, hostname).await; // convert short ids, short aliases and aliases to full room ids
 
-        replace_minus_with_default_room(&mut ap.joined_members, &default_room); // convert '-' to default room
-        replace_star_with_rooms(&client, &mut ap.joined_members); // convert '*' to full list of rooms
-        convert_to_full_room_ids(&client, &mut ap.joined_members, hostname).await; // convert short ids, short aliases and aliases to full room ids
+            convert_to_full_user_ids(&mut ap.room_dm_create, hostname);
+            ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
-        ap.room_dm_create = convert_to_full_user_ids(ap.room_dm_create, hostname);
-        ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
-        convert_to_full_alias_ids(&mut ap.alias, hostname);
-        ap.alias.retain(|x| !x.trim().is_empty());
+            ap.room_dm_create = convert_to_full_user_ids(ap.room_dm_create, hostname);
+          ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
-        convert_to_full_mxc_uris(&mut ap.media_download, hostname).await; // convert short mxcs to full mxc uris
+            convert_to_full_mxc_uris(&mut ap.media_download, hostname).await; // convert short mxcs to full mxc uris
 
-        convert_to_full_mxc_uris(&mut ap.media_delete, hostname).await; // convert short mxcs to full mxc uris
+            convert_to_full_mxc_uris(&mut ap.media_delete, hostname).await; // convert short mxcs to full mxc uris
 
-        if ap.tail > 0 {
-            // overwrite --listen if user has chosen both
-            if !ap.listen.is_never() && !ap.listen.is_tail() {
-                warn!(
-                    "Two contradicting listening methods were specified. \
+            if ap.tail > 0 {
+                // overwrite --listen if user has chosen both
+                if !ap.listen.is_never() && !ap.listen.is_tail() {
+                    warn!(
+                        "Two contradicting listening methods were specified. \
                     Overwritten with --tail. Will use '--listen tail'. {:?} {}",
-                    ap.listen, ap.tail
-                )
+                        ap.listen, ap.tail
+                    )
+                }
+                ap.listen = Listen::Tail
             }
-            ap.listen = Listen::Tail
-        }
 
-        // remove in version 0.5 : todo
-        warn!(
-            "Versions 0.4+ are incompatible with previous versions v0.3-. \
+            // remove in version 0.5 : todo
+            warn!(
+                "Versions 0.4+ are incompatible with previous versions v0.3-. \
             The default location of the store has changed. \
             The directory name of the default store used to be 'sledstore'. \
             Now it is just 'store'. The program attempts to rename \
@@ -3693,324 +3772,522 @@ async fn main() -> Result<(), Error> {
             text output is different than in previous version. If you are parsing \
             the output you should do careful testing to adapt to the changed \
             output."
-        );
-
-        // top-priority actions
-
-        if ap.bootstrap {
-            match crate::cli_bootstrap(&client, &mut ap).await {
-                Ok(ref _n) => debug!("crate::bootstrap successful"),
-                Err(ref e) => error!("Error: crate::bootstrap reported {}", e),
-            };
-        };
-
-        if !ap.verify.is_none() {
-            match crate::cli_verify(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::verify successful"),
-                Err(ref e) => error!("Error: crate::verify reported {}", e),
-            };
-        };
-
-        // get actions
-
-        if ap.devices {
-            match crate::cli_devices(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::devices successful"),
-                Err(ref e) => error!("Error: crate::devices reported {}", e),
-            };
-        };
-
-        if !ap.get_room_info.is_empty() {
-            match crate::cli_get_room_info(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_room_info successful"),
-                Err(ref e) => error!("Error: crate::get_room_info reported {}", e),
-            };
-        };
-
-        if ap.rooms {
-            match crate::cli_rooms(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::rooms successful"),
-                Err(ref e) => error!("Error: crate::rooms reported {}", e),
-            };
-        };
-
-        if ap.invited_rooms {
-            match crate::cli_invited_rooms(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::invited_rooms successful"),
-                Err(ref e) => error!("Error: crate::invited_rooms reported {}", e),
-            };
-        };
-
-        if ap.joined_rooms {
-            match crate::cli_joined_rooms(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::joined_rooms successful"),
-                Err(ref e) => error!("Error: crate::joined_rooms reported {}", e),
-            };
-        };
-
-        if ap.left_rooms {
-            match crate::cli_left_rooms(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::left_rooms successful"),
-                Err(ref e) => error!("Error: crate::left_rooms reported {}", e),
-            };
-        };
-
-        if !ap.room_get_visibility.is_empty() {
-            match crate::cli_room_get_visibility(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_get_visibility successful"),
-                Err(ref e) => error!("Error: crate::room_get_visibility reported {}", e),
-            };
-        };
-
-        if !ap.room_get_state.is_empty() {
-            match crate::cli_room_get_state(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_get_state successful"),
-                Err(ref e) => error!("Error: crate::room_get_state reported {}", e),
-            };
-        };
-
-        if !ap.joined_members.is_empty() {
-            match crate::cli_joined_members(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::joined_members successful"),
-                Err(ref e) => error!("Error: crate::joined_members reported {}", e),
-            };
-        };
-
-        if !ap.room_resolve_alias.is_empty() {
-            match crate::cli_room_resolve_alias(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_resolve_alias successful"),
-                Err(ref e) => error!("Error: crate::room_resolve_alias reported {}", e),
-            };
-        };
-
-        if ap.get_avatar.is_some() {
-            match crate::cli_get_avatar(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_avatar successful"),
-                Err(ref e) => error!("Error: crate::get_avatar reported {}", e),
-            };
-        };
-
-        if ap.get_avatar_url {
-            match crate::cli_get_avatar_url(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_avatar_url successful"),
-                Err(ref e) => error!("Error: crate::get_avatar_url reported {}", e),
-            };
-        };
-
-        if ap.get_display_name {
-            match crate::cli_get_display_name(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_display_name successful"),
-                Err(ref e) => error!("Error: crate::get_display_name reported {}", e),
-            };
-        };
-
-        if ap.get_profile {
-            match crate::cli_get_profile(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_profile successful"),
-                Err(ref e) => error!("Error: crate::get_profile reported {}", e),
-            };
-        };
-
-        if ap.get_masterkey {
-            match crate::cli_get_masterkey(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::get_masterkey successful"),
-                Err(ref e) => error!("Error: crate::get_masterkey reported {}", e),
-            };
-        };
-
-        if !ap.media_download.is_empty() {
-            match crate::cli_media_download(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::media_download successful"),
-                Err(ref e) => error!("Error: crate::media_download reported {}", e),
-            };
-        };
-
-        // set actions
-
-        if !ap.room_create.is_empty() {
-            match crate::cli_room_create(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_create successful"),
-                Err(ref e) => error!("Error: crate::room_create reported {}", e),
-            };
-        };
-
-        if !ap.room_dm_create.is_empty() {
-            match crate::cli_room_dm_create(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_dm_create successful"),
-                Err(ref e) => error!("Error: crate::room_dm_create reported {}", e),
-            };
-        };
-
-        if !ap.room_leave.is_empty() {
-            error!(
-                "There is a bug in the matrix-sdk library and hence this is not working \
-                properly at the moment. It will start working once matrix-sdk v0.7 is released."
             );
-            match crate::cli_room_leave(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_leave successful"),
-                Err(ref e) => error!("Error: crate::room_leave reported {}", e),
-            };
-        };
 
-        if !ap.room_forget.is_empty() {
-            error!(
-                "There is a bug in the matrix-sdk library and hence this is not working \
+            // top-priority actions
+
+            if ap.bootstrap {
+                match crate::cli_bootstrap(&client, &mut ap).await {
+                    Ok(ref _n) => debug!("crate::bootstrap successful"),
+                    Err(e) => {
+                        error!("Error: crate::bootstrap reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.verify.is_none() {
+                match crate::cli_verify(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::verify successful"),
+                    Err(e) => {
+                        error!("Error: crate::verify reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // get actions
+
+            if ap.devices {
+                match crate::cli_devices(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::devices successful"),
+                    Err(e) => {
+                        error!("Error: crate::devices reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.get_room_info.is_empty() {
+                match crate::cli_get_room_info(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_room_info successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_room_info reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.rooms {
+                match crate::cli_rooms(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::rooms successful"),
+                    Err(e) => {
+                        error!("Error: crate::rooms reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.invited_rooms {
+                match crate::cli_invited_rooms(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::invited_rooms successful"),
+                    Err(e) => {
+                        error!("Error: crate::invited_rooms reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.joined_rooms {
+                match crate::cli_joined_rooms(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::joined_rooms successful"),
+                    Err(e) => {
+                        error!("Error: crate::joined_rooms reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.left_rooms {
+                match crate::cli_left_rooms(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::left_rooms successful"),
+                    Err(e) => {
+                        error!("Error: crate::left_rooms reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_get_visibility.is_empty() {
+                match crate::cli_room_get_visibility(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_get_visibility successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_get_visibility reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_get_state.is_empty() {
+                match crate::cli_room_get_state(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_get_state successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_get_state reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.joined_members.is_empty() {
+                match crate::cli_joined_members(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::joined_members successful"),
+                    Err(e) => {
+                        error!("Error: crate::joined_members reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_resolve_alias.is_empty() {
+                match crate::cli_room_resolve_alias(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_resolve_alias successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_resolve_alias reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.get_avatar.is_some() {
+                match crate::cli_get_avatar(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_avatar successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_avatar reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.get_avatar_url {
+                match crate::cli_get_avatar_url(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_avatar_url successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_avatar_url reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.get_display_name {
+                match crate::cli_get_display_name(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_display_name successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_display_name reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.get_profile {
+                match crate::cli_get_profile(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_profile successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_profile reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.get_masterkey {
+                match crate::cli_get_masterkey(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::get_masterkey successful"),
+                    Err(e) => {
+                        error!("Error: crate::get_masterkey reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.media_download.is_empty() {
+                match crate::cli_media_download(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::media_download successful"),
+                    Err(e) => {
+                        error!("Error: crate::media_download reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // set actions
+
+            if !ap.room_create.is_empty() {
+                match crate::cli_room_create(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_create successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_create reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_dm_create.is_empty() {
+                match crate::cli_room_dm_create(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_dm_create successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_dm_create reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_leave.is_empty() {
+                error!(
+                    "There is a bug in the matrix-sdk library and hence this is not working \
                 properly at the moment. It will start working once matrix-sdk v0.7 is released."
+                );
+                match crate::cli_room_leave(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_leave successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_leave reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_forget.is_empty() {
+                error!(
+                    "There is a bug in the matrix-sdk library and hence this is not working \
+                properly at the moment. It might start working once matrix-sdk v0.7 is released."
+                );
+                match crate::cli_room_forget(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_forget successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_forget reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_invite.is_empty() {
+                match crate::cli_room_invite(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_invite successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_invite reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_join.is_empty() {
+                match crate::cli_room_join(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_join successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_join reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_ban.is_empty() {
+                match crate::cli_room_ban(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_ban successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_ban reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_unban.is_empty() {
+                match crate::cli_room_unban(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_unban successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_unban reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_kick.is_empty() {
+                match crate::cli_room_kick(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_kick successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_kick reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.delete_device.is_empty() {
+                match crate::cli_delete_device(&client, &mut ap).await {
+                    Ok(ref _n) => debug!("crate::delete_device successful"),
+                    Err(e) => {
+                        error!("Error: crate::delete_device reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.set_avatar.is_some() {
+                match crate::cli_set_avatar(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::set_avatar successful"),
+                    Err(e) => {
+                        error!("Error: crate::set_avatar reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.set_avatar_url.is_some() {
+                match crate::cli_set_avatar_url(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::set_avatar_url successful"),
+                    Err(e) => {
+                        error!("Error: crate::set_avatar_url reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.unset_avatar_url {
+                match crate::cli_unset_avatar_url(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::set_avatar_url successful"),
+                    Err(e) => {
+                        error!("Error: crate::set_avatar_url reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.set_display_name.is_some() {
+                match crate::cli_set_display_name(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::set_display_name successful"),
+                    Err(e) => {
+                        error!("Error: crate::set_display_name reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.room_enable_encryption.is_empty() {
+                match crate::cli_room_enable_encryption(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::room_enable_encryption successful"),
+                    Err(e) => {
+                        error!("Error: crate::room_enable_encryption reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.media_upload.is_empty() {
+                match crate::cli_media_upload(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::media_upload successful"),
+                    Err(e) => {
+                        error!("Error: crate::media_upload reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.media_delete.is_empty() {
+                match crate::cli_media_delete(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::media_delete successful"),
+                    Err(e) => {
+                        error!("Error: crate::media_delete reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // send text message(s)
+            if !ap.message.is_empty() {
+                match crate::cli_message(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::message successful"),
+                    Err(e) => {
+                        error!("Error: crate::message reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // send file(s)
+            if !ap.file.is_empty() {
+                match crate::cli_file(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::file successful"),
+                    Err(e) => {
+                        error!("Error: crate::file reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // listen once
+            if ap.listen.is_once() {
+                match crate::cli_listen_once(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::listen_once successful"),
+                    Err(e) => {
+                        error!("Error: crate::listen_once reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // listen forever
+            if ap.listen.is_forever() {
+                match crate::cli_listen_forever(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::listen_forever successful"),
+                    Err(e) => {
+                        error!("Error: crate::listen_forever reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // listen tail
+            if ap.listen.is_tail() {
+                match crate::cli_listen_tail(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::listen_tail successful"),
+                    Err(e) => {
+                        error!("Error: crate::listen_tail reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            // listen all
+            if ap.listen.is_all() {
+                match crate::cli_listen_all(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::listen_all successful"),
+                    Err(e) => {
+                        error!("Error: crate::listen_all reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if !ap.logout.is_none() {
+                match crate::cli_logout(&client, &mut ap).await {
+                    Ok(ref _n) => debug!("crate::logout successful"),
+                    Err(e) => {
+                        error!("Error: crate::logout reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            }
+        } // Ok(client) =>
+        Err(e) => {
+            info!(
+                "Most operations will be skipped because you don't have a valid client connection."
             );
-            match crate::cli_room_forget(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_forget successful"),
-                Err(ref e) => error!("Error: crate::room_forget reported {}", e),
+            error!("Error: {}", e);
+            errcount += 1;
+            result = Err(e);
+            // result = Err(Error::InvalidClientConnection);
+            // don't quit yet, don't return Err(Error::LoginFailed);
+            // whoami still works without server connection
+            // whoami already called above
+            // logout can partially be done without server connection
+            if !ap.logout.is_none() {
+                match logout_local(&ap) {
+                    Ok(ref _n) => debug!("crate::logout_local successful"),
+                    Err(e) => {
+                        error!("Error: crate::logout_local reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
             };
-        };
-
-        if !ap.room_invite.is_empty() {
-            match crate::cli_room_invite(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_invite successful"),
-                Err(ref e) => error!("Error: crate::room_invite reported {}", e),
-            };
-        };
-
-        if !ap.room_join.is_empty() {
-            match crate::cli_room_join(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_join successful"),
-                Err(ref e) => error!("Error: crate::room_join reported {}", e),
-            };
-        };
-
-        if !ap.room_ban.is_empty() {
-            match crate::cli_room_ban(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_ban successful"),
-                Err(ref e) => error!("Error: crate::room_ban reported {}", e),
-            };
-        };
-
-        if !ap.room_unban.is_empty() {
-            match crate::cli_room_unban(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_unban successful"),
-                Err(ref e) => error!("Error: crate::room_unban reported {}", e),
-            };
-        };
-
-        if !ap.room_kick.is_empty() {
-            match crate::cli_room_kick(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_kick successful"),
-                Err(ref e) => error!("Error: crate::room_kick reported {}", e),
-            };
-        };
-
-        if !ap.delete_device.is_empty() {
-            match crate::cli_delete_device(&client, &mut ap).await {
-                Ok(ref _n) => debug!("crate::delete_device successful"),
-                Err(ref e) => error!("Error: crate::delete_device reported {}", e),
-            };
-        };
-
-        if ap.set_avatar.is_some() {
-            match crate::cli_set_avatar(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::set_avatar successful"),
-                Err(ref e) => error!("Error: crate::set_avatar reported {}", e),
-            };
-        };
-
-        if ap.set_avatar_url.is_some() {
-            match crate::cli_set_avatar_url(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::set_avatar_url successful"),
-                Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
-            };
-        };
-
-        if ap.unset_avatar_url {
-            match crate::cli_unset_avatar_url(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::set_avatar_url successful"),
-                Err(ref e) => error!("Error: crate::set_avatar_url reported {}", e),
-            };
-        };
-
-        if ap.set_display_name.is_some() {
-            match crate::cli_set_display_name(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::set_display_name successful"),
-                Err(ref e) => error!("Error: crate::set_display_name reported {}", e),
-            };
-        };
-
-        if !ap.room_enable_encryption.is_empty() {
-            match crate::cli_room_enable_encryption(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::room_enable_encryption successful"),
-                Err(ref e) => error!("Error: crate::room_enable_encryption reported {}", e),
-            };
-        };
-
-        if !ap.media_upload.is_empty() {
-            match crate::cli_media_upload(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::media_upload successful"),
-                Err(ref e) => error!("Error: crate::media_upload reported {}", e),
-            };
-        };
-
-        if !ap.media_delete.is_empty() {
-            match crate::cli_media_delete(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::media_delete successful"),
-                Err(ref e) => error!("Error: crate::media_delete reported {}", e),
-            };
-        };
-
-        // send text message(s)
-        if !ap.message.is_empty() {
-            match crate::cli_message(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::message successful"),
-                Err(ref e) => error!("Error: crate::message reported {}", e),
-            };
-        };
-
-        // send file(s)
-        if !ap.file.is_empty() {
-            match crate::cli_file(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::file successful"),
-                Err(ref e) => error!("Error: crate::file reported {}", e),
-            };
-        };
-
-        // listen once
-        if ap.listen.is_once() {
-            match crate::cli_listen_once(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::listen_once successful"),
-                Err(ref e) => error!("Error: crate::listen_once reported {}", e),
-            };
-        };
-
-        // listen forever
-        if ap.listen.is_forever() {
-            match crate::cli_listen_forever(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::listen_forever successful"),
-                Err(ref e) => error!("Error: crate::listen_forever reported {}", e),
-            };
-        };
-
-        // listen tail
-        if ap.listen.is_tail() {
-            match crate::cli_listen_tail(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::listen_tail successful"),
-                Err(ref e) => error!("Error: crate::listen_tail reported {}", e),
-            };
-        };
-
-        // listen all
-        if ap.listen.is_all() {
-            match crate::cli_listen_all(&client, &ap).await {
-                Ok(ref _n) => debug!("crate::listen_all successful"),
-                Err(ref e) => error!("Error: crate::listen_all reported {}", e),
-            };
-        };
-
-        if !ap.logout.is_none() {
-            match crate::cli_logout(&client, &mut ap).await {
-                Ok(ref _n) => debug!("crate::logout successful"),
-                Err(ref e) => error!("Error: crate::logout reported {}", e),
-            };
-        };
+        } // Err(e) =>
+    } // match clientres
+    let plural = if errcount == 1 { "" } else { "s" };
+    if errcount > 0 {
+        error!("Encountered {} error{}.", errcount, plural);
+    } else {
+        debug!("Encountered {} error{}.", errcount, plural);
     }
     debug!("Good bye");
-    Ok(())
+    result
 }
 
 /// Future test cases will be put here
@@ -4019,9 +4296,43 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
+    // for testing async functions
+    // see: https://blog.x5ff.xyz/blog/async-tests-tokio-rust/
+    macro_rules! aw {
+        ($e:expr) => {
+            tokio_test::block_on($e)
+        };
+    }
+
+    #[test]
+    fn test_usage() {
+        assert_eq!(usage(), ());
+    }
+
+    #[test]
+    fn test_help() {
+        assert_eq!(help(), ());
+    }
+
+    #[test]
+    fn test_manual() {
+        assert_eq!(manual(), ());
+    }
+
+    #[test]
+    fn test_readme() {
+        assert_eq!(aw!(readme()), ());
+    }
+
     #[test]
     fn test_version() {
-        assert_eq!(version(), ());
+        assert_eq!(version(Output::Text), ());
+        assert_eq!(version(Output::Json), ());
+    }
+
+    #[test]
+    fn test_version_check() {
+        assert_eq!(version_check(), ());
     }
 
     #[test]

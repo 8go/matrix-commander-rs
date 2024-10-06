@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.8.0"
+version = "0.9.7"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -36,7 +36,14 @@ matrix-sdk = { version = "0.7", features = [
 ] }
 mime = "0.3"
 mime_guess = "2.0"
-regex = "1.10"
+#
+# create openssl dependency for cross compilation.
+# this removes dependencies on architecture specific openssl files.
+# see: https://stackoverflow.com/questions/54775076/how-to-cross-compile-a-rust-project-with-openssl
+# see: https://github.com/cross-rs/cross/issues/229
+# see: https://stackoverflow.com/questions/68871193/pkg-config-error-during-rust-cross-compilation
+openssl = { version = '0.10', features = ["vendored"] }
+regex = "1.11"
 reqwest = "0.12"
 rpassword = "7.3"
 serde_json = "1.0"
@@ -53,10 +60,13 @@ url = { version = "2.5", features = ["serde"] }
 
 
 [dev-dependencies]
+# "matrix-commander-rs" will be the Rust program
+# to perform tests on async functions
+tokio-test = "0.4"
+
 # this is to distinguish it from "matrix-commander" which is the Python program
 # For people that have both Python and Rust installed:
 # "matrix-commander" will remain the Python program
-# "matrix-commander-rs" will be the Rust program
 [[bin]]
 name = "matrix-commander-rs"
 path = "src/main.rs"

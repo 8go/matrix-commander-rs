@@ -6,8 +6,8 @@
 //! Module that bundles everything together do to emoji verification for Matrix.
 //! It implements the emoji-verification protocol.
 
-use std::io::Write;
-use tracing::{debug, error, info};
+use std::io::{self, Write};
+use tracing::{debug, error, info, warn};
 
 use futures_util::StreamExt;
 
@@ -45,15 +45,14 @@ use crate::get_prog_without_ext;
 async fn wait_for_confirmation(sas: SasVerification, emoji: [Emoji; 7]) {
     println!("\nDo the emojis match: \n{}", format_emojis(emoji));
     print!("Confirm with `yes` or cancel with `no`: ");
-    std::io::stdout()
-        .flush()
-        .expect("We should be able to flush stdout");
-
+    if let Err(e) = io::stdout().flush() {
+        warn!("Warning: Failed to flush stdout: {e}");
+    }
     let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("error: unable to read user input");
-
+    if io::stdin().read_line(&mut input).is_err() {
+        error!("Error: Unable to read user input. Cancelling.");
+        input = "no".to_string(); // cancel
+    }
     match input.trim().to_lowercase().as_ref() {
         "yes" | "true" | "ok" => sas.confirm().await.unwrap(),
         _ => sas.cancel().await.unwrap(),
@@ -118,7 +117,7 @@ async fn sas_verification_handler(client: Client, sas: SasVerification) {
                 tokio::spawn(wait_for_confirmation(
                     sas.clone(),
                     emojis
-                        .expect("We only support verifications using emojis")
+                        .expect("Error: We only support verifications using emojis")
                         .emojis,
                 ));
             }
@@ -154,7 +153,7 @@ async fn request_verification_handler(client: Client, request: VerificationReque
     request
         .accept()
         .await
-        .expect("Can't accept verification request");
+        .expect("Error: Can't accept verification request");
 
     let mut stream = request.changes();
 
@@ -201,7 +200,7 @@ pub async fn sync_wait_for_verification_request(client: &Client) -> matrix_sdk::
                 .encryption()
                 .get_verification_request(&ev.sender, &ev.content.transaction_id)
                 .await
-                .expect("Request object wasn't created");
+                .expect("Error: Request object wasn't created");
 
             tokio::spawn(request_verification_handler(client, request));
 
@@ -217,7 +216,7 @@ pub async fn sync_wait_for_verification_request(client: &Client) -> matrix_sdk::
                     .encryption()
                     .get_verification_request(&ev.sender, &ev.event_id)
                     .await
-                    .expect("Request object wasn't created");
+                    .expect("Error: Request object wasn't created");
 
                 tokio::spawn(request_verification_handler(client, request));
 
@@ -357,7 +356,7 @@ pub async fn sync_request_verification(
                 .encryption()
                 .get_verification_request(&ev.sender, &ev.content.transaction_id)
                 .await
-                .expect("Request object wasn't created");
+                .expect("Error: Request object wasn't created");
 
             tokio::spawn(request_verification_handler(client, request));
             debug!("ToDeviceKeyVerificationRequestEvent: leaving");
@@ -372,7 +371,7 @@ pub async fn sync_request_verification(
                     .encryption()
                     .get_verification_request(&ev.sender, &ev.event_id)
                     .await
-                    .expect("Request object wasn't created");
+                    .expect("Error: Request object wasn't created");
 
                 tokio::spawn(request_verification_handler(client, request));
             }

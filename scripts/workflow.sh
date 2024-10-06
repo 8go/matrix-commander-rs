@@ -2,11 +2,11 @@
 
 echo "Welcome!"
 echo "The script outlines the rough workflow"
-echo ""
+echo
 echo "You have written some code? Let's publish it."
 
 # https://askubuntu.com/questions/1705/how-can-i-create-a-select-menu-in-a-shell-script
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="rustup self update   # update rustup"
 OPT2="rustup update stable # update rust"
 OPT3="cargo upgrade        # update dependency versions in Cargo.toml"
@@ -15,87 +15,88 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" )
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ" | "quit")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ" | "quit")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="git pull # get the latest from Github"
 OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        break
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ" | "quit")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		break
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ" | "quit")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
-OPT1="cargo test         # run this testcase"
-OPT2="tests/test-send.sh # run this testcase"
-OPT3="tests/test-send.sh # run this testcase"
-OPT4="tests/test-send.sh # run this testcase"
-OPT5="tests/test-send.sh # run this testcase"
-OPT6="tests/test-send.sh # run this testcase"
+PS3="Please enter your choice: "
+OPT1="cargo test                     # run this testcase"
+OPT2="tests/test-version.sh          # run this testcase"
+OPT3="tests/test-send.sh             # run this testcase"
+OPT4="tests/test-devices.sh          # run this testcase"
+OPT5="tests/test-rooms.sh            # run this testcase"
+OPT6="tests/test-get-profile.sh      # run this testcase"
+OPT7="tests/test-get-display-name.sh # run this testcase"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="scripts/update-1-version.sh --mayor # increment MAJOR version number, incompatible"
 OPT2="scripts/update-1-version.sh --minor # increment MINOR version number, new feature"
 OPT3="scripts/update-1-version.sh --patch # increment PATCH version number, bug fix"
@@ -110,28 +111,28 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPT8" "$OPT9" "$OPT10" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" | "$OPT9" | "$OPT10" )
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" | "$OPT9" | "$OPT10")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="git status           # what is the current status"
 OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help.manual.txt help.help.txt help.usage.txt src/emoji_verify.rs src/main.rs src/mclient.rs"
 OPT3="cargo package --list # show files containing changes"
@@ -139,28 +140,28 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" )
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="git commit -a # alternative 1 for commit"
 OPT2="git commit # alternative 2 for commit"
 OPT3="git commit -a -m 'release: v$(cat VERSION)' # alternative 3 for commit; being lazy"
@@ -168,55 +169,55 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        break
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		break
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="scripts/update-5-tag.sh # create new annotated tag"
 OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        break
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		break
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 echo "A tag push of major version kicks off the Docker actions workflow on Github."
 echo "A tag push of major version kicks off the PiPy actions workflow on Github."
 echo "Note: a PR does not trigger Github Actions workflows."
@@ -230,28 +231,28 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        break
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		break
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 echo "Watch Actions workflows on Github, if any."
 echo "Now double-check if everything is in order."
 OPT1="git tag --list -n --sort=-refname # list tags"
@@ -263,29 +264,28 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
 
-
-PS3='Please enter your choice: '
+PS3="Please enter your choice: "
 OPT1="cargo login # log into crates.io"
 OPT2="cargo clean"
 OPT3="cargo publish"
@@ -293,27 +293,26 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-    case ${opt} in
-    "$OPT1" | "$OPT2" | "$OPT3")
-        OPTE=${opt%%#*} # remove everything after first #
-        echo "Performing: $OPTE"
-        $OPTE
-        continue
-        ;;
-    "$OPTC")
-        echo "On to next step."
-        break
-        ;;
-    "$OPTQ" | "quit")
-        echo "Quitting program."
-        exit 0
-        ;;
-    *) echo "invalid option $REPLY" ;;
-    esac
+	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+	case ${opt} in
+	"$OPT1" | "$OPT2" | "$OPT3")
+		OPTE=${opt%%#*} # remove everything after first #
+		echo "Performing: $OPTE"
+		$OPTE
+		continue
+		;;
+	"$OPTC")
+		echo "On to next step."
+		break
+		;;
+	"$OPTQ" | "quit")
+		echo "Quitting program."
+		exit 0
+		;;
+	*) echo "invalid option $REPLY" ;;
+	esac
 done
-
 
 echo "Bye"
 
