@@ -86,8 +86,9 @@ Safe!
   - ...
 
 # Contributors :clap:
+- These are the first contributors: https://github.com/sasa-tomic, https://github.com/jknedlik, https://github.com/dwattttt, 
+- Who will be next?
 - _Add your name here._
-- Who will be the first?
 
 # Usage
 
