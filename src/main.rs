@@ -43,6 +43,7 @@
 use clap::{ColorChoice, CommandFactory, Parser, ValueEnum};
 use colored::Colorize;
 use directories::ProjectDirs;
+use matrix_sdk::ruma::api::client::room::Visibility;
 use regex::Regex;
 use rpassword::read_password;
 use serde::{Deserialize, Serialize};
@@ -823,14 +824,15 @@ pub struct Args {
     // Todo
     /// Disable encryption for a specific action.
     /// Details::
-    /// By default encryption is
-    /// turned on wherever possible. E.g. rooms created will be created
-    /// by default with encryption enabled. To turn encryption off for a
-    /// specific action use --plain. Currently --plain is supported by
-    /// --room-create and --room-dm-create. See also --room-enable-encryption
-    /// which sort of does the opossite for rooms.
-    #[arg(long, default_value_t = false)]
-    plain: bool,
+    /// By default encryption is turned on for all private rooms and DMs
+    /// and turned off for all public rooms. E.g. Created DM or private room
+    /// will have encryption enabled by default.
+    /// To explicitly turn encryption off for a specific action use --plain.
+    /// Currently --plain is supported by --room-create and --room-dm-create.
+    /// See also --room-enable-encryption which sort of does the opossite for rooms.
+    /// See also --visibility which allows setting the visibility of the room.
+    #[arg(long)]
+    plain: Option<bool>,
 
     /// Specify path to a file containing credentials.
     /// Details::
@@ -1443,6 +1445,18 @@ pub struct Args {
     #[arg(long, num_args(0..), value_name = "LOCAL_ALIAS", )]
     room_create: Vec<String>,
 
+    /// Set the visibility of the newly created room.
+    /// Details::
+    /// Default room visibility is 'private'.
+    /// To create a public room, use
+    /// '--room-create <room-name> --visibility public'.
+    /// To create a private room, use
+    /// '--room-create <room-name> --visibility private'.
+    #[arg(long, value_enum,
+        value_name = "VISIBILITY",
+        default_value = Visibility::Private.as_str(), ignore_case = true, )]
+    visibility: Visibility,
+
     /// Create one or multiple direct messaging (DM) rooms
     /// for given users.
     /// Details::
@@ -1990,7 +2004,7 @@ impl Args {
             debug: 0u8,
             log_level: None,
             verbose: 0u8,
-            plain: false,
+            plain: None,
             credentials: get_credentials_default_path(),
             store: get_store_default_path(),
             login: Login::None,
@@ -2021,6 +2035,7 @@ impl Args {
             get_room_info: Vec::new(),
             file_name: Vec::new(),
             room_create: Vec::new(),
+            visibility: Visibility::Private,
             room_dm_create: Vec::new(),
             room_leave: Vec::new(),
             room_forget: Vec::new(),
@@ -3150,12 +3165,17 @@ pub(crate) async fn cli_room_create(client: &Client, ap: &Args) -> Result<(), Er
     crate::room_create(
         client,
         false,
-        !ap.plain,
+        match &ap.visibility {
+            Visibility::Private => !ap.plain.unwrap_or(false), // private rooms are encrypted by default
+            Visibility::Public => !ap.plain.unwrap_or(true),   // public rooms are plain by default
+            _ => !ap.plain.unwrap_or(false),
+        },
         &[],
         &ap.room_create,
         &ap.name,
         &ap.topic,
         ap.output,
+        ap.visibility.clone(),
     )
     .await
 }
@@ -3166,12 +3186,17 @@ pub(crate) async fn cli_room_dm_create(client: &Client, ap: &Args) -> Result<(),
     crate::room_create(
         client,
         true,
-        !ap.plain,
+        match &ap.visibility {
+            Visibility::Private => !ap.plain.unwrap_or(false), // private rooms are encrypted by default
+            Visibility::Public => !ap.plain.unwrap_or(true),   // public rooms are plain by default
+            _ => !ap.plain.unwrap_or(false),
+        },
         &ap.room_dm_create,
         &ap.alias,
         &ap.name,
         &ap.topic,
         ap.output,
+        ap.visibility.clone(),
     )
     .await
 }
@@ -3462,7 +3487,7 @@ async fn main() -> Result<(), Error> {
     debug!("debug flag is {}", ap.debug);
     debug!("log-level option is {:?}", ap.log_level);
     debug!("verbose option is {}", ap.verbose);
-    debug!("plain flag is {}", ap.plain);
+    debug!("plain flag is {:?}", ap.plain);
     debug!("credentials option is {:?}", ap.credentials);
     debug!("store option is {:?}", ap.store);
     debug!("login option is {:?}", ap.login);
