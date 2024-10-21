@@ -1150,7 +1150,7 @@ pub struct Args {
     #[arg(long)]
     markdown: bool,
 
-    /// SPecify the message format as Code.
+    /// Specify the message format as Code.
     /// Details::
     /// There are 3 message formats for '--message'.
     /// Plain text, MarkDown, and Code. By default, if no
@@ -1162,6 +1162,15 @@ pub struct Args {
     /// sending of text as a Code block.
     #[arg(long)]
     code: bool,
+
+    /// Send message as format "HTML"
+    /// Details::
+    /// If not specified, message will be sent 
+    /// as format "TEXT". E.g. that allows some text
+    /// to be bold, etc. Only a subset of HTML tags are 
+    /// accepted by Matrix.
+    #[arg(long)]
+    html: bool,
 
     /// Optionally specify one or multiple rooms.
     /// Details::
@@ -1998,6 +2007,7 @@ impl Args {
             timeout: TIMEOUT_DEFAULT,
             markdown: false,
             code: false,
+            html: false,
             room: Vec::new(),
             file: Vec::new(),
             notice: false,
@@ -2928,6 +2938,7 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
                                 ap.markdown,
                                 ap.notice,
                                 ap.emote,
+                                ap.html,
                             )
                             .await
                             {
@@ -2975,6 +2986,7 @@ pub(crate) async fn cli_message(client: &Client, ap: &Args) -> Result<(), Error>
         ap.markdown,
         ap.notice,
         ap.emote,
+        ap.html,
     )
     .await // returning
 }

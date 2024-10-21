@@ -2415,18 +2415,24 @@ pub(crate) async fn message(
         let fmsg = if notice {
             MessageType::Notice(if md {
                 NoticeMessageEventContent::markdown(nmsg)
+            } else if html {
+                NoticeMessageEventContent::html(nmsg, nmsg)
             } else {
                 NoticeMessageEventContent::plain(nmsg)
             })
         } else if emote {
             MessageType::Emote(if md {
                 EmoteMessageEventContent::markdown(nmsg)
+            } else if html {
+                EmoteMessageEventContent::html(nmsg, nmsg)
             } else {
                 EmoteMessageEventContent::plain(nmsg)
             })
         } else {
             MessageType::Text(if md {
                 TextMessageEventContent::markdown(nmsg)
+            } else if html {
+                TextMessageEventContent::html(nmsg, nmsg)
             } else {
                 TextMessageEventContent::plain(nmsg)
             })
