@@ -13,24 +13,6 @@ alt="MC logo" height="150">
 # matrix-commander-rs
 simple but convenient CLI-based Matrix client app for sending, receiving, and much more
 
-# Incompatibilities
-
-Version 0.4 is incompatible with previous versions.
-The default location of the store has changed.
-The directory name of the default store used to be `sledstore`.
-Now it is just `store`. The program attempts to rename
-the store's directory name automatically. E.g. on Linux it tries
-to automatically rename
-`~/.local/share/matrix-commander-rs/sledstore/` to
-`~/.local/share/matrix-commander-rs/store/`.
-If you have used the default store name in the past,
-and automatical renaming is failing for you, then rename the store's
-directory name from
-`sledstore` to `store` manually. Also, some JSON and
-text output is different than in previous version. If you are parsing
-the output you should do careful testing to adapt to the changed
-output.
-
 # Help create this Rust program
 
 This Rust project is currently bare essentials. 
