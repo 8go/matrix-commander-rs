@@ -1984,7 +1984,7 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
                     .collect::<Vec<String>>()
                     .join(", "),
                 name_evs
-                    .into()
+                    .iter()
                     .map(|value| format!("{:?}", value.deserialize()))
                     .collect::<Vec<String>>()
                     .join(", "),
@@ -2406,6 +2406,7 @@ pub(crate) async fn message(
     markdown: bool,
     notice: bool,
     emote: bool,
+    html: bool,
 ) -> Result<(), Error> {
     debug!(
         "In message(): roomnames are {:?}, msgs are {:?}",

@@ -829,7 +829,7 @@ pub struct Args {
     /// will have encryption enabled by default.
     /// To explicitly turn encryption off for a specific action use --plain.
     /// Currently --plain is supported by --room-create and --room-dm-create.
-    /// See also --room-enable-encryption which sort of does the opossite for rooms.
+    /// See also --room-enable-encryption which sort of does the opposite for rooms.
     /// See also --visibility which allows setting the visibility of the room.
     #[arg(long)]
     plain: Option<bool>,
@@ -1167,9 +1167,9 @@ pub struct Args {
 
     /// Send message as format "HTML"
     /// Details::
-    /// If not specified, message will be sent 
+    /// If not specified, message will be sent
     /// as format "TEXT". E.g. that allows some text
-    /// to be bold, etc. Only a subset of HTML tags are 
+    /// to be bold, etc. Only a subset of HTML tags are
     /// accepted by Matrix.
     #[arg(long)]
     html: bool,

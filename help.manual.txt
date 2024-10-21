@@ -90,13 +90,17 @@ Options:
           debug information. So, if '--debug' is not used then '--verbose' will
           be ignored
 
-      --plain
+      --plain <PLAIN>
           Disable encryption for a specific action. Details:: By default
-          encryption is turned on wherever possible. E.g. rooms created will be
-          created by default with encryption enabled. To turn encryption off
-          for a specific action use --plain. Currently --plain is supported by
+          encryption is turned on for all private rooms and DMs and turned off
+          for all public rooms. E.g. Created DM or private room will have
+          encryption enabled by default. To explicitly turn encryption off for
+          a specific action use --plain. Currently --plain is supported by
           --room-create and --room-dm-create. See also --room-enable-encryption
-          which sort of does the opossite for rooms
+          which sort of does the opposite for rooms. See also --visibility
+          which allows setting the visibility of the room
+          
+          [possible values: true, false]
 
   -c, --credentials <PATH_TO_FILE>
           Specify path to a file containing credentials. Details:: At login
@@ -348,12 +352,17 @@ Options:
           MarkDown language. '--code' allows sending of text as a Code block
 
       --code
-          SPecify the message format as Code. Details:: There are 3 message
+          Specify the message format as Code. Details:: There are 3 message
           formats for '--message'. Plain text, MarkDown, and Code. By default,
           if no command line options are specified, 'plain text' will be used.
           Use '--markdown' or '--code' to set the format to MarkDown or Code
           respectively. '--markdown' allows sending of text formatted in
           MarkDown language. '--code' allows sending of text as a Code block
+
+      --html
+          Send message as format "HTML" Details:: If not specified, message
+          will be sent as format "TEXT". E.g. that allows some text to be bold,
+          etc. Only a subset of HTML tags are accepted by Matrix
 
   -r, --room [<ROOM>...]
           Optionally specify one or multiple rooms. Details:: Specify rooms via
@@ -558,6 +567,14 @@ Options:
           values that are not set and hence have default values are not shown
           in the JSON output. E.g. if no topic is given, then there will be no
           topic field in the JSON output. Room aliases have to be unique
+
+      --visibility <VISIBILITY>
+          Set the visibility of the newly created room. Details:: Default room
+          visibility is 'private'. To create a public room, use '--room-create
+          <room-name> --visibility public'. To create a private room, use
+          '--room-create <room-name> --visibility private'
+          
+          [default: private]
 
       --room-dm-create [<USER>...]
           Create one or multiple direct messaging (DM) rooms for given users.
