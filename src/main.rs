@@ -3772,8 +3772,9 @@ async fn main() -> Result<(), Error> {
             convert_to_full_user_ids(&mut ap.room_dm_create, hostname);
             ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
-            convert_to_full_alias_ids(&mut ap.alias, hostname);
-            ap.alias.retain(|x| !x.trim().is_empty());
+
+            ap.room_dm_create = convert_to_full_user_ids(ap.room_dm_create, hostname);
+          ap.room_dm_create.retain(|x| !x.trim().is_empty());
 
             convert_to_full_mxc_uris(&mut ap.media_download, hostname).await; // convert short mxcs to full mxc uris
 
