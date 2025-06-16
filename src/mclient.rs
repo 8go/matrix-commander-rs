@@ -1267,7 +1267,7 @@ pub(crate) async fn room_create(
         }
 
         request.name = Some(names2[i].clone());
-        request.room_alias_name = Some(aliases2[i].clone());
+        request.room_alias_name = Some(aliases2[i].clone()).filter(|s| !s.is_empty());
         request.topic = Some(topics2[i].clone());
         request.is_direct = is_dm;
         let usr: OwnedUserId;
@@ -1997,18 +1997,37 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
         }
         // Output::JsonSpec => (), // These events should be spec compliant
         _ => {
-            println!(
-                "{{\"room_id\": {:?}, \
-                     \"RoomMemberEventContent\": [ {{ {} }} ], \
-                     \"RoomPowerLevelsEventContent\": [ {{ {} }} ], \
-                     \"RoomNameEventContent\": [ {{ {} }} ], \
-                     \"RoomTopicEventContent\": [ {{ {} }} ] }}",
-                room_id,
-                serde_json::to_string(&member_evs).unwrap_or_else(|_| r#""""#.to_string()),
-                serde_json::to_string(&power_level_evs).unwrap_or_else(|_| r#""""#.to_string()),
-                serde_json::to_string(&name_evs).unwrap_or_else(|_| r#""""#.to_string()),
-                serde_json::to_string(&topic_evs).unwrap_or_else(|_| r#""""#.to_string()),
-            );
+            // println!(
+            //     "{{\"room_id\": {:?}, \
+            //          \"RoomMemberEventContent\": [ {{ \"{}\" }} ], \
+            //          \"RoomPowerLevelsEventContent\": [ {{ \"{}\" }} ], \
+            //          \"RoomNameEventContent\": [ {{ \"{}\" }} ], \
+            //          \"RoomTopicEventContent\": [ {{ \"{}\" }} ] }}",
+            //     room_id,
+            //     serde_json::to_string(&member_evs).unwrap_or_else(|_| r#""""#.to_string()),
+            //     serde_json::to_string(&power_level_evs).unwrap_or_else(|_| r#""""#.to_string()),
+            //     serde_json::to_string(&name_evs).unwrap_or_else(|_| r#""""#.to_string()),
+            //     serde_json::to_string(&topic_evs).unwrap_or_else(|_| r#""""#.to_string()),
+            // );
+            use matrix_sdk::deserialized_responses::RawSyncOrStrippedState;
+            #[derive(serde::Serialize)]
+            struct MyState<'a> {
+                room_id: &'a str,
+                room_member_event_content: Vec<RawSyncOrStrippedState<RoomMemberEventContent>>,
+                room_power_levels_event_content:
+                    Vec<RawSyncOrStrippedState<RoomPowerLevelsEventContent>>,
+                room_name_event_content: Vec<RawSyncOrStrippedState<RoomNameEventContent>>,
+                room_topic_event_content: Vec<RawSyncOrStrippedState<RoomTopicEventContent>>,
+            }
+            let mystate = MyState {
+                room_id: room_id.as_str(),
+                room_member_event_content: member_evs,
+                room_power_levels_event_content: power_level_evs,
+                room_name_event_content: name_evs,
+                room_topic_event_content: topic_evs,
+            };
+            let jsonstr = serde_json::to_string(&mystate).unwrap();
+            println!("{}", jsonstr);
         }
     }
     Ok(())
@@ -2091,8 +2110,7 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
         }
         Output::JsonSpec => (),
         _ => {
-            //zzz
-            #[derive(serde::Serialize)]
+            #[derive(serde::Serialize, serde::Deserialize)]
             struct MyMember<'a> {
                 user_id: &'a str,
                 display_name: &'a str,
@@ -2101,7 +2119,7 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                 power_level: i64,
                 membership: &'a str,
             }
-            #[derive(serde::Serialize)]
+            #[derive(serde::Serialize, serde::Deserialize)]
             struct MyRoom<'a> {
                 room_id: &'a str,
                 members: Vec<MyMember<'a>>,
@@ -2122,8 +2140,8 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                 room_id: room_id.as_str(),
                 members: mymembers,
             };
-            let json = serde_json::to_string(&myroom).unwrap();
-            println!("{}", json);
+            let jsonstr = serde_json::to_string(&myroom).unwrap();
+            println!("{}", jsonstr);
         }
     }
 }
