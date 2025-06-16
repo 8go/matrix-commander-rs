@@ -2078,12 +2078,12 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
         Output::Text => {
             for m in members {
                 println!(
-                    "Room:    {:?}    Member:    {:?}    {:?}    {:?}    {:?}    {:?}    \"{:?}\"",
+                    "Room:    {:?}    Member:    {:?}    {:?}    {:?}    {:?}    {:?}    \"{}\"",
                     room_id,
                     m.user_id(),
-                    m.display_name(), // .as_deref().unwrap_or(""),
+                    m.display_name().as_deref().unwrap_or(""),
                     m.name(),
-                    m.avatar_url(), // .as_deref().unwrap_or("".into()),
+                    m.avatar_url().as_deref().unwrap_or("".into()),
                     m.power_level(),
                     m.membership(),
                 )
@@ -2091,26 +2091,39 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
         }
         Output::JsonSpec => (),
         _ => {
-            let mut first: bool = true;
-            print!("{{\"room_id\": {:?}, \"members\": [", room_id);
-            for m in members {
-                if first {
-                    first = false;
-                } else {
-                    print!(", ");
-                }
-                print!(
-                    "{{\"user_id\": {:?}, \"display_name\": {:?}, \"name\": {:?}, \
-                    \"avatar_url\": {:?}, \"power_level\": {:?}, \"membership\": \"{:?}\"}}",
-                    m.user_id(),
-                    m.display_name(), // .as_deref().unwrap_or(""),
-                    m.name(),
-                    m.avatar_url(), // .as_deref().unwrap_or("".into()),
-                    m.power_level(),
-                    m.membership(),
-                );
+            //zzz
+            #[derive(serde::Serialize)]
+            struct MyMember<'a> {
+                user_id: &'a str,
+                display_name: &'a str,
+                name: &'a str,
+                avatar_url: &'a str,
+                power_level: i64,
+                membership: &'a str,
             }
-            println!("]}}");
+            #[derive(serde::Serialize)]
+            struct MyRoom<'a> {
+                room_id: &'a str,
+                members: Vec<MyMember<'a>>,
+            }
+            let mut mymembers: Vec<MyMember> = Vec::new();
+            for m in members {
+                let mymember = MyMember {
+                    user_id: m.user_id().as_str(),
+                    display_name: m.display_name().unwrap_or(""),
+                    name: m.name(),
+                    avatar_url: m.avatar_url().unwrap_or("".into()).as_str(),
+                    power_level: m.power_level(),
+                    membership: m.membership().as_str(),
+                };
+                mymembers.push(mymember);
+            }
+            let myroom = MyRoom {
+                room_id: room_id.as_str(),
+                members: mymembers,
+            };
+            let json = serde_json::to_string(&myroom).unwrap();
+            println!("{}", json);
         }
     }
 }
