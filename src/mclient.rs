@@ -1267,7 +1267,7 @@ pub(crate) async fn room_create(
         }
 
         request.name = Some(names2[i].clone());
-        request.room_alias_name = Some(aliases2[i].clone());
+        request.room_alias_name = Some(aliases2[i].clone()).filter(|s| !s.is_empty());
         request.topic = Some(topics2[i].clone());
         request.is_direct = is_dm;
         let usr: OwnedUserId;
