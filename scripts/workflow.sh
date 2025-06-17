@@ -9,16 +9,17 @@ echo "You have written some code? Let's publish it."
 PS3="Please enter your choice: "
 OPT1="rustup self update   # update rustup"
 OPT2="rustup update stable # update rust"
-OPT3="cargo upgrade        # update dependency versions in Cargo.toml"
-OPT4="cargo update         # update dependencies"
+OPT3="cargo upgrades       # show which dependencies in Cargo.toml can be updated, requires cargo-upgrades installed"
+OPT4="cargo upgrade        # update dependency versions in Cargo.toml, requires cargo-edit installed"
+OPT5="cargo update         # update dependencies"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4"  "$OPT5" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
 	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
 	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
 	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
+	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
 		OPTE=${opt%%#*} # remove everything after first #
 		echo "Performing: $OPTE"
 		$OPTE

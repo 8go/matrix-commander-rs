@@ -2,7 +2,7 @@
 
 [package]
 name = "matrix-commander"
-version = "0.10.2"
+version = "1.0.0"
 edition = "2021"
 description = "simple but convenient CLI-based Matrix client app for sending and receiving"
 documentation = "https://docs.rs/matrix-commander"
@@ -28,7 +28,6 @@ colored = "3.0"
 directories = "6.0"
 futures-util = "0.3"
 json = "0.12"
-# matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk , features = ["markdown", "anyhow"] }
 matrix-sdk = { version = "0.7", features = [
     "markdown",
     "anyhow",
@@ -45,17 +44,17 @@ mime_guess = "2.0"
 openssl = { version = '0.10', features = ["vendored"] }
 regex = "1.11"
 reqwest = "0.12"
-rpassword = "7.3"
+rpassword = "7.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
-tokio = { version = "1.43", default-features = false, features = [
+tokio = { version = "1.45", default-features = false, features = [
     "rt-multi-thread",
     "macros",
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-update-informer = "1.1"
+update-informer = "1.2"
 url = { version = "2.5", features = ["serde"] }
 
 

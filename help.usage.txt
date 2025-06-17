@@ -9,7 +9,7 @@ Options:
   -d, --debug...
       --log-level <LOG_LEVEL>...
       --verbose...
-      --plain
+      --plain <PLAIN>
   -c, --credentials <PATH_TO_FILE>
   -s, --store <PATH_TO_DIRECTORY>
       --login <LOGIN_METHOD>
@@ -26,6 +26,7 @@ Options:
   -m, --message [<MESSAGE>...]
       --markdown
       --code
+      --html
   -r, --room [<ROOM>...]
   -f, --file [<FILE>...]
       --notice
@@ -39,6 +40,7 @@ Options:
       --file-name [<FILE_NAME>...]
       --get-room-info [<ROOM>...]
       --room-create [<LOCAL_ALIAS>...]
+      --visibility <VISIBILITY>
       --room-dm-create [<USER>...]
       --room-leave [<ROOM>...]
       --room-forget [<ROOM>...]

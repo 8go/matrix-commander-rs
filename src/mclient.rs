@@ -1106,15 +1106,62 @@ pub(crate) fn print_common_room(room: &room::Room, output: Output) {
         ),
         Output::JsonSpec => (),
         _ => {
-            println!(
-                            "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
-                            room.room_id(),
-                            serde_json::to_string(&room.clone_info().room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
-                            room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
-                            serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
-                            room.name().unwrap_or_default(),
-                            room.topic().unwrap_or_default(),
-                        );
+            // println!(
+            //                 "{{\"room_id\": {:?}, \"room_type\": {}, \"canonical_alias\": {:?}, \"alt_aliases\": {}, \"name\": {:?}, \"topic\": {:?}}}",
+            //                 room.room_id(),
+            //                 serde_json::to_string(&room.clone_info().room_type()).unwrap_or_else(|_| r#""""#.to_string()), // serialize, empty string as default
+            //                 room.canonical_alias().map_or(r#""#.to_string(),|v|v.to_string()),
+            //                 serde_json::to_string(&room.alt_aliases()).unwrap_or_else(|_| r#"[]"#.to_string()), // serialize, empty array as default
+            //                 room.name().unwrap_or_default(),
+            //                 room.topic().unwrap_or_default(),
+            //             );
+            #[derive(serde::Serialize)]
+            struct MyRoom<'a> {
+                room_id: &'a str,
+                room_info: &'a matrix_sdk::RoomInfo,
+                alt_aliases: Vec<OwnedRoomAliasId>,
+            }
+            let myroom = MyRoom {
+                room_id: room.room_id().as_str(),
+                room_info: &room.clone_info(),
+                alt_aliases: room.alt_aliases(),
+            };
+            let jsonstr = serde_json::to_string(&myroom).unwrap();
+            println!("{}", jsonstr);
+        }
+    }
+}
+
+/// Utility function to print Common room info of multiple rooms
+pub(crate) fn print_common_rooms(rooms: Vec<room::Room>, output: Output) {
+    debug!("common rooms: {:?}", rooms);
+    match output {
+        Output::Text => {
+            for r in rooms {
+                print_common_room(&r, output)
+            }
+        }
+        Output::JsonSpec => (),
+        _ => {
+            #[derive(serde::Serialize)]
+            struct MyRoom<'a> {
+                room_id: &'a str,
+                room_info: matrix_sdk::RoomInfo,
+                alt_aliases: Vec<OwnedRoomAliasId>,
+            }
+            let mut myrooms: Vec<MyRoom> = Vec::new();
+            let mut myroom: MyRoom;
+            for r in &rooms {
+                myroom = MyRoom {
+                    room_id: r.room_id().as_str(),
+                    room_info: r.clone_info(),
+                    alt_aliases: r.alt_aliases(),
+                };
+                myrooms.push(myroom);
+            }
+            let jsonstr = serde_json::to_string(&myrooms).unwrap();
+            println!("{}", jsonstr);
+            // to list only room ids run a comand like matrix-commander-rs --rooms --output json | jq '.[].room_id'
         }
     }
 }
@@ -1129,25 +1176,16 @@ pub(crate) fn print_rooms(
     match rooms {
         None => {
             // ALL rooms, default
-            for r in client.rooms() {
-                // *r changes type to Common, so &(*r), or just &r for short
-                print_common_room(&r, output);
-            }
+            print_common_rooms(client.rooms(), output);
         }
         Some(matrix_sdk::RoomState::Invited) => {
-            for r in client.invited_rooms() {
-                print_common_room(&r, output);
-            }
+            print_common_rooms(client.invited_rooms(), output);
         }
         Some(matrix_sdk::RoomState::Joined) => {
-            for r in client.joined_rooms() {
-                print_common_room(&r, output);
-            }
+            print_common_rooms(client.joined_rooms(), output);
         }
         Some(matrix_sdk::RoomState::Left) => {
-            for r in client.left_rooms() {
-                print_common_room(&r, output);
-            }
+            print_common_rooms(client.left_rooms(), output);
         }
     };
     Ok(())
@@ -1997,18 +2035,6 @@ async fn print_room_state(room_id: &OwnedRoomId, room: &Room, output: Output) ->
         }
         // Output::JsonSpec => (), // These events should be spec compliant
         _ => {
-            // println!(
-            //     "{{\"room_id\": {:?}, \
-            //          \"RoomMemberEventContent\": [ {{ \"{}\" }} ], \
-            //          \"RoomPowerLevelsEventContent\": [ {{ \"{}\" }} ], \
-            //          \"RoomNameEventContent\": [ {{ \"{}\" }} ], \
-            //          \"RoomTopicEventContent\": [ {{ \"{}\" }} ] }}",
-            //     room_id,
-            //     serde_json::to_string(&member_evs).unwrap_or_else(|_| r#""""#.to_string()),
-            //     serde_json::to_string(&power_level_evs).unwrap_or_else(|_| r#""""#.to_string()),
-            //     serde_json::to_string(&name_evs).unwrap_or_else(|_| r#""""#.to_string()),
-            //     serde_json::to_string(&topic_evs).unwrap_or_else(|_| r#""""#.to_string()),
-            // );
             use matrix_sdk::deserialized_responses::RawSyncOrStrippedState;
             #[derive(serde::Serialize)]
             struct MyState<'a> {

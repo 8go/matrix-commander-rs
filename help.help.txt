@@ -30,7 +30,7 @@ Options:
           Set the log level by overwriting the default log level.
       --verbose...
           Set the verbosity level.
-      --plain
+      --plain <PLAIN>
           Disable encryption for a specific action.
   -c, --credentials <PATH_TO_FILE>
           Specify path to a file containing credentials.
@@ -63,7 +63,9 @@ Options:
       --markdown
           Specify the message format as MarkDown.
       --code
-          SPecify the message format as Code.
+          Specify the message format as Code.
+      --html
+          Send message as format "HTML"
   -r, --room [<ROOM>...]
           Optionally specify one or multiple rooms.
   -f, --file [<FILE>...]
@@ -90,6 +92,8 @@ Options:
           Get room information.
       --room-create [<LOCAL_ALIAS>...]
           Create one or multiple rooms.
+      --visibility <VISIBILITY>
+          Set the visibility of the newly created room.
       --room-dm-create [<USER>...]
           Create one or multiple direct messaging (DM) rooms for given users.
       --room-leave [<ROOM>...]
