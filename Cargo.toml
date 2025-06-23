@@ -28,7 +28,7 @@ colored = "3.0"
 directories = "6.0"
 futures-util = "0.3"
 json = "0.12"
-matrix-sdk = { version = "0.7", features = [
+matrix-sdk = { version = "0.12", features = [
     "markdown",
     "anyhow",
     "bundled-sqlite",
