@@ -724,6 +724,7 @@ impl fmt::Display for Output {
     after_help = "PS: Also have a look at scripts/matrix-commander-rs-tui.",
     disable_version_flag = true,
     disable_help_flag = true,
+    arg_required_else_help = true,
 )]
 pub struct Args {
     // This is an internal field used to store credentials.
