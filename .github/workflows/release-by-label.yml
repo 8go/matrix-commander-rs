@@ -107,7 +107,7 @@ jobs:
           cat tag.txt
 
       - name: Upload artifact Linux
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Binary
           path: |
@@ -131,7 +131,7 @@ jobs:
           RUSTTARGET: x86_64-pc-windows-gnu
           UPLOAD_MODE: none
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Binary
           path: |
@@ -148,7 +148,7 @@ jobs:
           MINIFY: true
           EXTRA_FILES: "README.md LICENSE help.help.txt help.manual.txt help.usage.txt"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Binary
           path: |
@@ -165,7 +165,7 @@ jobs:
           MINIFY: true
           EXTRA_FILES: "README.md LICENSE help.help.txt help.manual.txt help.usage.txt"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Binary
           path: |
