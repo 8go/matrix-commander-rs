@@ -138,7 +138,8 @@ async fn sas_verification_handler(client: Client, sas: SasVerification) {
 
                 break;
             }
-            SasState::Started { .. } | SasState::Accepted { .. } | SasState::Confirmed => {
+            SasState::Created { .. } | SasState::Started { .. } | SasState::Accepted { .. } | SasState::Confirmed => {
+                println!("sas_verification_handler state: {:?}", state);
                 debug!("sas_verification_handler: state {:?} ignored", state);
             }
         }

@@ -62,9 +62,9 @@ use matrix_sdk::{
             OriginalSyncRoomRedactionEvent, RedactedSyncRoomRedactionEvent, SyncRoomRedactionEvent,
         },
         events::{
-            AnyMessageLikeEvent,
-            AnyTimelineEvent,
-            MessageLikeEvent,
+            AnySyncMessageLikeEvent,
+            AnySyncTimelineEvent,
+            //MessageLikeEvent,
             OriginalSyncMessageLikeEvent,
             // OriginalMessageLikeEvent, // MessageLikeEventContent,
             SyncMessageLikeEvent,
@@ -677,25 +677,28 @@ pub(crate) async fn listen_tail(
             let anytimelineevent = &chunk[chunk.len() - 1 - index]; // reverse ordering, getting older msg first
                                                                     // Todo : dump the JSON serialized string via Json API
 
-            let rawevent: AnyTimelineEvent = anytimelineevent.event.deserialize().unwrap();
+            let rawevent: AnySyncTimelineEvent = anytimelineevent.raw().deserialize().unwrap();
+            // SDK 0.8 docs: Previously, this differed from SyncTimelineEvent by wrapping an AnyTimelineEvent instead of an AnySyncTimelineEvent, 
+            // but nowadays they are essentially identical, and one of them should probably be removed.
+            
             // print_type_of(&rawevent); // ruma_common::events::enums::AnyTimelineEvent
             debug!("rawevent = value is {:?}\n", rawevent);
             // rawevent = Ok(MessageLike(RoomMessage(Original(OriginalMessageLikeEvent { content: RoomMessageEventContent {
             // msgtype: Text(TextMessageEventContent { body: "54", formatted: None }), relates_to: Some(_Custom) }, event_id: "$xxx", sender: "@u:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!rrr:some.homeserver.org", unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } }))))
             if !output.is_text() {
-                println!("{}", anytimelineevent.event.json());
+                println!("{}", anytimelineevent.raw().json());
                 continue;
             }
 
             match rawevent {
-                AnyTimelineEvent::MessageLike(anymessagelikeevent) => {
+                AnySyncTimelineEvent::MessageLike(anymessagelikeevent) => {
                     debug!("value: {:?}", anymessagelikeevent);
                     match anymessagelikeevent {
-                        AnyMessageLikeEvent::RoomMessage(messagelikeevent) => {
+                        AnySyncMessageLikeEvent::RoomMessage(messagelikeevent) => {
                             debug!("value: {:?}", messagelikeevent);
                             match messagelikeevent {
-                                MessageLikeEvent::Original(orginialmessagelikeevent) => {
-                                    let room_id = orginialmessagelikeevent.room_id.clone();
+                                SyncMessageLikeEvent::Original(orginialmessagelikeevent) => {
+                                    let room_id = roomid; //orginialmessagelikeevent.room_id.clone();
                                     let orginialsyncmessagelikeevent =
                                         OriginalSyncMessageLikeEvent::from(
                                             orginialmessagelikeevent,
@@ -712,7 +715,7 @@ pub(crate) async fn listen_tail(
                                 }
                             }
                         }
-                        AnyMessageLikeEvent::RoomEncrypted(messagelikeevent) => {
+                        AnySyncMessageLikeEvent::RoomEncrypted(messagelikeevent) => {
                             warn!(
                                 "Event of type RoomEncrypted received: {:?}",
                                 messagelikeevent
@@ -724,12 +727,12 @@ pub(crate) async fn listen_tail(
                             // because decrypt_event() only decrypts events from sync() and not from messages()
 
                             match messagelikeevent {
-                                MessageLikeEvent::Original(orginialmessagelikeevent) => {
+                                SyncMessageLikeEvent::Original(orginialmessagelikeevent) => {
                                     debug!(
                                     "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
                                     orginialmessagelikeevent.content,
                                     orginialmessagelikeevent.sender,
-                                    orginialmessagelikeevent.room_id,
+                                    roomid, //orginialmessagelikeevent.room_id,
                                     orginialmessagelikeevent.event_id,
                                 );
                                     if whoami != orginialmessagelikeevent.sender || listen_self {
@@ -737,7 +740,7 @@ pub(crate) async fn listen_tail(
                                         // print_type_of(&orginialmessagelikeevent.content); // ruma_common::events::room::message::RoomEncryptedEventContent
                                         println!(
                                             "Message: type Encrypted: body {:?}, room {:?}, sender {:?}, event_id {:?}, message could not be decrypted",
-                                            orginialmessagelikeevent.content, orginialmessagelikeevent.room_id, orginialmessagelikeevent.sender, orginialmessagelikeevent.event_id,
+                                            orginialmessagelikeevent.content, roomid /*orginialmessagelikeevent.room_id*/, orginialmessagelikeevent.sender, orginialmessagelikeevent.event_id,
                                         );
                                         // has orginialmessagelikeevent.content.relates_to.unwrap()
                                     } else {
@@ -750,7 +753,7 @@ pub(crate) async fn listen_tail(
                                 }
                             }
                         }
-                        AnyMessageLikeEvent::RoomRedaction(messagelikeevent) => {
+                        AnySyncMessageLikeEvent::RoomRedaction(messagelikeevent) => {
                             warn!("Event of type RoomRedaction received. Not implemented yet. value: {:?}", messagelikeevent);
                             err_count += 1;
                         }

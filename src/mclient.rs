@@ -32,9 +32,9 @@ use matrix_sdk::{
     config::{RequestConfig, StoreConfig, SyncSettings},
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
-    instant::Duration,
+    ruma::time::Duration,
     matrix_auth::{MatrixSession, MatrixSessionTokens},
-    media::{MediaFormat, MediaRequest},
+    media::{MediaFormat, MediaRequestParameters},
     room,
     room::{Room, RoomMember},
     ruma::{
@@ -86,7 +86,10 @@ use matrix_sdk::{
     Client,
     RoomMemberships,
     SessionMeta,
+
 };
+
+use matrix_sdk_base::RoomStateFilter;
 
 // from main.rs
 use crate::{
@@ -239,7 +242,7 @@ pub(crate) async fn convert_to_full_mxc_uris(vecstr: &mut Vec<OwnedMxcUri>, defa
             i += 1;
             continue;
         }
-        let mxc = "mxc://".to_owned() + default_host + "/" + &s;
+        let mxc = "mxc://".to_owned() + default_host + "/" + s.as_str(); // changed from &s
         vecstr[i] = OwnedMxcUri::from(mxc);
         if !vecstr[i].is_valid() {
             error!(
@@ -508,7 +511,7 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     // let builder = if let Some(proxy) = cli.proxy { builder.proxy(proxy) } else { builder };
     let builder = Client::builder()
         .homeserver_url(homeserver)
-        .store_config(StoreConfig::new())
+        .store_config(StoreConfig::new("matrix-commander-lock".to_owned()))
         .request_config(
             RequestConfig::new()
                 .timeout(Duration::from_secs(ap.timeout))
@@ -933,7 +936,7 @@ pub(crate) async fn set_display_name(
 /// Get profile of the current user.
 pub(crate) async fn get_profile(client: &Client, output: Output) -> Result<(), Error> {
     debug!("Get profile from server");
-    if let Ok(profile) = client.account().get_profile().await {
+    if let Ok(profile) = client.account().fetch_user_profile().await {
         debug!("Profile successfully. Profile {:?}", profile);
         print_json(
             &json::object!(display_name: profile.displayname, avatar_url: profile.avatar_url.as_ref().map(|x| x.as_str())),
@@ -1186,6 +1189,12 @@ pub(crate) fn print_rooms(
         }
         Some(matrix_sdk::RoomState::Left) => {
             print_common_rooms(client.left_rooms(), output);
+        }
+        Some(matrix_sdk::RoomState::Knocked) => {
+            print_common_rooms(client.rooms_filtered(RoomStateFilter::KNOCKED), output);
+        }
+        Some(matrix_sdk::RoomState::Banned) => {
+            print_common_rooms(client.rooms_filtered(RoomStateFilter::BANNED), output);
         }
     };
     Ok(())
@@ -2706,7 +2715,8 @@ pub(crate) async fn media_upload(
             );
             err_count += 1;
         } else {
-            match client.media().upload(&mime, data).await {
+            // use RequestConfig from client
+            match client.media().upload(&mime, data, Some(client.request_config())).await {
                 Ok(response) => {
                     debug!("upload successful {:?}", response);
                     print_json(
@@ -2771,7 +2781,7 @@ pub(crate) async fn media_download(
                 10,
             ));
         }
-        let request = MediaRequest {
+        let request = MediaRequestParameters {
             source: MediaSource::Plain(mxc_uri.clone()),
             format: MediaFormat::File,
         };
