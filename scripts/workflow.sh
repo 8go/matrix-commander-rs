@@ -175,9 +175,9 @@ select opt in "${options[@]}"; do
     if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
     case ${opt} in
     "$OPT1" | "$OPT2" | "$OPT3")
-        OPTE=${opt%%#*} # remove everything after first #
+        OPTE="${opt%%#*}" # remove everything after first #
         echo "Performing: $OPTE"
-        $OPTE
+        eval "$OPTE"
         break
         ;;
     "$OPTC")
