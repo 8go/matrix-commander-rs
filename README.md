@@ -68,7 +68,7 @@ Safe!
   - ...
 
 # Contributors :clap:
-- These are the first contributors: https://github.com/sasa-tomic, https://github.com/jknedlik, https://github.com/dwattttt, 
+- These are the first contributors: https://github.com/sasa-tomic, https://github.com/jknedlik, https://github.com/dwattttt, https://github.com/Benjamin-Loison, ...
 - Who will be next?
 - _Add your name here._
 
