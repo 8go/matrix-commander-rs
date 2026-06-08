@@ -26,6 +26,7 @@ use tracing::{debug, error, info, warn};
 
 use matrix_sdk::{
     config::SyncSettings,
+    deserialized_responses::TimelineEventKind,
     event_handler::Ctx,
     // SessionMeta,
     room::MessagesOptions,
@@ -79,9 +80,6 @@ use matrix_sdk::{
         // OwnedRoomId, OwnedRoomOrAliasId, OwnedServerName,
         // device_id, room_id, session_id, user_id, OwnedDeviceId, OwnedUserId,
         UInt,
-    },
-    deserialized_responses::{
-        TimelineEventKind
     },
     Client,
 };

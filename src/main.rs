@@ -722,6 +722,7 @@ impl fmt::Display for Output {
     after_help = "PS: Also have a look at scripts/matrix-commander-rs-tui.",
     disable_version_flag = true,
     disable_help_flag = true,
+    arg_required_else_help = true,
 )]
 pub struct Args {
     // This is an internal field used to store credentials.
@@ -3392,7 +3393,9 @@ async fn main() -> Result<(), Error> {
                 .with_writer(io::stderr)
                 .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
                 .init();
-            debug!("Neither --debug nor --log-level was used. Using environment variable RUST_LOG.");
+            debug!(
+                "Neither --debug nor --log-level was used. Using environment variable RUST_LOG."
+            );
         }
         Some(llvec) => {
             if llvec.len() == 1 {

@@ -147,14 +147,14 @@ Options:
           only work if the server supports it and if there is access to a
           browser. So, don't use SSO on headless homeservers where there is no
           browser installed or accessible
-          
-          [default: none]
 
           Possible values:
           - none:         None: no login specified, don't login
           - password:     Password: login with password
           - access-token: AccessToken: login with access-token
           - sso:          SSO: login with SSO, single-sign on
+          
+          [default: none]
 
       --verify <VERIFICATION_METHOD>
           Perform account verification. Details:: By default, no verification
@@ -217,8 +217,6 @@ Options:
           verification request. 'emoji-req' currently seems to have problems,
           while it does work with Element web page in browser, 'emoji-req' does
           not seem to work with Element phone app
-          
-          [default: none]
 
           Possible values:
           - none:          None: option not used, no verification done
@@ -228,6 +226,8 @@ Options:
             https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
           - emoji:         Emoji: verify via emojis as the recipient
           - emoji-req:     Emoji: verify via emojis as the initiator
+          
+          [default: none]
 
       --bootstrap
           Details:: By default, no bootstrapping is performed. Bootstrapping is
@@ -253,13 +253,13 @@ Options:
           "matrix-commander-rs" again. You can perfectly use
           "matrix-commander-rs" without ever logging out. --logout is a cleanup
           if you have decided not to use this (or all) device(s) ever again
-          
-          [default: none]
 
           Possible values:
           - none: None: Log out nowhere, don't do anything, default
           - me:   Me: Log out from the currently used device
           - all:  All: Log out from all devices of the user
+          
+          [default: none]
 
       --homeserver <HOMESERVER>
           Specify a homeserver for use by certain actions. Details:: It is an
@@ -420,13 +420,13 @@ Options:
           synchronized between this program and the server before a 'send'. If
           you have chosen 'off', synchronization will be skipped entirely
           before the 'send' which will improve performance
-          
-          [default: full]
 
           Possible values:
           - off:  Turns syncing off for sending operations to improve
             performance
           - full: full: the default value
+          
+          [default: full]
 
   -l, --listen <LISTEN_TYPE>
           Listen to messages. Details:: The '--listen' option takes one
@@ -450,8 +450,6 @@ Options:
           Unlike 'once' and 'forever' that listen in ALL rooms, 'tail' and
           'all' listen only to the room specified in the credentials file or
           the --room options
-          
-          [default: never]
 
           Possible values:
           - never:   Never: Indicates to not listen, default
@@ -464,6 +462,8 @@ Options:
             specified room(s) and then continue
           - all:     All: Indicates to get *all* the messages from the
             specified room(s) and then continue
+          
+          [default: never]
 
       --tail <TAIL>
           Get the last messages. Details:: The '--tail' option reads and prints
@@ -513,8 +513,6 @@ Options:
           corresponds exactly with the Matrix Specification, no data will be
           printed. In short, currently '--json-spec' only provides outputs for
           '--listen' and '--tail'
-          
-          [default: text]
 
           Possible values:
           - text:      Text: Indicates to print human readable text, default
@@ -523,6 +521,8 @@ Options:
             output in Json format
           - json-spec: Json Spec: Indicates to print output in Json format, but
             only data that is according to Matrix Specifications
+          
+          [default: text]
 
       --file-name [<FILE_NAME>...]
           Specify one or multiple file names for some actions. Details:: This
@@ -878,3 +878,4 @@ Options:
           safe
 
 PS: Also have a look at scripts/matrix-commander-rs-tui.
+

@@ -7,19 +7,19 @@ from datetime import datetime
 from os import R_OK, access
 from os.path import isfile
 
-# runs program (cargo run) to create the help.manual.txt file
+# runs program (cargo run) to create the help/manual.txt file
 #
 # replace this pattern:
 # ```
 # Usage: ...
 # ```
-# in the README.md file with the help.manual.txt file
+# in the README.md file with the help/manual.txt file
 
 # datetime object containing current date and time
 now = datetime.now()
 date_string = now.strftime("%Y%m%d-%H%M%S")
 
-helpfile = "help.manual.txt"
+helpfile = "help/manual.txt"
 filename = "README.md"
 # create_help_script = "scripts/create-help-manual.sh"
 
@@ -53,12 +53,16 @@ with open(helpfile, "w") as f:
 with open(helpfile, "r+") as f:
     helptext = f.read()
     if len(helptext) < 100:
-        print(f"Error: file {helpfile} has length {len(helptext)}. Something is wrong. Aborting.")
+        print(
+            f"Error: file {helpfile} has length {len(helptext)}. Something is wrong. Aborting."
+        )
         sys.exit(1)
 
 # remove escaped color sequences from helpfile, turned colored text into normal text
-bashCmd = ["sed", "-i" , "s,"+"\x1B"+"\\[[0-9;]*[a-zA-Z],,g" , helpfile]
-process = subprocess.Popen(bashCmd,)
+bashCmd = ["sed", "-i", "s," + "\x1b" + "\\[[0-9;]*[a-zA-Z],,g", helpfile]
+process = subprocess.Popen(
+    bashCmd,
+)
 _, error = process.communicate()
 if error:
     print(error)
@@ -76,33 +80,37 @@ with open(helpfile, "r+") as f:
     helptext = f.read()
     print(f"Length of new {helpfile} file is: {len(helptext)}")
 
-with open(filename, "r+") as f:
-    text = f.read()
-    print(f"Length of {filename} before: {len(text)}")
-    text = re.sub(
-        r"```\nWelcome to[\s\S]*?```",
-        "```\n"
-        + helptext.translate(
-            str.maketrans(
-                {
-                    "\\": r"\\",
-                }
-            )
-        )
-        + "```",
-        text,
-    )
 
-    text = re.sub(
-        r"target/debug/matrix-commander-rs",
-        "matrix-commander-rs",
-        text,
-    )
-
-    print(f"Length of {filename} after:  {len(text)}")
-    f.seek(0)
-    f.write(text)
-    f.truncate()
+# We no longer change the REAME.md file (June 2026)
+#
+# with open(filename, "r+") as f:
+#     text = f.read()
+#     print(f"Length of {filename} before: {len(text)}")
+#     text = re.sub(
+#         r"```\nWelcome to[\s\S]*?```",
+#         "```\n"
+#         + helptext.translate(
+#             str.maketrans(
+#                 {
+#                     "\\": r"\\",
+#                 }
+#             )
+#         )
+#         + "```",
+#         text,
+#     )
+#
+#     text = re.sub(
+#         r"target/debug/matrix-commander-rs",
+#         "matrix-commander-rs",
+#         text,
+#     )
+#
+#     print(f"Length of {filename} after:  {len(text)}")
+#     f.seek(0)
+#     f.write(text)
+#     f.truncate()
+#
 
 bashCmd = ["diff", filename, backupfile]
 process = subprocess.Popen(bashCmd, stdout=subprocess.PIPE)

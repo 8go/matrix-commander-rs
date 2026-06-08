@@ -29,19 +29,18 @@ use url::Url;
 
 use matrix_sdk::{
     attachment::AttachmentConfig,
-    config::{RequestConfig, StoreConfig, SyncSettings},
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
     authentication::{matrix::MatrixSession, SessionTokens},
+    config::{RequestConfig, StoreConfig, SyncSettings},
     media::{MediaFormat, MediaRequestParameters},
     room,
     room::{Room, RoomMember},
     ruma::{
-        time::Duration,
+        api::client::profile::{AvatarUrl, DisplayName},
         api::client::room::create_room::v3::Request as CreateRoomRequest,
         api::client::room::create_room::v3::RoomPreset,
         api::client::room::Visibility,
-        api::client::profile::{DisplayName, AvatarUrl},
         api::client::uiaa,
         events::room::encryption::RoomEncryptionEventContent,
         // OwnedRoomOrAliasId, OwnedServerName,
@@ -62,7 +61,7 @@ use matrix_sdk::{
             TextMessageEventContent,
         },
         events::room::name::RoomNameEventContent,
-        events::room::power_levels::{RoomPowerLevelsEventContent/*, UserPowerLevel*/},
+        events::room::power_levels::{RoomPowerLevelsEventContent /*, UserPowerLevel*/},
         events::room::topic::RoomTopicEventContent,
         events::room::MediaSource,
         events::AnyInitialStateEvent,
@@ -70,6 +69,7 @@ use matrix_sdk::{
         events::InitialStateEvent,
         // events::OriginalMessageLikeEvent,
         serde::Raw,
+        time::Duration,
         EventEncryptionAlgorithm,
         // MxcUri,
         // DeviceId,
@@ -91,8 +91,8 @@ use matrix_sdk::{
 
 // from main.rs
 use crate::{
-    credentials_exist, get_password, get_store_default_path,
-    Args, Credentials, Error, Listen, Output, Sync,
+    credentials_exist, get_password, get_store_default_path, Args, Credentials, Error, Listen,
+    Output, Sync,
 };
 
 // import verification code
@@ -468,7 +468,7 @@ pub(crate) async fn login<'a>(
             Some(refresh_token.to_string())
         } else {
             None
-        }
+        },
     );
     credentials.save(&ap.credentials)?;
     // sync is needed even when --login is used,
@@ -497,10 +497,7 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     let builder = Client::builder()
         .homeserver_url(homeserver)
         .store_config(StoreConfig::new("".to_string()))
-        .request_config(
-            RequestConfig::new()
-                .timeout(Duration::from_secs(ap.timeout)),
-        );
+        .request_config(RequestConfig::new().timeout(Duration::from_secs(ap.timeout)));
     let client = builder
         .sqlite_store(sqlitestorehome, None)
         .build()
@@ -1284,10 +1281,8 @@ pub(crate) async fn room_create(
             //     pub visibility: Visibility,  }
             let content =
                 RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
-            let initstateev: InitialStateEvent<RoomEncryptionEventContent> = InitialStateEvent::new(
-                EmptyStateKey,
-                content,
-            );
+            let initstateev: InitialStateEvent<RoomEncryptionEventContent> =
+                InitialStateEvent::new(EmptyStateKey, content);
             let rawinitstateev = Raw::new(&initstateev)?;
             // let anyinitstateev: AnyInitialStateEvent =
             //     matrix_sdk::ruma::events::AnyInitialStateEvent::RoomEncryption(initstateev);

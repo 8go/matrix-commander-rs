@@ -9,32 +9,33 @@ echo "You have written some code? Let's publish it."
 PS3="Please enter your choice: "
 OPT1="rustup self update   # update rustup"
 OPT2="rustup update stable # update rust"
-OPT3="cargo upgrades       # show which dependencies in Cargo.toml can be updated, requires cargo-upgrades installed"
-OPT4="cargo upgrade        # update dependency versions in Cargo.toml, requires cargo-edit installed"
-OPT5="cargo update         # update dependencies"
+OPT3="cargo install cargo-upgrades # install cargo-upgrades"
+OPT4="cargo upgrades       # show which dependencies in Cargo.toml can be updated, requires cargo-upgrades installed"
+OPT5="cargo upgrade        # update dependency versions in Cargo.toml, requires cargo-edit installed"
+OPT6="cargo update         # update dependencies"
 OPTC="Continue"
 OPTQ="Quit"
-options=("$OPT1" "$OPT2" "$OPT3" "$OPT4"  "$OPT5" "$OPTC" "$OPTQ")
+options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ" | "quit")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -43,25 +44,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		break
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ" | "quit")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -76,25 +77,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -112,54 +113,54 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPT6" "$OPT7" "$OPT8" "$OPT9" "$OPT10" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" | "$OPT9" | "$OPT10")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5" | "$OPT6" | "$OPT7" | "$OPT8" | "$OPT9" | "$OPT10")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
 OPT1="git status           # what is the current status"
-OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help.manual.txt help.help.txt help.usage.txt src/emoji_verify.rs src/main.rs src/mclient.rs"
+OPT2="git add  Cargo.lock Cargo.toml README.md VERSION help/manual.txt help/help.txt help/usage.txt src/emoji_verify.rs src/main.rs src/mclient.rs"
 OPT3="cargo package --list # show files containing changes"
 OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -170,25 +171,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		break
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -197,25 +198,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		break
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -232,25 +233,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		break
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        break
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -265,25 +266,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPT4" "$OPT5" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3" | "$OPT4" | "$OPT5")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 PS3="Please enter your choice: "
@@ -294,25 +295,25 @@ OPTC="Continue"
 OPTQ="Quit"
 options=("$OPT1" "$OPT2" "$OPT3" "$OPTC" "$OPTQ")
 select opt in "${options[@]}"; do
-	if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
-	if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
-	case ${opt} in
-	"$OPT1" | "$OPT2" | "$OPT3")
-		OPTE=${opt%%#*} # remove everything after first #
-		echo "Performing: $OPTE"
-		$OPTE
-		continue
-		;;
-	"$OPTC")
-		echo "On to next step."
-		break
-		;;
-	"$OPTQ" | "quit")
-		echo "Quitting program."
-		exit 0
-		;;
-	*) echo "invalid option $REPLY" ;;
-	esac
+    if [ "${REPLY,,}" == "c" ]; then opt="$OPTC"; fi
+    if [ "${REPLY,,}" == "q" ]; then opt="$OPTQ"; fi
+    case ${opt} in
+    "$OPT1" | "$OPT2" | "$OPT3")
+        OPTE=${opt%%#*} # remove everything after first #
+        echo "Performing: $OPTE"
+        $OPTE
+        continue
+        ;;
+    "$OPTC")
+        echo "On to next step."
+        break
+        ;;
+    "$OPTQ" | "quit")
+        echo "Quitting program."
+        exit 0
+        ;;
+    *) echo "invalid option $REPLY" ;;
+    esac
 done
 
 echo "Bye"
