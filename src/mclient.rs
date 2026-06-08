@@ -2725,7 +2725,7 @@ pub(crate) async fn media_upload(
     }
 }
 
-/// Download one or more files from the server based on XMC URI.
+/// Download one or more files from the server based on MXC URI.
 /// Allows various Mime formats.
 pub(crate) async fn media_download(
     client: &Client,
@@ -2845,7 +2845,7 @@ pub(crate) async fn media_download(
 
 // Todo: remove media content thumbnails
 
-/// Delete one or more files from the server based on XMC URI.
+/// Delete one or more files from the server based on MXC URI.
 /// Does not delete Thumbnails.
 pub(crate) async fn media_delete(
     client: &Client,
@@ -2884,7 +2884,7 @@ pub(crate) async fn media_delete(
     }
 }
 
-/// Convert one or more XMC URIs to HTTP URLs. This is for legacy reasons
+/// Convert one or more MXC URIs to HTTP URLs. This is for legacy reasons
 /// and compatibility with Python version of matrix-commander.
 /// This works without a server and without being logged in.
 /// Converts a string like "mxc://matrix.server.org/SomeStrangeUriKey"

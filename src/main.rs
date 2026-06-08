@@ -1970,7 +1970,7 @@ pub struct Args {
     /// you can just provide the MXC id, i.e. the part after
     /// the last slash.
     /// The syntax of the provided MXC URIs will be verified.
-    /// The existence of content for the XMC URI will not be checked.
+    /// The existence of content for the MXC URI will not be checked.
     // This works without a server or without being logged in.
     #[arg(long, alias = "mxc-to-http", value_name = "MXC_URI", num_args(0..), )]
     media_mxc_to_http: Vec<OwnedMxcUri>,
