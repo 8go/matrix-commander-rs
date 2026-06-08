@@ -114,8 +114,6 @@ const PKG_REPOSITORY_O: Option<&str> = option_env!("CARGO_PKG_REPOSITORY");
 const PKG_REPOSITORY: &str = "https://github.com/8go/matrix-commander-rs/";
 /// default name for login credentials JSON file
 const CREDENTIALS_FILE_DEFAULT: &str = "credentials.json";
-/// depreciated default directory to be used for persistent storage, remove in v0.5 todo
-const DEPRECIATED_STORE_DIR_DEFAULT: &str = "sledstore/";
 /// default directory to be used by end-to-end encrypted protocol for persistent storage
 const STORE_DIR_DEFAULT: &str = "store/";
 /// default timeouts for waiting for the Matrix server, in seconds
@@ -546,9 +544,9 @@ enum Listen {
     /// Forever: Indicates to listen forever in *all* rooms, until process is killed manually.
     /// This is the only option that remains in the event loop.
     Forever,
-    /// Tail: Indicates to get the last N messages from the specified romm(s) and then continue
+    /// Tail: Indicates to get the last N messages from the specified room(s) and then continue
     Tail,
-    /// All: Indicates to get *all* the messages from from the specified romm(s) and then continue
+    /// All: Indicates to get *all* the messages from the specified room(s) and then continue
     All,
 }
 
@@ -605,11 +603,11 @@ enum LogLevel {
     Error,
     /// Warn: Indicates to print warnings and errors
     Warn,
-    /// Info: Indicates to to print info, warn and errors
+    /// Info: Indicates to print info, warn and errors
     Info,
-    /// Debug: Indicates to to print debug and the rest
+    /// Debug: Indicates to print debug and the rest
     Debug,
-    /// Trace: Indicates to to print everything
+    /// Trace: Indicates to print everything
     Trace,
 }
 
@@ -659,9 +657,9 @@ pub enum Output {
     Text,
     /// Json: Indicates to print output in Json format
     Json,
-    /// Json Max: Indicates to to print the maximum anount of output in Json format
+    /// Json Max: Indicates to print the maximum amount of output in Json format
     JsonMax,
-    /// Json Spec: Indicates to to print output in Json format, but only data that is according to Matrix Specifications
+    /// Json Spec: Indicates to print output in Json format, but only data that is according to Matrix Specifications
     JsonSpec,
 }
 
@@ -766,7 +764,7 @@ pub struct Args {
 
     /// Prints README.md file, the documenation in Markdown.
     /// Details:: The README.md file will be downloaded from
-    /// Github. It is a Markdown file and it is best viewed with a
+    /// GitHub. It is a Markdown file and it is best viewed with a
     /// Markdown viewer.
     /// See also --usage, --help and --manual.
     #[arg(long)]
@@ -783,7 +781,7 @@ pub struct Args {
     /// --log-level to '--log-level debug'.
     /// If used twice as in '-d -d' it will set and/or overwrite
     /// --log-level to '--log-level debug debug'.
-    /// And third or futher occurance of '-d' will be ignored.
+    /// And third or futher occurrence of '-d' will be ignored.
     /// See also '--log-level'. '-d' takes precedence over '--log-level'.
     /// Additionally, have a look also at the option '--verbose'.
     #[arg(short, long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
@@ -796,10 +794,10 @@ pub struct Args {
     /// If used with one value specified this value is assigned to the
     /// log level of matrix-commander-rs.
     /// If used with two values specified the first value is assigned to the
-    /// log level of matrix-commander-rs. The second value is asigned to the
+    /// log level of matrix-commander-rs. The second value is assigned to the
     /// lower level modules.
     /// More than two values should not be specified.
-    /// --debug overwrites -log-level.
+    /// --debug overwrites --log-level.
     /// See also '--debug' and '--verbose'.
     /// Alternatively you can use the RUST_LOG environment variable.
     /// An example use of RUST_LOG is to use neither --log-level nor --debug,
@@ -908,7 +906,7 @@ pub struct Args {
     /// By default, no
     /// verification is performed.
     /// Verification is currently offered via Manual-Device, Manual-User, Emoji and Emoji-Req.
-    /// Do verification in this order: 1) bottstrap first with -bootstrap,
+    /// Do verification in this order: 1) bootstrap first with --bootstrap,
     /// 2) perform both manual verifications, and 3) perform emoji verification.
     /// --verify emoji has been tested against Element in Firefox browser and against
     /// Element app on Android phone. Both has been working successfully in Sept 2024.
@@ -918,7 +916,7 @@ pub struct Args {
     /// Manual verification is simpler but does less.
     /// Try: '--bootstrap --password mypassword --verify manual-device' or
     /// '--bootstrap --password mypassword --verify manual-user'.
-    /// Manual only verfies devices or users one-directionally. See
+    /// Manual only verifies devices or users one-directionally. See
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
     /// and
     /// https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
@@ -926,7 +924,7 @@ pub struct Args {
     /// manual-device can only verify its own devices, not other users' devices.
     /// manual-user can trust other users. So, with manual-user also use the --user option
     /// to specify one or multiple users. With manual-user first trust yourself, by
-    /// setting --user to yourself, or omitting -user in which case it will default to itself.
+    /// setting --user to yourself, or omitting --user in which case it will default to itself.
     /// One should first do 'manual-device' and 'manual-user' verification and
     /// then 'emoji' or 'emoji-req' verification.
     /// Both 'emoji' as well as 'emoji-req' perform emoji verification.
@@ -937,7 +935,7 @@ pub struct Args {
     /// While verification is optional it is highly recommended, and it
     /// is recommended to be done right after (or together with) the
     /// --login action. Verification is always interactive, i.e. it
-    /// required keyboard input.
+    /// requires keyboard input.
     /// Verification questions
     /// will be printed on stdout and the user has to respond
     /// via the keyboard to accept or reject verification.
@@ -1024,7 +1022,7 @@ pub struct Args {
 
     /// Optional argument to specify the user for --login.
     /// Details::
-    /// This gives the otion to specify the user id for login.
+    /// This gives the option to specify the user id for login.
     /// For '--login sso' the --user-login is not needed as user id can be
     /// obtained from server via SSO. For '--login password', if not
     /// provided it will be queried via keyboard. A full user id like
@@ -1139,15 +1137,15 @@ pub struct Args {
     #[arg(short, long, num_args(0..), )]
     message: Vec<String>,
 
-    /// Specify the message format as MarkDown.
+    /// Specify the message format as Markdown.
     /// Details::
     /// There are 3 message formats for '--message'.
-    /// Plain text, MarkDown, and Code. By default, if no
+    /// Plain text, Markdown, and Code. By default, if no
     /// command line options are specified, 'plain text'
     /// will be used. Use '--markdown' or '--code' to set
-    /// the format to MarkDown or Code respectively.
+    /// the format to Markdown or Code respectively.
     /// '--markdown' allows sending of text
-    /// formatted in MarkDown language. '--code' allows
+    /// formatted in Markdown language. '--code' allows
     /// sending of text as a Code block.
     #[arg(long)]
     markdown: bool,
@@ -1155,12 +1153,12 @@ pub struct Args {
     /// Specify the message format as Code.
     /// Details::
     /// There are 3 message formats for '--message'.
-    /// Plain text, MarkDown, and Code. By default, if no
+    /// Plain text, Markdown, and Code. By default, if no
     /// command line options are specified, 'plain text'
     /// will be used. Use '--markdown' or '--code' to set
-    /// the format to MarkDown or Code respectively.
+    /// the format to Markdown or Code respectively.
     /// '--markdown' allows sending of text
-    /// formatted in MarkDown language. '--code' allows
+    /// formatted in Markdown language. '--code' allows
     /// sending of text as a Code block.
     #[arg(long)]
     code: bool,
@@ -1350,7 +1348,7 @@ pub struct Args {
     /// text. If you have chosen 'json', the output will be
     /// formatted as JSON. The content of the JSON object
     /// matches the data provided by the matrix-nio SDK. In
-    /// some occassions the output is enhanced by having a few
+    /// some occasions the output is enhanced by having a few
     /// extra data items added for convenience. In most cases
     /// the output will be processed by other programs rather
     /// than read by humans. Option 'json-max' is practically
@@ -1396,7 +1394,7 @@ pub struct Args {
     /// information of these rooms will be fetched. If no
     /// room is specified, nothing will be done.
     /// If you want the room information for the
-    /// pre-configured default room specify the shortcut '-'.
+    /// preconfigured default room specify the shortcut '-'.
     /// Rooms can be given via room id (e.g.
     /// '\!SomeRoomId:matrix.example.com'), canonical (full)
     /// room alias (e.g. '#SomeRoomAlias:matrix.example.com'),
@@ -1430,7 +1428,7 @@ pub struct Args {
     /// with room id, alias, name and topic will be printed
     /// to stdout. If
     /// you are not interested in an alias, provide an empty
-    /// string like ''. The alias provided must be in canocial
+    /// string like ''. The alias provided must be in canonical
     /// local form, i.e. if you want a final full alias like
     /// '#SomeRoomAlias:matrix.example.com' you must provide
     /// the string 'SomeRoomAlias'. The user must be permitted
@@ -1510,7 +1508,7 @@ pub struct Args {
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-invite. The user must have
     /// permissions to invite users.
-    /// Use the shortcut '-' to specify the pre-configured
+    /// Use the shortcut '-' to specify the preconfigured
     /// default room of 'matrix-commander-rs' as room.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_invite: Vec<String>,
@@ -1521,7 +1519,7 @@ pub struct Args {
     /// aliases can be specified. The room (or multiple ones)
     /// provided in the arguments will be joined. The user
     /// must have permissions to join these rooms.
-    /// Use the shortcut '-' to specify the pre-configured
+    /// Use the shortcut '-' to specify the preconfigured
     /// default room of 'matrix-commander-rs' as room.
     /// Note, no --user on this feature as the user is
     /// always the user of 'matrix-commander-rs'.
@@ -1535,7 +1533,7 @@ pub struct Args {
     /// as arguments to this option, i.e. as arguments to
     /// --room-ban. The user must have permissions to ban
     /// users.
-    /// Use the shortcut '-' to specify the pre-configured
+    /// Use the shortcut '-' to specify the preconfigured
     /// default room of 'matrix-commander-rs' as room.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_ban: Vec<String>,
@@ -1546,7 +1544,7 @@ pub struct Args {
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-unban. The user must have
     /// permissions to unban users.
-    /// Use the shortcut '-' to specify the pre-configured
+    /// Use the shortcut '-' to specify the preconfigured
     /// default room of 'matrix-commander-rs' as room.
     /// Note, this is currently not implemented in the
     /// matrix-sdk API. This feature will currently return
@@ -1560,7 +1558,7 @@ pub struct Args {
     /// the rooms as arguments to this option, i.e. as
     /// arguments to --room-kick. The user must have
     /// permissions to kick users.
-    /// Use the shortcut '-' to specify the pre-configured
+    /// Use the shortcut '-' to specify the preconfigured
     /// default room of 'matrix-commander-rs' as room.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     room_kick: Vec<String>,
@@ -1591,7 +1589,7 @@ pub struct Args {
     /// Provide one or more room ids. For each room given
     /// encryption will be enabled. You must be member of the
     /// room in order to be able to enable encryption. Use
-    /// shortcut '-' to enable encryption in the pre-configured
+    /// shortcut '-' to enable encryption in the preconfigured
     /// default room. Enabling an already enabled room will
     /// do nothing and cause no error.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
@@ -1701,7 +1699,7 @@ pub struct Args {
     /// If you want to print the joined members of all
     /// rooms that you are member of, then use the special
     /// shortcut character '*'. If you want the members of
-    /// the pre-configured default room, use shortcut '-'.
+    /// the preconfigured default room, use shortcut '-'.
     #[arg(long, num_args(0..), value_name = "ROOM", )]
     joined_members: Vec<String>,
 
@@ -1800,7 +1798,7 @@ pub struct Args {
     /// Get your own avatar.
     /// Details::
     /// Get the avatar of itself, i.e. the
-    /// 'matrix-commander-rs' user account. Spefify a
+    /// 'matrix-commander-rs' user account. Specify a
     /// file optionally with path to store the image.
     /// E.g. --get-avatar "./avatar.png".
     #[arg(long, value_name = "FILE")]
@@ -1809,7 +1807,7 @@ pub struct Args {
     /// Set your own avatar.
     /// Details::
     /// Set, i.e. upload, an image to be used as avatar for
-    /// 'matrix-commander-rs' user account. Spefify a
+    /// 'matrix-commander-rs' user account. Specify a
     /// file optionally with path with the image. If the MIME
     /// type of the image cannot be determined, it will
     /// assume 'PNG' as default.
@@ -1829,7 +1827,7 @@ pub struct Args {
     /// Set your own avatar URL.
     /// Details::
     /// Set the avatar MXC URI of the URL to be used as avatar for
-    /// the 'matrix-commander-rs' user account. Spefify a
+    /// the 'matrix-commander-rs' user account. Specify a
     /// MXC URI.
     /// E.g. --set-avatar-url "mxc://matrix.server.org/SomeStrangeStringOfYourMxcUri".
     #[arg(long, alias = "upload-avatar-url", value_name = "MAX_URI")]
@@ -1853,7 +1851,7 @@ pub struct Args {
     /// Set your own display name.
     /// Details::
     /// Set the display name of
-    /// the 'matrix-commander-rs' user account. Spefify a
+    /// the 'matrix-commander-rs' user account. Specify a
     /// name.
     #[arg(long, value_name = "NAME")]
     set_display_name: Option<String>,
@@ -1971,7 +1969,7 @@ pub struct Args {
     /// you can just provide the MXC id, i.e. the part after
     /// the last slash.
     /// The syntax of the provided MXC URIs will be verified.
-    /// The existance of content for the XMC URI will not be checked.
+    /// The existence of content for the XMC URI will not be checked.
     // This works without a server or without being logged in.
     #[arg(long, alias = "mxc-to-http", value_name = "MXC_URI", num_args(0..), )]
     media_mxc_to_http: Vec<OwnedMxcUri>,
@@ -2293,18 +2291,6 @@ fn credentials_exist(ap: &Args) -> bool {
         debug!("{:?} does not exist or is not a file.", ap);
     }
     exists
-}
-
-/// Gets the *default* path (terminating in a directory) of the store directory
-/// The default path might not be the actual path as it can be overwritten with command line
-/// options. To be removed in v0.5. : todo
-fn get_store_depreciated_default_path() -> PathBuf {
-    let dir = ProjectDirs::from_path(PathBuf::from(get_prog_without_ext())).unwrap();
-    // fs::create_dir_all(dir.data_dir());
-    let dp = dir.data_dir().join(DEPRECIATED_STORE_DIR_DEFAULT);
-    debug!("Default project directory is {:?}.", dir.data_dir());
-    debug!("Ddepreciated default store directory is {}.", dp.display());
-    dp
 }
 
 /// Gets the *default* path (terminating in a directory) of the store directory
@@ -3406,7 +3392,7 @@ async fn main() -> Result<(), Error> {
                 .with_writer(io::stderr)
                 .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
                 .init();
-            debug!("Neither --debug nor --log-level was used. Using environment vaiable RUST_LOG.");
+            debug!("Neither --debug nor --log-level was used. Using environment variable RUST_LOG.");
         }
         Some(llvec) => {
             if llvec.len() == 1 {
@@ -3425,7 +3411,7 @@ async fn main() -> Result<(), Error> {
                     .init();
                 debug!(
                     "The --debug or --log-level was used once or with one value. \
-                    Specifying logging equivalent to RUST_LOG seting of '{}'.",
+                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
                     rlogstr
                 );
             } else {
@@ -3447,7 +3433,7 @@ async fn main() -> Result<(), Error> {
                     .init();
                 debug!(
                     "The --debug or --log-level was used twice or with two values. \
-                    Specifying logging equivalent to RUST_LOG seting of '{}'.",
+                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
                     rlogstr
                 );
             }
@@ -3722,7 +3708,7 @@ async fn main() -> Result<(), Error> {
             // pre-processing of CLI arguments, filtering, replacing shortcuts, etc.
             let default_room =
                 get_room_default_from_credentials(&client, ap.creds.as_ref().unwrap()).await;
-            // Todo: port number is not handled in hostrname, could be matrix.server.org:90
+            // Todo: port number is not handled in hostname, could be matrix.server.org:90
             let creds = ap.creds.clone().unwrap();
             let hostname = creds.homeserver.host_str().unwrap(); // matrix.server.org
             set_rooms(&mut ap, &default_room); // if no rooms in --room, set rooms to default room from credentials file
@@ -3790,25 +3776,6 @@ async fn main() -> Result<(), Error> {
                 }
                 ap.listen = Listen::Tail
             }
-
-            // remove in version 0.5 : todo
-            warn!(
-                "Versions 0.4+ are incompatible with previous versions v0.3-. \
-            The default location of the store has changed. \
-            The directory name of the default store used to be 'sledstore'. \
-            Now it is just 'store'. The program attempts to rename \
-            the store's directory name automatically. E.g. on Linux it tries \
-            to automatically rename \
-            '~/.local/share/matrix-commander-rs/sledstore/' to \
-            '~/.local/share/matrix-commander-rs/store/'. \
-            If you have used the default store name in the past, \
-            and automatical renaming is failing for you, then rename the store's \
-            directory name from \
-            'sledstore' to 'store' manually. Also, some JSON and \
-            text output is different than in previous version. If you are parsing \
-            the output you should do careful testing to adapt to the changed \
-            output."
-            );
 
             // top-priority actions
 

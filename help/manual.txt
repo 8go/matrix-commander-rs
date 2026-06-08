@@ -44,7 +44,7 @@ Options:
 
       --readme
           Prints README.md file, the documenation in Markdown. Details:: The
-          README.md file will be downloaded from Github. It is a Markdown file
+          README.md file will be downloaded from GitHub. It is a Markdown file
           and it is best viewed with a Markdown viewer. See also --usage,
           --help and --manual
 
@@ -56,7 +56,7 @@ Options:
           DEBUG'. If used once as in '-d' it will set and/or overwrite
           --log-level to '--log-level debug'. If used twice as in '-d -d' it
           will set and/or overwrite --log-level to '--log-level debug debug'.
-          And third or futher occurance of '-d' will be ignored. See also
+          And third or futher occurrence of '-d' will be ignored. See also
           '--log-level'. '-d' takes precedence over '--log-level'.
           Additionally, have a look also at the option '--verbose'
 
@@ -66,9 +66,9 @@ Options:
           'RUST_LOG' will be used. If used with one value specified this value
           is assigned to the log level of matrix-commander-rs. If used with two
           values specified the first value is assigned to the log level of
-          matrix-commander-rs. The second value is asigned to the lower level
+          matrix-commander-rs. The second value is assigned to the lower level
           modules. More than two values should not be specified. --debug
-          overwrites -log-level. See also '--debug' and '--verbose'.
+          overwrites --log-level. See also '--debug' and '--verbose'.
           Alternatively you can use the RUST_LOG environment variable. An
           example use of RUST_LOG is to use neither --log-level nor --debug,
           and to set RUST_LOG="error,matrix_commander_rs=debug" which turns off
@@ -79,9 +79,9 @@ Options:
           - none:  None: not set, default
           - error: Error: Indicates to print only errors
           - warn:  Warn: Indicates to print warnings and errors
-          - info:  Info: Indicates to to print info, warn and errors
-          - debug: Debug: Indicates to to print debug and the rest
-          - trace: Trace: Indicates to to print everything
+          - info:  Info: Indicates to print info, warn and errors
+          - debug: Debug: Indicates to print debug and the rest
+          - trace: Trace: Indicates to print everything
 
       --verbose...
           Set the verbosity level. Details:: If not used, then verbosity will
@@ -160,7 +160,7 @@ Options:
           Perform account verification. Details:: By default, no verification
           is performed. Verification is currently offered via Manual-Device,
           Manual-User, Emoji and Emoji-Req. Do verification in this order: 1)
-          bottstrap first with -bootstrap, 2) perform both manual
+          bootstrap first with --bootstrap, 2) perform both manual
           verifications, and 3) perform emoji verification. --verify emoji has
           been tested against Element in Firefox browser and against Element
           app on Android phone. Both has been working successfully in Sept
@@ -170,8 +170,8 @@ Options:
           emojis first on the cell phone. Manual verification is simpler but
           does less. Try: '--bootstrap --password mypassword --verify
           manual-device' or '--bootstrap --password mypassword --verify
-          manual-user'. Manual only verfies devices or users one-directionally.
-          See
+          manual-user'. Manual only verifies devices or users
+          one-directionally. See
           https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.Device.html#method.verify
           and
           https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
@@ -179,7 +179,7 @@ Options:
           its own devices, not other users' devices. manual-user can trust
           other users. So, with manual-user also use the --user option to
           specify one or multiple users. With manual-user first trust yourself,
-          by setting --user to yourself, or omitting -user in which case it
+          by setting --user to yourself, or omitting --user in which case it
           will default to itself. One should first do 'manual-device' and
           'manual-user' verification and then 'emoji' or 'emoji-req'
           verification. Both 'emoji' as well as 'emoji-req' perform emoji
@@ -190,7 +190,7 @@ Options:
           without a pipe. While verification is optional it is highly
           recommended, and it is recommended to be done right after (or
           together with) the --login action. Verification is always
-          interactive, i.e. it required keyboard input. Verification questions
+          interactive, i.e. it requires keyboard input. Verification questions
           will be printed on stdout and the user has to respond via the
           keyboard to accept or reject verification. Once verification is
           complete, the program may be run as a service. Different Matrix
@@ -269,7 +269,7 @@ Options:
 
       --user-login <USER_LOGIN>
           Optional argument to specify the user for --login. Details:: This
-          gives the otion to specify the user id for login. For '--login sso'
+          gives the option to specify the user id for login. For '--login sso'
           the --user-login is not needed as user id can be obtained from server
           via SSO. For '--login password', if not provided it will be queried
           via keyboard. A full user id like '@john:example.com', a partial user
@@ -344,20 +344,20 @@ Options:
           '_' can be used
 
       --markdown
-          Specify the message format as MarkDown. Details:: There are 3 message
-          formats for '--message'. Plain text, MarkDown, and Code. By default,
+          Specify the message format as Markdown. Details:: There are 3 message
+          formats for '--message'. Plain text, Markdown, and Code. By default,
           if no command line options are specified, 'plain text' will be used.
-          Use '--markdown' or '--code' to set the format to MarkDown or Code
+          Use '--markdown' or '--code' to set the format to Markdown or Code
           respectively. '--markdown' allows sending of text formatted in
-          MarkDown language. '--code' allows sending of text as a Code block
+          Markdown language. '--code' allows sending of text as a Code block
 
       --code
           Specify the message format as Code. Details:: There are 3 message
-          formats for '--message'. Plain text, MarkDown, and Code. By default,
+          formats for '--message'. Plain text, Markdown, and Code. By default,
           if no command line options are specified, 'plain text' will be used.
-          Use '--markdown' or '--code' to set the format to MarkDown or Code
+          Use '--markdown' or '--code' to set the format to Markdown or Code
           respectively. '--markdown' allows sending of text formatted in
-          MarkDown language. '--code' allows sending of text as a Code block
+          Markdown language. '--code' allows sending of text as a Code block
 
       --html
           Send message as format "HTML" Details:: If not specified, message
@@ -461,9 +461,9 @@ Options:
             process is killed manually. This is the only option that remains in
             the event loop
           - tail:    Tail: Indicates to get the last N messages from the
-            specified romm(s) and then continue
-          - all:     All: Indicates to get *all* the messages from from the
-            specified romm(s) and then continue
+            specified room(s) and then continue
+          - all:     All: Indicates to get *all* the messages from the
+            specified room(s) and then continue
 
       --tail <TAIL>
           Get the last messages. Details:: The '--tail' option reads and prints
@@ -498,7 +498,7 @@ Options:
           be formatted with the intention to be consumed by humans, i.e.
           readable text. If you have chosen 'json', the output will be
           formatted as JSON. The content of the JSON object matches the data
-          provided by the matrix-nio SDK. In some occassions the output is
+          provided by the matrix-nio SDK. In some occasions the output is
           enhanced by having a few extra data items added for convenience. In
           most cases the output will be processed by other programs rather than
           read by humans. Option 'json-max' is practically the same as 'json',
@@ -519,10 +519,10 @@ Options:
           Possible values:
           - text:      Text: Indicates to print human readable text, default
           - json:      Json: Indicates to print output in Json format
-          - json-max:  Json Max: Indicates to to print the maximum anount of
+          - json-max:  Json Max: Indicates to print the maximum amount of
             output in Json format
-          - json-spec: Json Spec: Indicates to to print output in Json format,
-            but only data that is according to Matrix Specifications
+          - json-spec: Json Spec: Indicates to print output in Json format, but
+            only data that is according to Matrix Specifications
 
       --file-name [<FILE_NAME>...]
           Specify one or multiple file names for some actions. Details:: This
@@ -537,7 +537,7 @@ Options:
           as 'room name' or incorrectly even as room title. If one or more
           rooms are given, the room information of these rooms will be fetched.
           If no room is specified, nothing will be done. If you want the room
-          information for the pre-configured default room specify the shortcut
+          information for the preconfigured default room specify the shortcut
           '-'. Rooms can be given via room id (e.g.
           '\!SomeRoomId:matrix.example.com'), canonical (full) room alias (e.g.
           '#SomeRoomAlias:matrix.example.com'), or short alias (e.g.
@@ -559,7 +559,7 @@ Options:
           For each created room one line with room id, alias, name and topic
           will be printed to stdout. If you are not interested in an alias,
           provide an empty string like ''. The alias provided must be in
-          canocial local form, i.e. if you want a final full alias like
+          canonical local form, i.e. if you want a final full alias like
           '#SomeRoomAlias:matrix.example.com' you must provide the string
           'SomeRoomAlias'. The user must be permitted to create rooms. Combine
           --room-create with --name and --topic to add names and topics to the
@@ -608,14 +608,14 @@ Options:
           Specify the user(s) as arguments to --user. Specify the rooms as
           arguments to this option, i.e. as arguments to --room-invite. The
           user must have permissions to invite users. Use the shortcut '-' to
-          specify the pre-configured default room of 'matrix-commander-rs' as
+          specify the preconfigured default room of 'matrix-commander-rs' as
           room
 
       --room-join [<ROOM>...]
           Join one or multiple rooms. Details:: One or multiple room aliases
           can be specified. The room (or multiple ones) provided in the
           arguments will be joined. The user must have permissions to join
-          these rooms. Use the shortcut '-' to specify the pre-configured
+          these rooms. Use the shortcut '-' to specify the preconfigured
           default room of 'matrix-commander-rs' as room. Note, no --user on
           this feature as the user is always the user of 'matrix-commander-rs'
 
@@ -624,14 +624,14 @@ Options:
           user(s) as arguments to --user. Specify the rooms as arguments to
           this option, i.e. as arguments to --room-ban. The user must have
           permissions to ban users. Use the shortcut '-' to specify the
-          pre-configured default room of 'matrix-commander-rs' as room
+          preconfigured default room of 'matrix-commander-rs' as room
 
       --room-unban [<ROOM>...]
           Unban one ore more users from one or more rooms. Details:: Specify
           the user(s) as arguments to --user. Specify the rooms as arguments to
           this option, i.e. as arguments to --room-unban. The user must have
           permissions to unban users. Use the shortcut '-' to specify the
-          pre-configured default room of 'matrix-commander-rs' as room. Note,
+          preconfigured default room of 'matrix-commander-rs' as room. Note,
           this is currently not implemented in the matrix-sdk API. This feature
           will currently return an error
 
@@ -640,7 +640,7 @@ Options:
           user(s) as arguments to --user. Specify the rooms as arguments to
           this option, i.e. as arguments to --room-kick. The user must have
           permissions to kick users. Use the shortcut '-' to specify the
-          pre-configured default room of 'matrix-commander-rs' as room
+          preconfigured default room of 'matrix-commander-rs' as room
 
       --room-resolve-alias [<ALIAS>...]
           Resolves room aliases to room ids. Details:: Resolves a room alias to
@@ -661,7 +661,7 @@ Options:
           Enable encryption for one or multiple rooms. Details:: Provide one or
           more room ids. For each room given encryption will be enabled. You
           must be member of the room in order to be able to enable encryption.
-          Use shortcut '-' to enable encryption in the pre-configured default
+          Use shortcut '-' to enable encryption in the preconfigured default
           room. Enabling an already enabled room will do nothing and cause no
           error
 
@@ -729,7 +729,7 @@ Options:
           Print the list of joined members for one or multiple rooms. Details::
           If you want to print the joined members of all rooms that you are
           member of, then use the special shortcut character '*'. If you want
-          the members of the pre-configured default room, use shortcut '-'
+          the members of the preconfigured default room, use shortcut '-'
 
       --delete-device [<DEVICE>...]
           Delete one or multiple devices. Details:: By default devices
@@ -768,12 +768,12 @@ Options:
 
       --get-avatar <FILE>
           Get your own avatar. Details:: Get the avatar of itself, i.e. the
-          'matrix-commander-rs' user account. Spefify a file optionally with
+          'matrix-commander-rs' user account. Specify a file optionally with
           path to store the image. E.g. --get-avatar "./avatar.png"
 
       --set-avatar <FILE>
           Set your own avatar. Details:: Set, i.e. upload, an image to be used
-          as avatar for 'matrix-commander-rs' user account. Spefify a file
+          as avatar for 'matrix-commander-rs' user account. Specify a file
           optionally with path with the image. If the MIME type of the image
           cannot be determined, it will assume 'PNG' as default. E.g.
           --set-avatar "./avatar.jpg". It returns a line with the MRX URI of
@@ -786,7 +786,7 @@ Options:
       --set-avatar-url <MAX_URI>
           Set your own avatar URL. Details:: Set the avatar MXC URI of the URL
           to be used as avatar for the 'matrix-commander-rs' user account.
-          Spefify a MXC URI. E.g. --set-avatar-url
+          Specify a MXC URI. E.g. --set-avatar-url
           "mxc://matrix.server.org/SomeStrangeStringOfYourMxcUri"
 
       --unset-avatar-url
@@ -800,7 +800,7 @@ Options:
 
       --set-display-name <NAME>
           Set your own display name. Details:: Set the display name of the
-          'matrix-commander-rs' user account. Spefify a name
+          'matrix-commander-rs' user account. Specify a name
 
       --get-profile
           Get your own profile. Details:: Get the profile of itself, i.e. of
@@ -870,7 +870,7 @@ Options:
           look something like this 'mxc://example.com/SomeStrangeUriKey'.
           Alternatively, you can just provide the MXC id, i.e. the part after
           the last slash. The syntax of the provided MXC URIs will be verified.
-          The existance of content for the XMC URI will not be checked
+          The existence of content for the XMC URI will not be checked
 
       --get-masterkey
           Get your own master key. Details:: Get the master key of itself, i.e.
@@ -878,4 +878,3 @@ Options:
           safe
 
 PS: Also have a look at scripts/matrix-commander-rs-tui.
-

@@ -80,6 +80,9 @@ use matrix_sdk::{
         // device_id, room_id, session_id, user_id, OwnedDeviceId, OwnedUserId,
         UInt,
     },
+    deserialized_responses::{
+        TimelineEventKind
+    },
     Client,
 };
 
@@ -150,7 +153,7 @@ fn handle_originalsyncmessagelikeevent(
                     body, source, info, ..
                 } = audiomessageeventcontent;
                 println!(
-                    "Message: type Image: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
+                    "Message: type Audio: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
                     body, room_id, ev.sender, ev.event_id, source, info,
                 );
             }
@@ -160,7 +163,7 @@ fn handle_originalsyncmessagelikeevent(
                     body, source, info, ..
                 } = videomessageeventcontent;
                 println!(
-                    "Message: type Image: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
+                    "Message: type Video: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
                     body, room_id, ev.sender, ev.event_id, source, info,
                 );
             }
@@ -677,17 +680,21 @@ pub(crate) async fn listen_tail(
             let anytimelineevent = &chunk[chunk.len() - 1 - index]; // reverse ordering, getting older msg first
                                                                     // Todo : dump the JSON serialized string via Json API
 
-            let rawevent: AnyTimelineEvent = anytimelineevent.event.deserialize().unwrap();
+            let rawevent = if let TimelineEventKind::Decrypted(decrypted) = &anytimelineevent.kind {
+                &decrypted.event
+            } else {
+                panic!()
+            };
             // print_type_of(&rawevent); // ruma_common::events::enums::AnyTimelineEvent
             debug!("rawevent = value is {:?}\n", rawevent);
             // rawevent = Ok(MessageLike(RoomMessage(Original(OriginalMessageLikeEvent { content: RoomMessageEventContent {
             // msgtype: Text(TextMessageEventContent { body: "54", formatted: None }), relates_to: Some(_Custom) }, event_id: "$xxx", sender: "@u:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!rrr:some.homeserver.org", unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } }))))
             if !output.is_text() {
-                println!("{}", anytimelineevent.event.json());
+                println!("{}", rawevent.json());
                 continue;
             }
 
-            match rawevent {
+            match rawevent.deserialize().unwrap() {
                 AnyTimelineEvent::MessageLike(anymessagelikeevent) => {
                     debug!("value: {:?}", anymessagelikeevent);
                     match anymessagelikeevent {

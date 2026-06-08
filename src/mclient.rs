@@ -32,15 +32,16 @@ use matrix_sdk::{
     config::{RequestConfig, StoreConfig, SyncSettings},
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
-    instant::Duration,
-    matrix_auth::{MatrixSession, MatrixSessionTokens},
-    media::{MediaFormat, MediaRequest},
+    authentication::{matrix::MatrixSession, SessionTokens},
+    media::{MediaFormat, MediaRequestParameters},
     room,
     room::{Room, RoomMember},
     ruma::{
+        time::Duration,
         api::client::room::create_room::v3::Request as CreateRoomRequest,
         api::client::room::create_room::v3::RoomPreset,
         api::client::room::Visibility,
+        api::client::profile::{DisplayName, AvatarUrl},
         api::client::uiaa,
         events::room::encryption::RoomEncryptionEventContent,
         // OwnedRoomOrAliasId, OwnedServerName,
@@ -61,7 +62,7 @@ use matrix_sdk::{
             TextMessageEventContent,
         },
         events::room::name::RoomNameEventContent,
-        events::room::power_levels::RoomPowerLevelsEventContent,
+        events::room::power_levels::{RoomPowerLevelsEventContent/*, UserPowerLevel*/},
         events::room::topic::RoomTopicEventContent,
         events::room::MediaSource,
         events::AnyInitialStateEvent,
@@ -90,7 +91,7 @@ use matrix_sdk::{
 
 // from main.rs
 use crate::{
-    credentials_exist, get_password, get_store_default_path, get_store_depreciated_default_path,
+    credentials_exist, get_password, get_store_default_path,
     Args, Credentials, Error, Listen, Output, Sync,
 };
 
@@ -239,7 +240,7 @@ pub(crate) async fn convert_to_full_mxc_uris(vecstr: &mut Vec<OwnedMxcUri>, defa
             i += 1;
             continue;
         }
-        let mxc = "mxc://".to_owned() + default_host + "/" + &s;
+        let mxc = format!("mxc://{default_host}/{s}");
         vecstr[i] = OwnedMxcUri::from(mxc);
         if !vecstr[i].is_valid() {
             error!(
@@ -388,7 +389,7 @@ pub(crate) async fn restore_login(credentials: &Credentials, ap: &Args) -> Resul
             user_id: credentials.user_id.clone(),
             device_id: credentials.device_id.clone(),
         },
-        tokens: MatrixSessionTokens {
+        tokens: SessionTokens {
             access_token: credentials.access_token.clone(),
             refresh_token: None,
         },
@@ -460,10 +461,14 @@ pub(crate) async fn login<'a>(
     let credentials = Credentials::new(
         homeserver.clone(),
         client.session_meta().unwrap().user_id.clone(),
-        client.matrix_auth().access_token().unwrap(),
+        client.access_token().unwrap(),
         client.session_meta().unwrap().device_id.clone(),
         room_default.to_string(),
-        client.matrix_auth().refresh_token(),
+        if let Some(refresh_token) = client.session().unwrap().get_refresh_token() {
+            Some(refresh_token.to_string())
+        } else {
+            None
+        }
     );
     credentials.save(&ap.credentials)?;
     // sync is needed even when --login is used,
@@ -482,37 +487,19 @@ pub(crate) async fn login<'a>(
 async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     // The location to save files to
     let sqlitestorehome = &ap.store;
-    // remove in version 0.5 : todo
-    // Incompatibility between v0.4 and v0.3-
     debug!(
         "Compare store names: {:?} {:?}",
         ap.store,
         get_store_default_path()
     );
-    if ap.store == get_store_default_path()
-        && !get_store_default_path().exists()
-        && get_store_depreciated_default_path().exists()
-    {
-        warn!(
-            "In order to correct incompatibility in version v0.4 the \
-            directory {:?} will be renamed to {:?}.",
-            get_store_depreciated_default_path(),
-            get_store_default_path()
-        );
-        fs::rename(
-            get_store_depreciated_default_path(),
-            get_store_default_path(),
-        )?;
-    }
     info!("Using sqlite store {:?}", &sqlitestorehome);
     // let builder = if let Some(proxy) = cli.proxy { builder.proxy(proxy) } else { builder };
     let builder = Client::builder()
         .homeserver_url(homeserver)
-        .store_config(StoreConfig::new())
+        .store_config(StoreConfig::new("".to_string()))
         .request_config(
             RequestConfig::new()
-                .timeout(Duration::from_secs(ap.timeout))
-                .retry_timeout(Duration::from_secs(ap.timeout)),
+                .timeout(Duration::from_secs(ap.timeout)),
         );
     let client = builder
         .sqlite_store(sqlitestorehome, None)
@@ -567,7 +554,7 @@ pub(crate) async fn bootstrap(client: &Client, ap: &mut Args) -> Result<(), Erro
 pub(crate) async fn verify(client: &Client, ap: &Args) -> Result<(), Error> {
     let userid = &ap.creds.as_ref().unwrap().user_id.clone();
     let deviceid = &ap.creds.as_ref().unwrap().device_id.clone();
-    debug!("Client logged in: {}", client.logged_in());
+    debug!("Client active: {}", client.is_active());
     debug!("Client user id: {}", userid);
     debug!("Client device id: {}", deviceid);
     debug!(
@@ -933,10 +920,10 @@ pub(crate) async fn set_display_name(
 /// Get profile of the current user.
 pub(crate) async fn get_profile(client: &Client, output: Output) -> Result<(), Error> {
     debug!("Get profile from server");
-    if let Ok(profile) = client.account().get_profile().await {
+    if let Ok(profile) = client.account().fetch_user_profile().await {
         debug!("Profile successfully. Profile {:?}", profile);
         print_json(
-            &json::object!(display_name: profile.displayname, avatar_url: profile.avatar_url.as_ref().map(|x| x.as_str())),
+            &json::object!(display_name: profile.get_static::<DisplayName>()?, avatar_url: profile.get_static::<AvatarUrl>()?.as_ref().map(|x| x.as_str())),
             output,
             false,
         );
@@ -1187,6 +1174,13 @@ pub(crate) fn print_rooms(
         Some(matrix_sdk::RoomState::Left) => {
             print_common_rooms(client.left_rooms(), output);
         }
+        Some(matrix_sdk::RoomState::Knocked) | Some(matrix_sdk::RoomState::Banned) => (),
+        /*Some(matrix_sdk::RoomState::Knocked) => {
+            print_common_rooms(client.knocked_rooms(), output);
+        }
+        Some(matrix_sdk::RoomState::Banned) => {
+            print_common_rooms(client.banned_rooms(), output);
+        }*/
     };
     Ok(())
 }
@@ -1215,7 +1209,7 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
     print_rooms(client, Some(matrix_sdk::RoomState::Left), output)
 }
 
-/// Create rooms, either noemal room or DM room:
+/// Create rooms, either normal room or DM room:
 /// For normal room, create one room for each alias name in the list.
 /// For DM room, create one DM room for each user name in the list.
 /// Alias name can be empty, i.e. ''.
@@ -1290,10 +1284,10 @@ pub(crate) async fn room_create(
             //     pub visibility: Visibility,  }
             let content =
                 RoomEncryptionEventContent::new(EventEncryptionAlgorithm::MegolmV1AesSha2);
-            let initstateev: InitialStateEvent<RoomEncryptionEventContent> = InitialStateEvent {
+            let initstateev: InitialStateEvent<RoomEncryptionEventContent> = InitialStateEvent::new(
+                EmptyStateKey,
                 content,
-                state_key: EmptyStateKey,
-            };
+            );
             let rawinitstateev = Raw::new(&initstateev)?;
             // let anyinitstateev: AnyInitialStateEvent =
             //     matrix_sdk::ruma::events::AnyInitialStateEvent::RoomEncryption(initstateev);
@@ -1380,8 +1374,8 @@ pub(crate) async fn room_create(
                         topic: to_opt(&topics2[i]),
                         invited: <std::string::String as AsRef<str>>::as_ref(&users2[i]),
                         direct: created_room.is_direct().await.unwrap_or(is_dm),
-                        encrypted: created_room.is_encrypted().await.unwrap_or(is_encrypted),
-                        visibility: if created_room.is_public() {
+                        encrypted: format!("{:?}", created_room.encryption_state()),
+                        visibility: if created_room.is_public().unwrap() {
                             "Public"
                         } else {
                             "Private"
@@ -1441,10 +1435,6 @@ pub(crate) async fn room_leave(
                     info!("Left room {:?} successfully.", id);
                     // Todo: does this work? Does not seem to work.
                     jroom.clone_info().mark_as_left();
-                    // Todo: starting v0.7 this sync() will no longer be necessary
-                    client
-                        .sync_once(SyncSettings::new().timeout(Duration::new(10, 0)))
-                        .await?; //todo: remove this it did not fix the problem.
                 }
                 Err(ref e) => {
                     error!("Error: leave() returned error {:?}.", e);
@@ -1911,7 +1901,7 @@ fn print_room_visibility(room_id: &OwnedRoomId, room: &Room, output: Output) {
             println!(
                 "Room:    {:?}    {:?}",
                 room_id,
-                if room.is_public() {
+                if room.is_public().unwrap() {
                     "public"
                 } else {
                     "private"
@@ -1923,7 +1913,7 @@ fn print_room_visibility(room_id: &OwnedRoomId, room: &Room, output: Output) {
             println!(
                 "{{\"room_id\": {:?}, \"public\": {}}}",
                 room_id,
-                room.is_public()
+                room.is_public().unwrap()
             );
         }
     }
@@ -2142,9 +2132,14 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                 display_name: &'a str,
                 name: &'a str,
                 avatar_url: &'a str,
-                power_level: i64,
+                //power_level: UserPowerLevel,
+                //power_level: MyUserPowerLevel,
                 membership: &'a str,
             }
+            /*#[derive(serde::Serialize, serde::Deserialize)]
+            struct MyUserPowerLevel<'a> {
+                power_level: UserPowerLevel,
+            }*/
             #[derive(serde::Serialize, serde::Deserialize)]
             struct MyRoom<'a> {
                 room_id: &'a str,
@@ -2157,7 +2152,7 @@ fn print_room_members(room_id: &OwnedRoomId, members: &[RoomMember], output: Out
                     display_name: m.display_name().unwrap_or(""),
                     name: m.name(),
                     avatar_url: m.avatar_url().unwrap_or("".into()).as_str(),
-                    power_level: m.power_level(),
+                    //power_level: m.power_level(),
                     membership: m.membership().as_str(),
                 };
                 mymembers.push(mymember);
@@ -2706,7 +2701,7 @@ pub(crate) async fn media_upload(
             );
             err_count += 1;
         } else {
-            match client.media().upload(&mime, data).await {
+            match client.media().upload(&mime, data, None).await {
                 Ok(response) => {
                     debug!("upload successful {:?}", response);
                     print_json(
@@ -2771,7 +2766,7 @@ pub(crate) async fn media_download(
                 10,
             ));
         }
-        let request = MediaRequest {
+        let request = MediaRequestParameters {
             source: MediaSource::Plain(mxc_uri.clone()),
             format: MediaFormat::File,
         };

@@ -61,7 +61,7 @@ Options:
   -m, --message [<MESSAGE>...]
           Send one or more messages.
       --markdown
-          Specify the message format as MarkDown.
+          Specify the message format as Markdown.
       --code
           Specify the message format as Code.
       --html

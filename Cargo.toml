@@ -28,11 +28,7 @@ colored = "3.0"
 directories = "6.0"
 futures-util = "0.3"
 json = "0.12"
-matrix-sdk = { version = "0.7", features = [
-    "markdown",
-    "anyhow",
-    "bundled-sqlite",
-] }
+matrix-sdk = { version = "0.16", features = ["markdown", "anyhow", "bundled-sqlite"] }
 mime = "0.3"
 mime_guess = "2.0"
 #
