@@ -103,7 +103,7 @@ jobs:
           ls -l
           echo ${TAG_NAME} > tag.txt
           cat tag.txt
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: plain-linux
           path: |
