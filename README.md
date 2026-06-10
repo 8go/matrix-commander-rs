@@ -13,6 +13,13 @@ alt="MC logo" height="150">
 # matrix-commander-rs
 simple but convenient CLI-based Matrix client app for sending, receiving, and much more
 
+# News
+
+For the reason of transparency and the reason of appreciation I would like to
+announce that as of June 2026 there is a new maintainer on the project: 
+[@Benjamin-Loison](https://github.com/Benjamin-Loison). He has full permissions including publishing new releases. 
+Welcome ❤️ and thanks.
+  
 # Help create this Rust program
 
 This Rust project is currently bare essentials. 
