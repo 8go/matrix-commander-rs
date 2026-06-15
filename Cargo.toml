@@ -39,7 +39,7 @@ mime_guess = "2.0"
 # see: https://stackoverflow.com/questions/68871193/pkg-config-error-during-rust-cross-compilation
 openssl = { version = '0.10', features = ["vendored"] }
 regex = "1.12"
-reqwest = "0.12"
+reqwest = "0.13"
 rpassword = "7.5"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
