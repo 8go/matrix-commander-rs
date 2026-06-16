@@ -6,11 +6,10 @@
 name: Test
 
 on:
-  # TURNED IT OFF IN SEPT 2024
-  # push:
-  #   branches: [ "main" ]
-  # pull_request:
-  #   branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
