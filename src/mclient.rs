@@ -32,6 +32,7 @@ use matrix_sdk::{
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
     authentication::{matrix::MatrixSession, SessionTokens},
+    cross_process_lock::CrossProcessLockConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
     media::{MediaFormat, MediaRequestParameters},
     room,
@@ -42,6 +43,7 @@ use matrix_sdk::{
         api::client::room::create_room::v3::RoomPreset,
         api::client::room::Visibility,
         api::client::uiaa,
+        api::client::uiaa::MatrixUserIdentifier,
         events::room::encryption::RoomEncryptionEventContent,
         // OwnedRoomOrAliasId, OwnedServerName,
         // device_id,
@@ -496,7 +498,7 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     // let builder = if let Some(proxy) = cli.proxy { builder.proxy(proxy) } else { builder };
     let builder = Client::builder()
         .homeserver_url(homeserver)
-        .store_config(StoreConfig::new("".to_string()))
+        .store_config(StoreConfig::new(CrossProcessLockConfig::MultiProcess { holder_name: "".to_owned()}))
         .request_config(RequestConfig::new().timeout(Duration::from_secs(ap.timeout)));
     let client = builder
         .sqlite_store(sqlitestorehome, None)
@@ -517,7 +519,7 @@ pub(crate) async fn bootstrap(client: &Client, ap: &mut Args) -> Result<(), Erro
         if let Err(e) = client.encryption().bootstrap_cross_signing(None).await {
             if let Some(response) = e.as_uiaa_response() {
                 let mut password = uiaa::Password::new(
-                    uiaa::UserIdentifier::UserIdOrLocalpart(userid.to_string()),
+                    uiaa::UserIdentifier::Matrix(MatrixUserIdentifier::new(userid.to_string())),
                     password.to_owned(),
                 );
                 password.session = response.session.clone();
@@ -2417,7 +2419,7 @@ pub(crate) async fn delete_devices(
         if let Some(info) = e.as_uiaa_response() {
             let mut password = uiaa::Password::new(
                 // full user id (@john:some.matrix.org), or just local part (john)
-                uiaa::UserIdentifier::UserIdOrLocalpart(user.to_string()),
+                uiaa::UserIdentifier::Matrix(MatrixUserIdentifier::new(user.to_string())),
                 password.to_string(),
             );
             password.session = info.session.clone();
