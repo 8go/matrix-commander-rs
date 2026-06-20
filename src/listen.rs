@@ -1,5 +1,5 @@
 //
-// https://www.github.com/8go/matrix-commander-rs
+// https://github.com/8go/matrix-commander-rs
 // listen.rs
 //
 
