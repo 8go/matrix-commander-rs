@@ -2,7 +2,7 @@
 
 # vipe (from moreutils) must be installed
 type vipe >/dev/null 2>&1 || {
-    echo "This script requires that you install \"vipe\" from the packge \"moreutils\"."
+    echo "This script requires that you install \"vipe\" from the package \"moreutils\"."
     echo "Read https://www.putorius.net/moreutils.html for installation instructions."
     echo "As an alternative you could also install \"vipe.sh\" from https://github.com/0mp/vipe.sh/blob/master/vipe.sh."
     exit 0
@@ -22,7 +22,7 @@ echo "Set env variables EDITOR and VISUAL to change the editor being used."
 echo "Use tab to select the correct arguments in the correct order."
 sleep 1
 # generate the short command options list
-# run it throu fzf, run it through editor, execute it
+# run it through fzf, run it through editor, execute it
 # shellcheck disable=SC2046 # quoting will
 PATH=".:./target/release/:./target/debug/:$PATH" $EXE --usage |
     sed '1,/^Options:/d' | 

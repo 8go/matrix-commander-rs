@@ -20,7 +20,7 @@ PATH="./target/debug/:./target/release/:../target/debug/:../target/release/:.:./
 
 # getting some optional arguments
 if [ "$MCRS_OPTIONS" != "" ]; then
-    echo "Exellent. Variable MCRS_OPTIONS already set. " \
+    echo "Excellent. Variable MCRS_OPTIONS already set. " \
         "Using \"$MCRS_OPTIONS\" as additional options for testing."
 else
     echo "If desired, set variable \"MCRS_OPTIONS\" for further options."

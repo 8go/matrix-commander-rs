@@ -341,7 +341,7 @@ pub async fn sync_wait_for_verification_request(client: &Client) -> matrix_sdk::
 // ###############################################################################################
 
 /// Go into the event loop and implement the emoji verification protocol.
-/// We are initiating the verification witn device recipient_device.
+/// We are initiating the verification with device recipient_device.
 /// This is the main function, the access point, to emoji verification.
 /// Remember it is interactive and will remain in the event loop until user
 /// leaves with Control-C.

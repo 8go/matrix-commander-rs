@@ -43,7 +43,7 @@ Options:
           --usage, --help and --readme
 
       --readme
-          Prints README.md file, the documenation in Markdown. Details:: The
+          Prints README.md file, the documentation in Markdown. Details:: The
           README.md file will be downloaded from GitHub. It is a Markdown file
           and it is best viewed with a Markdown viewer. See also --usage,
           --help and --manual
@@ -56,7 +56,7 @@ Options:
           DEBUG'. If used once as in '-d' it will set and/or overwrite
           --log-level to '--log-level debug'. If used twice as in '-d -d' it
           will set and/or overwrite --log-level to '--log-level debug debug'.
-          And third or futher occurrence of '-d' will be ignored. See also
+          And third or further occurrence of '-d' will be ignored. See also
           '--log-level'. '-d' takes precedence over '--log-level'.
           Additionally, have a look also at the option '--verbose'
 
@@ -776,7 +776,7 @@ Options:
           as avatar for 'matrix-commander-rs' user account. Specify a file
           optionally with path with the image. If the MIME type of the image
           cannot be determined, it will assume 'PNG' as default. E.g.
-          --set-avatar "./avatar.jpg". It returns a line with the MRX URI of
+          --set-avatar "./avatar.jpg". It returns a line with the MXC URI of
           the new avatar
 
       --get-avatar-url
@@ -870,7 +870,7 @@ Options:
           look something like this 'mxc://example.com/SomeStrangeUriKey'.
           Alternatively, you can just provide the MXC id, i.e. the part after
           the last slash. The syntax of the provided MXC URIs will be verified.
-          The existence of content for the XMC URI will not be checked
+          The existence of content for the MXC URI will not be checked
 
       --get-masterkey
           Get your own master key. Details:: Get the master key of itself, i.e.

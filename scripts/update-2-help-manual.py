@@ -81,7 +81,7 @@ with open(helpfile, "r+") as f:
     print(f"Length of new {helpfile} file is: {len(helptext)}")
 
 
-# We no longer change the REAME.md file (June 2026)
+# We no longer change the README.md file (June 2026)
 #
 # with open(filename, "r+") as f:
 #     text = f.read()

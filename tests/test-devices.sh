@@ -20,7 +20,7 @@ PATH="./target/debug/:./target/release/:../target/debug/:../target/release/:.:./
 
 # getting some optional arguments
 if [ "$MCRS_OPTIONS" != "" ]; then
-    echo "Exellent. Variable MCRS_OPTIONS already set. " \
+    echo "Excellent. Variable MCRS_OPTIONS already set. " \
         "Using \"$MCRS_OPTIONS\" as additional options for testing."
 else
     echo "Optionally, set variable \"MCRS_OPTIONS\" for further options."
@@ -53,7 +53,7 @@ function test1() {
 
 function test2() {
     echo "=== Test 2: get devices in JSON format ==="
-    fofile="/tmp/matrix-comander-rs-test-devices.json"
+    fofile="/tmp/matrix-commander-rs-test-devices.json"
     matrix-commander-rs --devices --output json $MCRS_OPTIONS >$fofile
     res=$?
     if [ "$res" == "0" ]; then

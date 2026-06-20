@@ -221,7 +221,7 @@ done
 
 PS3="Please enter your choice: "
 echo "A tag push of major version kicks off the Docker actions workflow on Github."
-echo "A tag push of major version kicks off the PiPy actions workflow on Github."
+echo "A tag push of major version kicks off the PyPI actions workflow on Github."
 echo "Note: a PR does not trigger Github Actions workflows."
 echo "Only pushing a tag kicks off the workflow and only if not a minor version."
 echo "Instead of 2 separate pushes, one can use *annotated* tags and ----follow-tags."

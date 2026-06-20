@@ -23,7 +23,7 @@ Options:
       --manual
           Prints long help.
       --readme
-          Prints README.md file, the documenation in Markdown.
+          Prints README.md file, the documentation in Markdown.
   -d, --debug...
           Overwrite the default log level.
       --log-level <LOG_LEVEL>...
@@ -61,7 +61,7 @@ Options:
   -m, --message [<MESSAGE>...]
           Send one or more messages.
       --markdown
-          Specify the message format as MarkDown.
+          Specify the message format as Markdown.
       --code
           Specify the message format as Code.
       --html

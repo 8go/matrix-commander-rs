@@ -284,7 +284,7 @@ pub enum Error {
     Http(#[from] matrix_sdk::HttpError),
 }
 
-/// Function to create custom error messaages on the fly with static text
+/// Function to create custom error messages on the fly with static text
 #[allow(dead_code)]
 impl Error {
     pub(crate) fn custom<T>(message: &'static str) -> Result<T, Error> {
@@ -763,7 +763,7 @@ pub struct Args {
     #[arg(long)]
     manual: bool,
 
-    /// Prints README.md file, the documenation in Markdown.
+    /// Prints README.md file, the documentation in Markdown.
     /// Details:: The README.md file will be downloaded from
     /// GitHub. It is a Markdown file and it is best viewed with a
     /// Markdown viewer.
@@ -782,7 +782,7 @@ pub struct Args {
     /// --log-level to '--log-level debug'.
     /// If used twice as in '-d -d' it will set and/or overwrite
     /// --log-level to '--log-level debug debug'.
-    /// And third or futher occurrence of '-d' will be ignored.
+    /// And third or further occurrence of '-d' will be ignored.
     /// See also '--log-level'. '-d' takes precedence over '--log-level'.
     /// Additionally, have a look also at the option '--verbose'.
     #[arg(short, long,  action = clap::ArgAction::Count, default_value_t = 0u8, )]
@@ -1813,7 +1813,7 @@ pub struct Args {
     /// type of the image cannot be determined, it will
     /// assume 'PNG' as default.
     /// E.g. --set-avatar "./avatar.jpg".
-    /// It returns a line with the MRX URI of the new
+    /// It returns a line with the MXC URI of the new
     /// avatar.
     #[arg(long, alias = "upload-avatar", value_name = "FILE")]
     set_avatar: Option<PathBuf>,
@@ -2156,13 +2156,13 @@ impl Credentials {
 
 /// Implements From trait for Session
 impl From<Credentials> for SessionMeta {
-    fn from(creditials: Credentials) -> Self {
+    fn from(credentials: Credentials) -> Self {
         Self {
-            user_id: creditials.user_id,
-            // 0.7 access_token: creditials.access_token,
-            device_id: creditials.device_id,
+            user_id: credentials.user_id,
+            // 0.7 access_token: credentials.access_token,
+            device_id: credentials.device_id,
             // no room_id (was default_room) in session
-            // 0.7 refresh_token: creditials.refresh_token,
+            // 0.7 refresh_token: credentials.refresh_token,
         }
     }
 
@@ -2772,7 +2772,7 @@ fn convert_to_full_room_aliases(vecstr: &mut Vec<String>, default_host: &str) {
 
 // Replace shortcut "-" with room id of default room
 fn replace_minus_with_default_room(vecstr: &mut Vec<String>, default_room: &str) {
-    // There is no way to distringuish --get-room-info not being in CLI
+    // There is no way to distinguish --get-room-info not being in CLI
     // and --get-room-info being in API without a room.
     // Hence it is not possible to say "if vector is empty let's use the default room".
     // The user has to specify something, we used "-".
@@ -3423,8 +3423,8 @@ async fn main() -> Result<(), Error> {
                         "Value 'none' not allowed for --log-level argument",
                     ));
                 }
-                // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-comander-rs
-                // debug info, and erors for all other modules
+                // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-commander-rs
+                // debug info, and errors for all other modules
                 let mut rlogstr: String = llvec[1].to_string().to_owned();
                 rlogstr.push(','); // add char
                 rlogstr.push_str(BIN_NAME_UNDERSCORE);

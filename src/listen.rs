@@ -104,7 +104,7 @@ fn handle_originalsyncmessagelikeevent(
     );
     if context.whoami != ev.sender || context.listen_self {
         // The compiler knows that it is RoomMessageEventContent, because it comes from room::messages()
-        // print_type_of(&orginialmessagelikeevent.content); // ruma_common::events::room::message::RoomMessageEventContent
+        // print_type_of(&originalmessagelikeevent.content); // ruma_common::events::room::message::RoomMessageEventContent
         match ev.content.msgtype.to_owned() {
             MessageType::Text(textmessageeventcontent) => {
                 // debug!("Msg of type Text");
@@ -322,13 +322,13 @@ async fn handle_syncroomencryptedevent(
         return;
     }
     match ev {
-        SyncMessageLikeEvent::Original(orginialmessagelikeevent) => {
+        SyncMessageLikeEvent::Original(originalmessagelikeevent) => {
             debug!(
                 "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
-                orginialmessagelikeevent.content,
-                orginialmessagelikeevent.sender,
+                originalmessagelikeevent.content,
+                originalmessagelikeevent.sender,
                 room.room_id(), // "<unknown>", // ev does not contain room!
-                orginialmessagelikeevent.event_id,
+                originalmessagelikeevent.event_id,
             );
             // let jroom = join_room();
             // let _res = jroom.decrypt_event(&ev).await?;
@@ -384,23 +384,23 @@ async fn handle_syncroommessageevent(
         return;
     }
     match ev {
-        SyncMessageLikeEvent::Original(orginialmessagelikeevent) => {
+        SyncMessageLikeEvent::Original(originalmessagelikeevent) => {
             if !context.output.is_text() {
                 // Serialize it to a JSON string.
-                let j = match serde_json::to_string(&orginialmessagelikeevent.content) {
+                let j = match serde_json::to_string(&originalmessagelikeevent.content) {
                     Ok(jsonstr) => {
                         // this event does not contain the room_id, other events do.
                         // People are missing the room_id in output.
                         // Nasty hack: inserting the room_id into the JSON string.
                         let mut s = jsonstr;
                         s.insert_str(s.len() - 1, ",\"event_id\":\"\"");
-                        s.insert_str(s.len() - 2, orginialmessagelikeevent.event_id.as_str());
+                        s.insert_str(s.len() - 2, originalmessagelikeevent.event_id.as_str());
                         s.insert_str(s.len() - 1, ",\"sender\":\"\"");
-                        s.insert_str(s.len() - 2, orginialmessagelikeevent.sender.as_str());
+                        s.insert_str(s.len() - 2, originalmessagelikeevent.sender.as_str());
                         s.insert_str(s.len() - 1, ",\"origin_server_ts\":\"\"");
                         s.insert_str(
                             s.len() - 2,
-                            &orginialmessagelikeevent.origin_server_ts.0.to_string(),
+                            &originalmessagelikeevent.origin_server_ts.0.to_string(),
                         );
                         s.insert_str(s.len() - 1, ",\"room_id\":\"\"");
                         s.insert_str(s.len() - 2, room.room_id().as_str());
@@ -412,7 +412,7 @@ async fn handle_syncroommessageevent(
                 return;
             }
             handle_originalsyncmessagelikeevent(
-                &orginialmessagelikeevent,
+                &originalmessagelikeevent,
                 &RoomId::parse(room.room_id()).unwrap(),
                 &context,
             );
@@ -592,7 +592,7 @@ fn print_type_of<T>(_: &T) {
 }
 
 /// Get last N messages from some specified rooms once, then go on.
-/// Listens to the room(s) specified in the argument, prints the last N messasges.
+/// Listens to the room(s) specified in the argument, prints the last N messages.
 /// The read messages can be already read ones or new unread ones.
 /// Then it returns. Less than N messages might be printed if the messages do not exist.
 /// Running it twice in a row (while no new messages were sent) should deliver the same output, response.
@@ -699,14 +699,14 @@ pub(crate) async fn listen_tail(
                         AnyMessageLikeEvent::RoomMessage(messagelikeevent) => {
                             debug!("value: {:?}", messagelikeevent);
                             match messagelikeevent {
-                                MessageLikeEvent::Original(orginialmessagelikeevent) => {
-                                    let room_id = orginialmessagelikeevent.room_id.clone();
-                                    let orginialsyncmessagelikeevent =
+                                MessageLikeEvent::Original(originalmessagelikeevent) => {
+                                    let room_id = originalmessagelikeevent.room_id.clone();
+                                    let originalsyncmessagelikeevent =
                                         OriginalSyncMessageLikeEvent::from(
-                                            orginialmessagelikeevent,
+                                            originalmessagelikeevent,
                                         );
                                     handle_originalsyncmessagelikeevent(
-                                        &orginialsyncmessagelikeevent,
+                                        &originalsyncmessagelikeevent,
                                         &room_id,
                                         &ctx,
                                     );
@@ -725,26 +725,26 @@ pub(crate) async fn listen_tail(
                             // messagelikeevent is something like
                             // RoomEncrypted: Original(OriginalMessageLikeEvent { content: RoomEncryptedEventContent { scheme: MegolmV1AesSha2(MegolmV1AesSha2Content { ciphertext: "xxx", sender_key: "yyy", device_id: "DDD", session_id: "sss" }), relates_to: Some(_Custom) }, event_id: "$eee", sender: "@sss:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!roomid:some.homeserver.org",
                             //      unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } })
-                            // Cannot be decryoted with jroom.decrypt_event(&anytimelineevent.event).await?;
+                            // Cannot be decrypted with jroom.decrypt_event(&anytimelineevent.event).await?;
                             // because decrypt_event() only decrypts events from sync() and not from messages()
 
                             match messagelikeevent {
-                                MessageLikeEvent::Original(orginialmessagelikeevent) => {
+                                MessageLikeEvent::Original(originalmessagelikeevent) => {
                                     debug!(
                                     "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
-                                    orginialmessagelikeevent.content,
-                                    orginialmessagelikeevent.sender,
-                                    orginialmessagelikeevent.room_id,
-                                    orginialmessagelikeevent.event_id,
+                                    originalmessagelikeevent.content,
+                                    originalmessagelikeevent.sender,
+                                    originalmessagelikeevent.room_id,
+                                    originalmessagelikeevent.event_id,
                                 );
-                                    if whoami != orginialmessagelikeevent.sender || listen_self {
+                                    if whoami != originalmessagelikeevent.sender || listen_self {
                                         // The compiler knows that it is RoomMessageEventContent, because it comes from room::messages()
-                                        // print_type_of(&orginialmessagelikeevent.content); // ruma_common::events::room::message::RoomEncryptedEventContent
+                                        // print_type_of(&originalmessagelikeevent.content); // ruma_common::events::room::message::RoomEncryptedEventContent
                                         println!(
                                             "Message: type Encrypted: body {:?}, room {:?}, sender {:?}, event_id {:?}, message could not be decrypted",
-                                            orginialmessagelikeevent.content, orginialmessagelikeevent.room_id, orginialmessagelikeevent.sender, orginialmessagelikeevent.event_id,
+                                            originalmessagelikeevent.content, originalmessagelikeevent.room_id, originalmessagelikeevent.sender, originalmessagelikeevent.event_id,
                                         );
-                                        // has orginialmessagelikeevent.content.relates_to.unwrap()
+                                        // has originalmessagelikeevent.content.relates_to.unwrap()
                                     } else {
                                         debug!("Skipping message from itself because --listen-self is not set.");
                                     }
@@ -808,7 +808,7 @@ pub(crate) async fn listen_all(
         tokio::spawn(handle_syncroommessageevent(ev, room, client, context));
     });
 
-    // this seems idential to SyncRoomMessageEvent and hence a duplicate
+    // this seems identical to SyncRoomMessageEvent and hence a duplicate
     // client.add_event_handler(
     //     |ev: OriginalSyncRoomMessageEvent, _client: Client| async move {
     //         println!(
@@ -860,7 +860,7 @@ pub(crate) async fn listen_all(
 
     // // Todo: add future option like --user to filter messages by user id
     // // Filter by user; this works but NOT for itself.
-    // // It does not listen to its own messages, additing itself as sender does not help.
+    // // It does not listen to its own messages, adding itself as sender does not help.
     // // The msgs sent by itself are not in this event stream and hence cannot be filtered.
     // let mut roomstate = RoomEventFilter::empty();
     // let userid1: OwnedUserId = UserId::parse("@john:some.homeserver.org").unwrap();

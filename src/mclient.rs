@@ -1147,7 +1147,7 @@ pub(crate) fn print_common_rooms(rooms: Vec<room::Room>, output: Output) {
             }
             let jsonstr = serde_json::to_string(&myrooms).unwrap();
             println!("{}", jsonstr);
-            // to list only room ids run a comand like matrix-commander-rs --rooms --output json | jq '.[].room_id'
+            // to list only room ids run a command like matrix-commander-rs --rooms --output json | jq '.[].room_id'
         }
     }
 }
@@ -1214,7 +1214,7 @@ pub(crate) async fn left_rooms(client: &Client, output: Output) -> Result<(), Er
 /// Alias name can be empty, i.e. ''.
 /// If and when available set the room name from the name list.
 /// If and when available set the topic name from the topic list.
-/// As output it lists/prints the newly generated room ids and and the corresponding room aliases.
+/// As output it lists/prints the newly generated room ids and the corresponding room aliases.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn room_create(
     client: &Client,
@@ -1778,7 +1778,7 @@ pub(crate) async fn room_unban(
     _output: Output,     // how to format output, currently no output
 ) -> Result<(), Error> {
     debug!(
-        "Unbaning user(s) from room(s): users={:?}, rooms={:?}",
+        "Unbanning user(s) from room(s): users={:?}, rooms={:?}",
         user_ids, room_ids
     );
     let mut err_count = 0u32;
@@ -2536,7 +2536,7 @@ pub(crate) async fn message(
 /// Send one or more files,
 /// allows various Mime formats.
 // If a file is piped in from stdin, then use the 'stdin_filename' as label for the piped data.
-// Implicitely this label also determines the MIME type of the piped data.
+// Implicitly this label also determines the MIME type of the piped data.
 pub(crate) async fn file(
     client: &Client,
     filenames: &[PathBuf],
@@ -2769,7 +2769,7 @@ pub(crate) async fn media_download(
         };
         match client.media().get_media_content(&request, false).await {
             Ok(response) => {
-                debug!("dowload successful: {:?} bytes received", response.len());
+                debug!("download successful: {:?} bytes received", response.len());
                 if filename.to_str().unwrap() == "-" {
                     match std::io::stdout().write_all(&response) {
                         Ok(_) => {
