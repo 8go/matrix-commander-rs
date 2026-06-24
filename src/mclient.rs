@@ -38,6 +38,7 @@ use matrix_sdk::{
     room,
     room::{Room, RoomMember},
     ruma::{
+        api::client::backup::{get_backup_keys, get_latest_backup_info},
         api::client::profile::{AvatarUrl, DisplayName},
         api::client::room::create_room::v3::Request as CreateRoomRequest,
         api::client::room::create_room::v3::RoomPreset,
@@ -980,6 +981,101 @@ pub(crate) async fn get_masterkey(
             );
             Err(Error::GetMasterkeyFailed)
         }
+    }
+}
+
+/// Restore room keys from the server-side key backup into the local store.
+///
+/// matrix-commander-rs builds the client with the matrix-sdk default
+/// `BackupDownloadStrategy::Manual`, so even when the store already holds the
+/// backup decryption key and version, the SDK never pulls the backed-up room
+/// keys on its own. A verified device therefore only decrypts newly received
+/// messages and cannot read history. This enumerates every room present in the
+/// latest server-side backup and explicitly downloads its keys into the store,
+/// which works regardless of the configured download strategy.
+pub(crate) async fn restore_backup(client: &Client, output: Output) -> Result<(), Error> {
+    debug!("Restore room keys from server-side key backup");
+
+    let backups = client.encryption().backups();
+    debug!("Backup state: {:?}", backups.state());
+
+    // Find the latest backup version on the server and enumerate the rooms it
+    // contains. If there is no backup, the server returns an error.
+    let info = match client
+        .send(get_latest_backup_info::v3::Request::new())
+        .await
+    {
+        Ok(info) => info,
+        Err(e) => {
+            error!(
+                "Error: no server-side key backup found or could not be fetched. Error: {:?}",
+                e
+            );
+            return Err(Error::RestoreBackupFailed);
+        }
+    };
+    let version = info.version;
+    debug!("Server backup version: {}", version);
+
+    let keys = match client
+        .send(get_backup_keys::v3::Request::new(version.clone()))
+        .await
+    {
+        Ok(keys) => keys,
+        Err(e) => {
+            error!("Error: could not list rooms in the backup. Error: {:?}", e);
+            return Err(Error::RestoreBackupFailed);
+        }
+    };
+    let rooms: Vec<OwnedRoomId> = keys.rooms.keys().cloned().collect();
+    let sessions: usize = keys.rooms.values().map(|r| r.sessions.len()).sum();
+    debug!(
+        "Backup version {} contains {} rooms ({} sessions)",
+        version,
+        rooms.len(),
+        sessions
+    );
+
+    let mut ok = 0usize;
+    let mut failed = 0usize;
+    for room_id in &rooms {
+        match backups.download_room_keys_for_room(room_id).await {
+            Ok(()) => {
+                ok += 1;
+                debug!("Downloaded room keys for room {}", room_id);
+            }
+            Err(e) => {
+                failed += 1;
+                error!(
+                    "Error: failed to download room keys for room {}. Error: {:?}",
+                    room_id, e
+                );
+            }
+        }
+    }
+
+    match output {
+        Output::Text => println!(
+            "Restored room keys from backup version {}: {} rooms restored, {} failed, {} sessions in backup",
+            version, ok, failed, sessions
+        ),
+        Output::JsonSpec => (),
+        _ => print_json(
+            &json::object!(
+                backup_version: version.to_string(),
+                rooms_restored: ok,
+                rooms_failed: failed,
+                sessions: sessions,
+            ),
+            output,
+            false,
+        ),
+    };
+
+    if failed != 0 {
+        Err(Error::RestoreBackupFailed)
+    } else {
+        Ok(())
     }
 }
 
