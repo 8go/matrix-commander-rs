@@ -678,45 +678,41 @@ pub(crate) async fn listen_tail(
             let anytimelineevent = &chunk[chunk.len() - 1 - index]; // reverse ordering, getting older msg first
                                                                     // Todo : dump the JSON serialized string via Json API
 
-            let rawevent = if let TimelineEventKind::Decrypted(decrypted) = &anytimelineevent.kind {
-                &decrypted.event
-            } else {
-                // The event could not be decrypted (unable-to-decrypt, UTD) or it
-                // is a plaintext event. Previously this branch did `panic!()`,
-                // so a single UTD event in the tail window crashed the whole
-                // program. Instead, emit a notice and carry on with the next
-                // event. To read encrypted history, the device must be verified
-                // and the room keys present; '--restore-backup' can fetch keys
-                // from the server-side key backup.
-                let utdraw = anytimelineevent.raw();
-                let event_id = anytimelineevent
-                    .event_id()
-                    .map(|e| e.to_string())
-                    .unwrap_or_default();
-                let sender = utdraw
-                    .deserialize()
-                    .ok()
-                    .map(|e| e.sender().to_string())
-                    .unwrap_or_default();
-                if !output.is_text() {
-                    println!("{}", utdraw.json());
-                } else {
-                    println!(
-                        "Message: type Encrypted: room {:?}, sender {:?}, event_id {:?}, message could not be decrypted",
-                        roomid, sender, event_id,
-                    );
+            let rawevent = match &anytimelineevent.kind {
+                TimelineEventKind::Decrypted(decrypted) => &decrypted.event,
+                TimelineEventKind::PlainText { event } => {
+                    event.cast_ref_unchecked::<AnyTimelineEvent>()
                 }
-                err_count += 1;
-                continue;
+                _ => {
+                    // The event could not be decrypted (unable-to-decrypt, UTD) or it
+                    // is a plaintext event. Previously this branch did `panic!()`,
+                    // so a single UTD event in the tail window crashed the whole
+                    // program. Instead, emit a notice and carry on with the next
+                    // event. To read encrypted history, the device must be verified
+                    // and the room keys present; '--restore-backup' can fetch keys
+                    // from the server-side key backup.
+                    let utdraw = anytimelineevent.raw();
+                    let event_id = anytimelineevent
+                        .event_id()
+                        .map(|e| e.to_string())
+                        .unwrap_or_default();
+                    let sender = utdraw
+                        .deserialize()
+                        .ok()
+                        .map(|e| e.sender().to_string())
+                        .unwrap_or_default();
+                    if !output.is_text() {
+                        println!("{}", utdraw.json());
+                    } else {
+                        println!(
+                            "Message: type Encrypted: room {:?}, sender {:?}, event_id {:?}, message could not be decrypted",
+                            roomid, sender, event_id,
+                        );
+                    }
+                    err_count += 1;
+                    continue;
+                }
             };
-            // print_type_of(&rawevent); // ruma_common::events::enums::AnyTimelineEvent
-            debug!("rawevent = value is {:?}\n", rawevent);
-            // rawevent = Ok(MessageLike(RoomMessage(Original(OriginalMessageLikeEvent { content: RoomMessageEventContent {
-            // msgtype: Text(TextMessageEventContent { body: "54", formatted: None }), relates_to: Some(_Custom) }, event_id: "$xxx", sender: "@u:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!rrr:some.homeserver.org", unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } }))))
-            if !output.is_text() {
-                println!("{}", rawevent.json());
-                continue;
-            }
 
             match rawevent.deserialize().unwrap() {
                 AnyTimelineEvent::MessageLike(anymessagelikeevent) => {
