@@ -32,8 +32,8 @@ use matrix_sdk::{
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
     authentication::{matrix::MatrixSession, SessionTokens},
-    cross_process_lock::CrossProcessLockConfig,
     config::{RequestConfig, StoreConfig, SyncSettings},
+    cross_process_lock::CrossProcessLockConfig,
     media::{MediaFormat, MediaRequestParameters},
     room,
     room::{Room, RoomMember},
@@ -498,7 +498,9 @@ async fn create_client(homeserver: &Url, ap: &Args) -> Result<Client, Error> {
     // let builder = if let Some(proxy) = cli.proxy { builder.proxy(proxy) } else { builder };
     let builder = Client::builder()
         .homeserver_url(homeserver)
-        .store_config(StoreConfig::new(CrossProcessLockConfig::MultiProcess { holder_name: "".to_owned()}))
+        .store_config(StoreConfig::new(CrossProcessLockConfig::MultiProcess {
+            holder_name: "".to_owned(),
+        }))
         .request_config(RequestConfig::new().timeout(Duration::from_secs(ap.timeout)));
     let client = builder
         .sqlite_store(sqlitestorehome, None)
