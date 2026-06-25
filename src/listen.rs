@@ -49,7 +49,7 @@ use matrix_sdk::{
             FileMessageEventContent,
             ImageMessageEventContent,
             MessageType,
-            // NoticeMessageEventContent,
+            NoticeMessageEventContent,
             // OriginalRoomMessageEvent, OriginalSyncRoomMessageEvent,
             // RedactedRoomMessageEventContent, RoomMessageEvent,
             // OriginalSyncRoomEncryptedEvent,
@@ -163,6 +163,15 @@ fn handle_originalsyncmessagelikeevent(
                 println!(
                     "Message: type Video: body {:?}, room {:?}, sender {:?}, event id {:?}, source {:?}, info {:?}",
                     body, room_id, ev.sender, ev.event_id, source, info,
+                );
+            }
+            MessageType::Notice(noticemessageeventcontent) => {
+                let NoticeMessageEventContent {
+                    body, formatted, ..
+                } = noticemessageeventcontent;
+                println!(
+                    "Message: type Notice: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
+                    body, room_id, ev.sender, ev.event_id, formatted,
                 );
             }
             _ => {
@@ -681,6 +690,12 @@ pub(crate) async fn listen_tail(
             let rawevent = match &anytimelineevent.kind {
                 TimelineEventKind::Decrypted(decrypted) => &decrypted.event,
                 TimelineEventKind::PlainText { event } => {
+                    // cast_ref_unchecked is needed to convert from AnySyncTimelineEvent to AnyTimelineEvent.
+                    // AnyTimelineEvent differs from AnySyncTimelineEvent in that the event has an additional room_id field.
+                    // However all room messages are required to have a room_id field as specified in the
+                    // [client-server-api spec](https://spec.matrix.org/latest/client-server-api/#room-event-format).
+                    // Therefore, it is fine to cast from AnySyncTimelineEvent to AnyTimelineEvent **here** since the
+                    // rawevent will always deserialize correctly.
                     event.cast_ref_unchecked::<AnyTimelineEvent>()
                 }
                 _ => {
