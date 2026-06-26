@@ -25,7 +25,7 @@ sleep 1
 # run it through fzf, run it through editor, execute it
 # shellcheck disable=SC2046 # quoting will
 PATH=".:./target/release/:./target/debug/:$PATH" $EXE --usage |
-    sed '1,/^Options:/d' | 
+    sed '1,/^Options:/d' |
     sed "s/^  -., /      /g" |
     sed "s/^      //g" |
     sed "s/^$//g" | sort |
