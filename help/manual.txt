@@ -877,5 +877,16 @@ Options:
           of the 'matrix-commander-rs' user account. Keep this key private and
           safe
 
+      --restore-backup
+          Restore room keys from the server-side key backup. Details:: Download
+          and import all room keys (megolm sessions) that are stored in the
+          server-side key backup into the local store, so that this device can
+          decrypt historical messages. The store must already hold the backup
+          decryption key and version (typically obtained by verifying this
+          device with '--verify'). matrix-commander-rs uses the matrix-sdk
+          default 'Manual' backup download strategy, so without this option a
+          verified device only decrypts newly received messages and never pulls
+          the backed-up keys for older history
+
 PS: Also have a look at scripts/matrix-commander-rs-tui.
 

@@ -169,5 +169,7 @@ Options:
           Convert URIs to HTTP URLs.
       --get-masterkey
           Get your own master key.
+      --restore-backup
+          Restore room keys from the server-side key backup.
 PS: Also have a look at scripts/matrix-commander-rs-tui.
 Use --manual to get more detailed help information.

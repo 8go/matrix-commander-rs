@@ -83,10 +83,10 @@ use crate::mclient::{
     get_avatar, get_avatar_url, get_display_name, get_masterkey, get_profile, get_room_info,
     invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local,
     media_delete, media_download, media_mxc_to_http, media_upload, message,
-    replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
-    room_enable_encryption, room_forget, room_get_state, room_get_visibility, room_invite,
-    room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar,
-    set_avatar_url, set_display_name, unset_avatar_url, verify,
+    replace_star_with_rooms, restore_backup, restore_credentials, restore_login, room_ban,
+    room_create, room_enable_encryption, room_forget, room_get_state, room_get_visibility,
+    room_invite, room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms,
+    set_avatar, set_avatar_url, set_display_name, unset_avatar_url, verify,
 };
 
 // import matrix-sdk Client related code related to receiving messages and listening
@@ -228,6 +228,9 @@ pub enum Error {
 
     #[error("Get Masterkey Failed")]
     GetMasterkeyFailed,
+
+    #[error("Restore Backup Failed")]
+    RestoreBackupFailed,
 
     #[error("Restoring Login Failed")]
     RestoreLoginFailed,
@@ -1982,6 +1985,19 @@ pub struct Args {
     /// this key private and safe.
     #[arg(long)]
     get_masterkey: bool,
+
+    /// Restore room keys from the server-side key backup.
+    /// Details::
+    /// Download and import all room keys (megolm sessions) that are
+    /// stored in the server-side key backup into the local store, so that
+    /// this device can decrypt historical messages. The store must already
+    /// hold the backup decryption key and version (typically obtained by
+    /// verifying this device with '--verify'). matrix-commander-rs uses the
+    /// matrix-sdk default 'Manual' backup download strategy, so without this
+    /// option a verified device only decrypts newly received messages and
+    /// never pulls the backed-up keys for older history.
+    #[arg(long, alias = "backup-restore")]
+    restore_backup: bool,
 }
 
 impl Default for Args {
@@ -2071,6 +2087,7 @@ impl Args {
             media_mxc_to_http: Vec::new(),
             mime: Vec::new(),
             get_masterkey: false,
+            restore_backup: false,
         }
     }
 }
@@ -3317,6 +3334,12 @@ pub(crate) async fn cli_get_masterkey(client: &Client, ap: &Args) -> Result<(), 
     .await
 }
 
+/// Handle the --restore-backup CLI argument
+pub(crate) async fn cli_restore_backup(client: &Client, ap: &Args) -> Result<(), Error> {
+    info!("Restore-backup chosen.");
+    crate::restore_backup(client, ap.output).await // returning
+}
+
 /// Handle the --room-get-visibility CLI argument
 pub(crate) async fn cli_room_get_visibility(client: &Client, ap: &Args) -> Result<(), Error> {
     info!("Room-get-visibility chosen.");
@@ -3608,6 +3631,7 @@ async fn main() -> Result<(), Error> {
         || !ap.media_download.is_empty()
         || !ap.media_mxc_to_http.is_empty()
         || ap.get_masterkey
+        || ap.restore_backup
         // set actions
         || !ap.room_create.is_empty()
         || !ap.room_dm_create.is_empty()
@@ -3965,6 +3989,17 @@ async fn main() -> Result<(), Error> {
                     Ok(ref _n) => debug!("crate::get_masterkey successful"),
                     Err(e) => {
                         error!("Error: crate::get_masterkey reported {}", e);
+                        errcount += 1;
+                        result = Err(e);
+                    }
+                };
+            };
+
+            if ap.restore_backup {
+                match crate::cli_restore_backup(&client, &ap).await {
+                    Ok(ref _n) => debug!("crate::restore_backup successful"),
+                    Err(e) => {
+                        error!("Error: crate::restore_backup reported {}", e);
                         errcount += 1;
                         result = Err(e);
                     }
