@@ -99,7 +99,7 @@ Options:
           --room-create and --room-dm-create. See also --room-enable-encryption
           which sort of does the opposite for rooms. See also --visibility
           which allows setting the visibility of the room
-          
+
           [possible values: true, false]
 
   -c, --credentials <PATH_TO_FILE>
@@ -111,7 +111,7 @@ Options:
           to the preconfigured room. If this option is provided, the provided
           path to a file will be used as credentials file instead of the
           default one. E.g. ~/.local/share/matrix-commander-rs/credentials.json
-          
+
           [default:
           /home/user/.local/share/matrix-commander-rs/credentials.json]
 
@@ -123,7 +123,7 @@ Options:
           default one. Preferably, for multiple executions of this program use
           the same store for the same device. The store directory can be shared
           between multiple different devices and users
-          
+
           [default: /home/user/.local/share/matrix-commander-rs/store/]
 
       --login <LOGIN_METHOD>
@@ -153,7 +153,7 @@ Options:
           - password:     Password: login with password
           - access-token: AccessToken: login with access-token
           - sso:          SSO: login with SSO, single-sign on
-          
+
           [default: none]
 
       --verify <VERIFICATION_METHOD>
@@ -226,7 +226,7 @@ Options:
             https://docs.rs/matrix-sdk/0.7/matrix_sdk/encryption/identities/struct.UserIdentity.html#method.verify
           - emoji:         Emoji: verify via emojis as the recipient
           - emoji-req:     Emoji: verify via emojis as the initiator
-          
+
           [default: none]
 
       --bootstrap
@@ -258,7 +258,7 @@ Options:
           - none: None: Log out nowhere, don't do anything, default
           - me:   Me: Log out from the currently used device
           - all:  All: Log out from all devices of the user
-          
+
           [default: none]
 
       --homeserver <HOMESERVER>
@@ -310,7 +310,7 @@ Options:
           Set the timeout of the calls to the Matrix server. Details:: By
           default they are set to 60 seconds. Specify the timeout in seconds.
           Use 0 for infinite timeout
-          
+
           [default: 60]
 
   -m, --message [<MESSAGE>...]
@@ -425,7 +425,7 @@ Options:
           - off:  Turns syncing off for sending operations to improve
             performance
           - full: full: the default value
-          
+
           [default: full]
 
   -l, --listen <LISTEN_TYPE>
@@ -462,7 +462,7 @@ Options:
             specified room(s) and then continue
           - all:     All: Indicates to get *all* the messages from the
             specified room(s) and then continue
-          
+
           [default: never]
 
       --tail <TAIL>
@@ -476,7 +476,7 @@ Options:
           messages are obtained, but some of them are discarded by default if
           they are from the user itself. Look at '--listen' as this option is
           related to '--tail'
-          
+
           [default: 0]
 
   -y, --listen-self
@@ -521,7 +521,7 @@ Options:
             output in Json format
           - json-spec: Json Spec: Indicates to print output in Json format, but
             only data that is according to Matrix Specifications
-          
+
           [default: text]
 
       --file-name [<FILE_NAME>...]
@@ -573,7 +573,7 @@ Options:
           visibility is 'private'. To create a public room, use '--room-create
           <room-name> --visibility public'. To create a private room, use
           '--room-create <room-name> --visibility private'
-          
+
           [default: private]
 
       --room-dm-create [<USER>...]

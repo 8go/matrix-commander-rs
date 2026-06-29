@@ -9,4 +9,4 @@ echo "help/help.txt is $(wc -l help/help.txt | cut -d ' ' -f1) lines long"
 #     stty cols $old_width && stty size && echo -n "Max width: " && wc -L help/help.txt
 # sed -i "s|target/debug/matrix-commander-rs|matrix-commander-rs|g" help/help.txt
 # # remove color codes, bold and underline char sequences
-# sed -i "s,\x1B\[[0-9;]*[a-zA-Z],,g" help/help.txt 
+# sed -i "s,\x1B\[[0-9;]*[a-zA-Z],,g" help/help.txt

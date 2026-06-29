@@ -16,13 +16,13 @@ simple but convenient CLI-based Matrix client app for sending, receiving, and mu
 # News
 
 For the reason of transparency and the reason of appreciation I would like to
-announce that as of June 2026 there is a new maintainer on the project: 
-[@Benjamin-Loison](https://github.com/Benjamin-Loison). He has full permissions including publishing new releases. 
+announce that as of June 2026 there is a new maintainer on the project:
+[@Benjamin-Loison](https://github.com/Benjamin-Loison). He has full permissions including publishing new releases.
 Welcome ❤️ and thanks.
-  
+
 # Help create this Rust program
 
-This Rust project is currently bare essentials. 
+This Rust project is currently bare essentials.
 A more feature-rich Python package `matrix-commander`
 exists. See [matrix-commander](https://github.com/8go/matrix-commander/).
 The vision is to have a compatible program in Rust.
@@ -65,7 +65,7 @@ Safe!
 - Talk about it to your friends, post it in chatrooms, Hacker News, etc.
   This will give exposure and help find people willing to provide code,
   contributions, and PRs.
-- Write code yourself. :rocket: Features that you might want to code: 
+- Write code yourself. :rocket: Features that you might want to code:
   - implement `login` via SSO
   - add --proxy (see Python documentation)
   - add --nossl (see Python documentation)
