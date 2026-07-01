@@ -3397,7 +3397,9 @@ async fn main() -> Result<(), Error> {
             .unwrap_or_default()
             .split(',')
             .any(|directive| {
-                // Strip the `=level` suffix and any `[span{...}]` filter to isolate the target.
+                // The format of the EnvFilter directive is `target[span{...}]=level` and is
+                // documented in the [tracing_subscriber crate](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html).
+                // We need to strip the `=level` suffix and any `[span{...}]` filter to isolate the target.
                 // E.g. `target[span{field=value}]=level` becomes `target`.
                 let target = directive
                     .trim()
@@ -3411,15 +3413,15 @@ async fn main() -> Result<(), Error> {
                 !target.is_empty() && HTTP_CLIENT_TARGET.starts_with(target)
             });
     let mut llfilter = EnvFilter::from_default_env();
-    if !http_client_overridden {
-        llfilter = llfilter.add_directive(
-            format!("{}=off", HTTP_CLIENT_TARGET)
-                .parse()
-                .expect("hard-coded tracing directive must parse"),
-        );
-    }
     match ap.log_level.clone() {
         None => {
+            if !http_client_overridden {
+                llfilter = llfilter.add_directive(
+                    format!("{}=off", HTTP_CLIENT_TARGET)
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                );
+            }
             tracing_subscriber::fmt()
                 .with_writer(io::stderr)
                 .with_env_filter(llfilter)
@@ -3429,59 +3431,35 @@ async fn main() -> Result<(), Error> {
             );
         }
         Some(llvec) => {
-            if llvec.len() == 1 {
-                if llvec[0].is_none() {
-                    return Err(Error::UnsupportedCliParameter(
-                        "Value 'none' not allowed for --log-level argument",
-                    ));
-                }
-                llfilter = llfilter
-                    .add_directive(
-                        format!("{}={}", BIN_NAME_UNDERSCORE, llvec[0])
-                            .parse()
-                            .expect("hard-coded tracing directive must parse"),
-                    )
-                    .add_directive(
-                        format!("{}={}", HTTP_CLIENT_TARGET, llvec[0])
-                            .parse()
-                            .expect("hard-coded tracing directive must parse"),
-                    );
-                tracing_subscriber::fmt()
-                    .with_writer(io::stderr)
-                    .with_env_filter(llfilter.clone()) // support the standard RUST_LOG env variable for default value
-                    .init();
-                debug!(
-                    "The --debug or --log-level was used once or with one value. \
-                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
-                    llfilter
-                );
-            } else {
-                if llvec[0].is_none() || llvec[1].is_none() {
-                    return Err(Error::UnsupportedCliParameter(
-                        "Value 'none' not allowed for --log-level argument",
-                    ));
-                }
-                llfilter = llfilter
-                    .add_directive(
-                        format!("{}={}", BIN_NAME_UNDERSCORE, llvec[1])
-                            .parse()
-                            .expect("hard-coded tracing directive must parse"),
-                    )
-                    .add_directive(
-                        format!("{}={}", HTTP_CLIENT_TARGET, llvec[1])
-                            .parse()
-                            .expect("hard-coded tracing directive must parse"),
-                    );
-                tracing_subscriber::fmt()
-                    .with_writer(io::stderr)
-                    .with_env_filter(llfilter.clone())
-                    .init();
-                debug!(
-                    "The --debug or --log-level was used twice or with two values. \
-                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
-                    llfilter
-                );
+            // ap.log_level will always be set with a Some(llvec) value of at least length 1.
+            // We take the larger of the first two indices in llvec to be the log-level we use
+            // and disregard any log-levels specified beyond the first two.
+            let llindex = (llvec.len() - 1).min(1);
+            if llvec[..(llindex + 1)].iter().any(|ll| ll.is_none()) {
+                return Err(Error::UnsupportedCliParameter(
+                    "Value 'none' not allowed for --log-level argument",
+                ));
             }
+            llfilter = llfilter
+                .add_directive(
+                    format!("{}={}", BIN_NAME_UNDERSCORE, llvec[llindex])
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                )
+                .add_directive(
+                    format!("{}={}", HTTP_CLIENT_TARGET, llvec[llindex])
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                );
+            tracing_subscriber::fmt()
+                .with_writer(io::stderr)
+                .with_env_filter(llfilter.clone()) // support the standard RUST_LOG env variable for default value
+                .init();
+            debug!(
+                "--debug or --log-level was specified. \
+                Logging set to the equivalent of RUST_LOG='{}'.",
+                llfilter
+            );
             if llvec.len() > 2 {
                 debug!("The --log-level option was incorrectly used more than twice. Ignoring third and further use.")
             }
