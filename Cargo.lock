@@ -1980,7 +1980,7 @@ dependencies = [
 
 [[package]]
 name = "matrix-commander"
-version = "1.0.1"
+version = "0.11.0"
 dependencies = [
  "clap",
  "colored",
