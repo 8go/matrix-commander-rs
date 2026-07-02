@@ -4,7 +4,8 @@ name: Publish to crates.io
 on:
   push:
     tags:
-      - 'v*.*.*' 
+      - 'v*.*.*'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,8 +15,8 @@ jobs:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     # Optional: If you created a GitHub Environment for manual approval
-    # environment: production 
-    
+    # environment: production
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
