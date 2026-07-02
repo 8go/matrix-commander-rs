@@ -27,7 +27,7 @@ jobs:
         # This configures cargo to use the token for the crates.io registry
         run: cargo login ${CARGO_AUTH_TOKEN}
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_AUTH_TOKEN }}
+          CARGO_AUTH_TOKEN: ${{ secrets.CARGO_AUTH_TOKEN }}
 
       - name: Publish to crates.io
         run: cargo publish --verbose
