@@ -1,4 +1,4 @@
-name: Publish to crates.io
+name: Dry-run Publish to crates.io
 
 # Trigger ONLY when a version tag is pushed
 on:
