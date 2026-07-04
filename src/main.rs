@@ -2588,13 +2588,13 @@ fn get_user_login(ap: &mut Args) {
         if trimmed_input.is_empty() {
             error!("Error: Empty username is not allowed!");
         } else {
-            // With ':' it is a full user id; otherwise
-            // append the homeserver already entered above.
+            // With ':' it is a full user id; otherwise it is a local part
+            // (with or without a leading '@') and we append the homeserver.
             let full_username = if trimmed_input.contains(':') {
                 trimmed_input.to_string()
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
-                format!("@{trimmed_input}:{host}")
+                format!("@{}:{host}", trimmed_input.trim_start_matches('@'))
             };
             debug!("user_login is {full_username}");
             ap.user_login = Some(full_username);
@@ -2678,12 +2678,16 @@ fn get_room_default(ap: &mut Args) {
             error!("Error: Empty name of default room is not allowed!");
         } else {
             // With ':' it is a full room id (e.g. pasted from a client); otherwise
-            // append the homeserver already entered above.
+            // keep any '!'/'#' sigil (default '!') and append the homeserver.
             let full_room = if trimmed_input.contains(':') {
                 trimmed_input.to_string()
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
-                format!("!{trimmed_input}:{host}")
+                if trimmed_input.starts_with('!') || trimmed_input.starts_with('#') {
+                    format!("{trimmed_input}:{host}")
+                } else {
+                    format!("!{trimmed_input}:{host}")
+                }
             };
             debug!("room_default is '{full_room}'");
             ap.room_default = Some(full_room);
