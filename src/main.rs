@@ -2588,10 +2588,15 @@ fn get_user_login(ap: &mut Args) {
         if trimmed_input.is_empty() {
             error!("Error: Empty username is not allowed!");
         } else {
-            // With ':' it is a full user id; otherwise it is a local part
-            // (with or without a leading '@') and we append the homeserver.
+            // With ':' it is a full user id; prepend a '@' sigil if missing.
+            // Otherwise it is a local part (with or without a leading '@')
+            // and we append the homeserver.
             let full_username = if trimmed_input.contains(':') {
-                trimmed_input.to_string()
+                if trimmed_input.starts_with('@') {
+                    trimmed_input.to_string()
+                } else {
+                    format!("@{trimmed_input}")
+                }
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
                 format!("@{}:{host}", trimmed_input.trim_start_matches('@'))
@@ -2677,10 +2682,15 @@ fn get_room_default(ap: &mut Args) {
         if trimmed_input.is_empty() {
             error!("Error: Empty name of default room is not allowed!");
         } else {
-            // With ':' it is a full room id (e.g. pasted from a client); otherwise
+            // With ':' it is a full room id (e.g. pasted from a client);
+            // prepend a '!' sigil if no '!'/'#' sigil is present. Otherwise
             // keep any '!'/'#' sigil (default '!') and append the homeserver.
             let full_room = if trimmed_input.contains(':') {
-                trimmed_input.to_string()
+                if trimmed_input.starts_with('!') || trimmed_input.starts_with('#') {
+                    trimmed_input.to_string()
+                } else {
+                    format!("!{trimmed_input}")
+                }
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
                 if trimmed_input.starts_with('!') || trimmed_input.starts_with('#') {
