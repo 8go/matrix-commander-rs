@@ -3387,59 +3387,79 @@ async fn main() -> Result<(), Error> {
         }
         Ordering::Less => (),
     }
+    // Suppress matrix_sdk::http_client logs in normal operation as they are not useful for end
+    // users and can be very verbose. If RUST_LOG already contains a directive whose target is a
+    // prefix of (or equal to) matrix_sdk::http_client (e.g. `matrix_sdk` or
+    // `matrix_sdk::http_client`), we respect the user's choice and do not force the target off.
+    const HTTP_CLIENT_TARGET: &str = "matrix_sdk::http_client";
+    let http_client_overridden =
+        env::var("RUST_LOG")
+            .unwrap_or_default()
+            .split(',')
+            .any(|directive| {
+                // The format of the EnvFilter directive is `target[span{...}]=level` and is
+                // documented in the [tracing_subscriber crate](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html).
+                // We need to strip the `=level` suffix and any `[span{...}]` filter to isolate the target.
+                // E.g. `target[span{field=value}]=level` becomes `target`.
+                let target = directive
+                    .trim()
+                    .split('=')
+                    .next()
+                    .unwrap_or("")
+                    .split('[')
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                !target.is_empty() && HTTP_CLIENT_TARGET.starts_with(target)
+            });
+    let mut llfilter = EnvFilter::from_default_env();
     match ap.log_level.clone() {
         None => {
+            if !http_client_overridden {
+                llfilter = llfilter.add_directive(
+                    format!("{}=off", HTTP_CLIENT_TARGET)
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                );
+            }
             tracing_subscriber::fmt()
                 .with_writer(io::stderr)
-                .with_env_filter(EnvFilter::from_default_env()) // support the standard RUST_LOG env variable
+                .with_env_filter(llfilter)
                 .init();
             debug!(
                 "Neither --debug nor --log-level was used. Using environment variable RUST_LOG."
             );
         }
         Some(llvec) => {
-            if llvec.len() == 1 {
-                if llvec[0].is_none() {
-                    return Err(Error::UnsupportedCliParameter(
-                        "Value 'none' not allowed for --log-level argument",
-                    ));
-                }
-                // .with_env_filter("matrix_commander_rs=debug") // only set matrix_commander_rs
-                let mut rlogstr: String = BIN_NAME_UNDERSCORE.to_owned();
-                rlogstr.push('='); // add char
-                rlogstr.push_str(&llvec[0].to_string());
-                tracing_subscriber::fmt()
-                    .with_writer(io::stderr)
-                    .with_env_filter(rlogstr.clone()) // support the standard RUST_LOG env variable for default value
-                    .init();
-                debug!(
-                    "The --debug or --log-level was used once or with one value. \
-                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
-                    rlogstr
-                );
-            } else {
-                if llvec[0].is_none() || llvec[1].is_none() {
-                    return Err(Error::UnsupportedCliParameter(
-                        "Value 'none' not allowed for --log-level argument",
-                    ));
-                }
-                // RUST_LOG="error,matrix_commander_rs=debug"  .. This will only show matrix-commander-rs
-                // debug info, and errors for all other modules
-                let mut rlogstr: String = llvec[1].to_string().to_owned();
-                rlogstr.push(','); // add char
-                rlogstr.push_str(BIN_NAME_UNDERSCORE);
-                rlogstr.push('=');
-                rlogstr.push_str(&llvec[0].to_string());
-                tracing_subscriber::fmt()
-                    .with_writer(io::stderr)
-                    .with_env_filter(rlogstr.clone())
-                    .init();
-                debug!(
-                    "The --debug or --log-level was used twice or with two values. \
-                    Specifying logging equivalent to RUST_LOG setting of '{}'.",
-                    rlogstr
-                );
+            // ap.log_level will always be set with a Some(llvec) value of at least length 1.
+            // We take the larger of the first two indices in llvec to be the log-level we use
+            // and disregard any log-levels specified beyond the first two.
+            let llindex = (llvec.len() - 1).min(1);
+            if llvec[..(llindex + 1)].iter().any(|ll| ll.is_none()) {
+                return Err(Error::UnsupportedCliParameter(
+                    "Value 'none' not allowed for --log-level argument",
+                ));
             }
+            llfilter = llfilter
+                .add_directive(
+                    format!("{}={}", BIN_NAME_UNDERSCORE, llvec[llindex])
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                )
+                .add_directive(
+                    format!("{}={}", HTTP_CLIENT_TARGET, llvec[llindex])
+                        .parse()
+                        .expect("hard-coded tracing directive must parse"),
+                );
+            tracing_subscriber::fmt()
+                .with_writer(io::stderr)
+                .with_env_filter(llfilter.clone()) // support the standard RUST_LOG env variable for default value
+                .init();
+            debug!(
+                "--debug or --log-level was specified. \
+                Logging set to the equivalent of RUST_LOG='{}'.",
+                llfilter
+            );
             if llvec.len() > 2 {
                 debug!("The --log-level option was incorrectly used more than twice. Ignoring third and further use.")
             }
