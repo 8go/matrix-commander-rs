@@ -42,7 +42,6 @@ Safe!
 - Encryption
 - Manual and Emoji verification
 - Sending one or multiple text message to one or multiple rooms
-- Sending one or multiple text message to one or multiple rooms
 - Listening for new and incoming messages on one or multiple rooms
 - Getting and printing old messages
 - Listing devices
