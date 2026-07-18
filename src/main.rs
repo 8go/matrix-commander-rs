@@ -2649,7 +2649,9 @@ fn get_device(ap: &mut Args) {
         }
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
-            error!("Error: Empty device name is not allowed!");
+            let bin_name = get_bin_name().to_string();
+            ap.device = Some(bin_name.clone()); // Default to matrix-commander-rs
+            debug!("device is {bin_name}");
         } else {
             ap.device = Some(trimmed_input.to_string());
             debug!("device is {trimmed_input}");
