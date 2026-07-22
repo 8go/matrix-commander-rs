@@ -2668,7 +2668,8 @@ fn get_room_default(ap: &mut Args) {
     while ap.room_default.is_none() {
         print!(
             "Enter name of one of your Matrix rooms that you want to use as default room  \
-            (e.g. someRoomId or !someRoomId:some.homeserver.org): "
+            (e.g. someRoomId, !someRoomId:some.homeserver.org or \
+            #someRoomAlias:some.homeserver.org): "
         );
         if let Err(e) = io::stdout().flush() {
             warn!("Warning: Failed to flush stdout: {e}");
@@ -2681,19 +2682,22 @@ fn get_room_default(ap: &mut Args) {
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
             error!("Error: Empty name of default room is not allowed!");
+        } else if trimmed_input.contains(':') && !trimmed_input.starts_with(['!', '#']) {
+            // A full identifier without sigil is ambiguous: 'abc:server' could be
+            // the room id '!abc:server' or the room alias '#abc:server'. Unlike
+            // user ids, where '@' is the only possible sigil, we cannot guess here.
+            error!(
+                "Error: Invalid room format for '{trimmed_input}'! A room with a server \
+                part must start with '!' (room id) or with '#' (room alias)."
+            );
         } else {
-            // With ':' it is a full room id (e.g. pasted from a client);
-            // prepend a '!' sigil if no '!'/'#' sigil is present. Otherwise
-            // keep any '!'/'#' sigil (default '!') and append the homeserver.
+            // With ':' it is already a full room id or room alias, use it as is.
+            // Otherwise keep any '!'/'#' sigil (default '!') and append the homeserver.
             let full_room = if trimmed_input.contains(':') {
-                if trimmed_input.starts_with('!') || trimmed_input.starts_with('#') {
-                    trimmed_input.to_string()
-                } else {
-                    format!("!{trimmed_input}")
-                }
+                trimmed_input.to_string()
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
-                if trimmed_input.starts_with('!') || trimmed_input.starts_with('#') {
+                if trimmed_input.starts_with(['!', '#']) {
                     format!("{trimmed_input}:{host}")
                 } else {
                     format!("!{trimmed_input}:{host}")
