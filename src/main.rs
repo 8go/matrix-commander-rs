@@ -2559,14 +2559,25 @@ fn get_homeserver(ap: &mut Args) {
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
             error!("Error: Empty homeserver name is not allowed!");
-        } else if let Err(e) = Url::parse(trimmed_input) {
-            error!(
-                "Error: The syntax is incorrect. Homeserver must be a valid URL! \
-                Start with 'http://' or 'https://'. Details: {e}"
-            );
         } else {
-            ap.homeserver = Some(Url::parse(trimmed_input).unwrap()); // Safe to unwrap since we validated it
-            debug!("homeserver is {}", ap.homeserver.as_ref().unwrap());
+            // Assume 'https://' unless the input already is a URL with a host.
+            // This accepts 'some.homeserver.org' and rejects URLs without a host
+            // (e.g. 'some.homeserver.org:8448' parses as its own scheme), whose
+            // host is needed to complete user name and room later on.
+            let parsed = match Url::parse(trimmed_input) {
+                Ok(url) if url.host_str().is_some() => Ok(url),
+                _ => Url::parse(&format!("https://{trimmed_input}")),
+            };
+            match parsed {
+                Err(e) => error!(
+                    "Error: The syntax is incorrect. Homeserver must be a valid URL, \
+                    e.g. 'https://some.homeserver.org'. Details: {e}"
+                ),
+                Ok(url) => {
+                    debug!("homeserver is {url}");
+                    ap.homeserver = Some(url);
+                }
+            }
         }
     }
 }
