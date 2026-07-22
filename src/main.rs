@@ -2559,14 +2559,25 @@ fn get_homeserver(ap: &mut Args) {
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
             error!("Error: Empty homeserver name is not allowed!");
-        } else if let Err(e) = Url::parse(trimmed_input) {
-            error!(
-                "Error: The syntax is incorrect. Homeserver must be a valid URL! \
-                Start with 'http://' or 'https://'. Details: {e}"
-            );
         } else {
-            ap.homeserver = Some(Url::parse(trimmed_input).unwrap()); // Safe to unwrap since we validated it
-            debug!("homeserver is {}", ap.homeserver.as_ref().unwrap());
+            // Assume 'https://' unless the input already is a URL with a host.
+            // This accepts 'some.homeserver.org' and rejects URLs without a host
+            // (e.g. 'some.homeserver.org:8448' parses as its own scheme), whose
+            // host is needed to complete user name and room later on.
+            let parsed = match Url::parse(trimmed_input) {
+                Ok(url) if url.host_str().is_some() => Ok(url),
+                _ => Url::parse(&format!("https://{trimmed_input}")),
+            };
+            match parsed {
+                Err(e) => error!(
+                    "Error: The syntax is incorrect. Homeserver must be a valid URL, \
+                    e.g. 'https://some.homeserver.org'. Details: {e}"
+                ),
+                Ok(url) => {
+                    debug!("homeserver is {url}");
+                    ap.homeserver = Some(url);
+                }
+            }
         }
     }
 }
@@ -2575,7 +2586,7 @@ fn get_homeserver(ap: &mut Args) {
 /// If already set via --user-login option, then it does nothing.
 fn get_user_login(ap: &mut Args) {
     while ap.user_login.is_none() {
-        print!("Enter your full Matrix username (e.g. @john:some.homeserver.org): ");
+        print!("Enter your Matrix username (e.g. john or @john:some.homeserver.org): ");
         if let Err(e) = io::stdout().flush() {
             warn!("Warning: Failed to flush stdout: {e}");
         }
@@ -2587,19 +2598,24 @@ fn get_user_login(ap: &mut Args) {
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
             error!("Error: Empty username is not allowed!");
-        } else if !is_valid_username(trimmed_input) {
-            error!("Error: Invalid username format!");
         } else {
-            ap.user_login = Some(trimmed_input.to_string());
-            debug!("user_login is {trimmed_input}");
+            // With ':' it is a full user id; prepend a '@' sigil if missing.
+            // Otherwise it is a local part (with or without a leading '@')
+            // and we append the homeserver.
+            let full_username = if trimmed_input.contains(':') {
+                if trimmed_input.starts_with('@') {
+                    trimmed_input.to_string()
+                } else {
+                    format!("@{trimmed_input}")
+                }
+            } else {
+                let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
+                format!("@{}:{host}", trimmed_input.trim_start_matches('@'))
+            };
+            debug!("user_login is {full_username}");
+            ap.user_login = Some(full_username);
         }
     }
-}
-
-// validation function for username format
-fn is_valid_username(username: &str) -> bool {
-    // Check if it starts with '@', contains ':', etc.
-    username.starts_with('@') && username.contains(':')
 }
 
 /// If necessary reads password for login and puts it into the Args.
@@ -2665,7 +2681,8 @@ fn get_room_default(ap: &mut Args) {
     while ap.room_default.is_none() {
         print!(
             "Enter name of one of your Matrix rooms that you want to use as default room  \
-            (e.g. !someRoomId:some.homeserver.org): "
+            (e.g. someRoomId, !someRoomId:some.homeserver.org or \
+            #someRoomAlias:some.homeserver.org): "
         );
         if let Err(e) = io::stdout().flush() {
             warn!("Warning: Failed to flush stdout: {e}");
@@ -2678,18 +2695,31 @@ fn get_room_default(ap: &mut Args) {
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
             error!("Error: Empty name of default room is not allowed!");
-        } else if !is_valid_room_name(trimmed_input) {
-            error!("Error: Invalid room name format for '{trimmed_input}'! Room name must start with '!' and contain exactly one ':'.");
+        } else if trimmed_input.contains(':') && !trimmed_input.starts_with(['!', '#']) {
+            // A full identifier without sigil is ambiguous: 'abc:server' could be
+            // the room id '!abc:server' or the room alias '#abc:server'. Unlike
+            // user ids, where '@' is the only possible sigil, we cannot guess here.
+            error!(
+                "Error: Invalid room format for '{trimmed_input}'! A room with a server \
+                part must start with '!' (room id) or with '#' (room alias)."
+            );
         } else {
-            ap.room_default = Some(trimmed_input.to_string());
-            debug!("room_default is '{trimmed_input}'");
+            // With ':' it is already a full room id or room alias, use it as is.
+            // Otherwise keep any '!'/'#' sigil (default '!') and append the homeserver.
+            let full_room = if trimmed_input.contains(':') {
+                trimmed_input.to_string()
+            } else {
+                let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
+                if trimmed_input.starts_with(['!', '#']) {
+                    format!("{trimmed_input}:{host}")
+                } else {
+                    format!("!{trimmed_input}:{host}")
+                }
+            };
+            debug!("room_default is '{full_room}'");
+            ap.room_default = Some(full_room);
         }
     }
-}
-
-// Validation function for room name format
-fn is_valid_room_name(name: &str) -> bool {
-    name.starts_with('!') && name.matches(':').count() == 1
 }
 
 /// A room is either specified with --room or the default from credentials file is used
