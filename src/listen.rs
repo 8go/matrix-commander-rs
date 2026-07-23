@@ -39,47 +39,28 @@ use matrix_sdk::{
             sync::sync_events::v3::Filter,
             // sync::sync_events,
         },
-        events::room::encrypted::{
-            OriginalSyncRoomEncryptedEvent,
-            /* RoomEncryptedEventContent, */ SyncRoomEncryptedEvent,
-        },
-        events::room::message::{
-            AudioMessageEventContent,
-            // EmoteMessageEventContent,
-            FileMessageEventContent,
-            ImageMessageEventContent,
-            MessageType,
-            NoticeMessageEventContent,
-            // OriginalRoomMessageEvent, OriginalSyncRoomMessageEvent,
-            // RedactedRoomMessageEventContent, RoomMessageEvent,
-            // OriginalSyncRoomEncryptedEvent,
-            RedactedSyncRoomMessageEvent,
-            RoomMessageEventContent,
-            SyncRoomMessageEvent,
-            TextMessageEventContent,
-            VideoMessageEventContent,
-        },
-        events::room::redaction::{
-            OriginalSyncRoomRedactionEvent, RedactedSyncRoomRedactionEvent, SyncRoomRedactionEvent,
-        },
         events::{
-            AnyMessageLikeEvent,
-            AnyTimelineEvent,
-            MessageLikeEvent,
-            OriginalSyncMessageLikeEvent,
-            // OriginalMessageLikeEvent, // MessageLikeEventContent,
+            room::{
+                encrypted::{
+                    OriginalSyncRoomEncryptedEvent,
+                    /* RoomEncryptedEventContent, */ SyncRoomEncryptedEvent,
+                },
+                message::{
+                    AudioMessageEventContent, EmoteMessageEventContent, FileMessageEventContent,
+                    ImageMessageEventContent, LocationMessageEventContent, MessageType,
+                    NoticeMessageEventContent, RedactedSyncRoomMessageEvent,
+                    RoomMessageEventContent, SyncRoomMessageEvent, TextMessageEventContent,
+                    VideoMessageEventContent,
+                },
+                redaction::{
+                    OriginalSyncRoomRedactionEvent, RedactedSyncRoomRedactionEvent,
+                    SyncRoomRedactionEvent,
+                },
+            },
+            AnyMessageLikeEvent, AnyTimelineEvent, MessageLikeEvent, OriginalSyncMessageLikeEvent,
             SyncMessageLikeEvent,
         },
-        // OwnedRoomAliasId,
-        OwnedRoomId,
-        OwnedUserId,
-        // serde::Raw,
-        // events::OriginalMessageLikeEvent,
-        RoomId,
-        // UserId,
-        // OwnedRoomId, OwnedRoomOrAliasId, OwnedServerName,
-        // device_id, room_id, session_id, user_id, OwnedDeviceId, OwnedUserId,
-        UInt,
+        OwnedRoomId, OwnedUserId, RoomId, UInt,
     },
     Client,
 };
@@ -172,6 +153,28 @@ fn handle_originalsyncmessagelikeevent(
                 println!(
                     "Message: type Notice: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
                     body, room_id, ev.sender, ev.event_id, formatted,
+                );
+            }
+            MessageType::Emote(emotemessageeventcontent) => {
+                let EmoteMessageEventContent {
+                    body, formatted, ..
+                } = emotemessageeventcontent;
+                println!(
+                    "Message: type Emote: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
+                    body, room_id, ev.sender, ev.event_id, formatted,
+                );
+            }
+            MessageType::Location(locationmessageeventcontent) => {
+                let LocationMessageEventContent {
+                    body,
+                    geo_uri,
+                    message,
+                    location,
+                    ..
+                } = locationmessageeventcontent;
+                println!(
+                    "Message: type Location: body {:?}, room {:?}, sender {:?}, event id {:?}, geo_uri {:?}, message {:?}, location {:?}, ",
+                    body, room_id, ev.sender, ev.event_id, geo_uri, message, location
                 );
             }
             _ => {
