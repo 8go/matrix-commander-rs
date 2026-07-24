@@ -68,7 +68,7 @@ use matrix_sdk::{
                 },
             },
             AnyMessageLikeEvent, AnyTimelineEvent, MessageLikeEvent, OriginalSyncMessageLikeEvent,
-            SyncMessageLikeEvent,
+            RedactedMessageLikeEvent, SyncMessageLikeEvent,
         },
         OwnedRoomId, OwnedUserId, RoomId, UInt,
     },
@@ -765,9 +765,9 @@ pub(crate) async fn listen_tail(
                     match anymessagelikeevent {
                         AnyMessageLikeEvent::RoomMessage(messagelikeevent) => {
                             debug!("value: {:?}", messagelikeevent);
+                            let room_id = OwnedRoomId::from(messagelikeevent.room_id());
                             match messagelikeevent {
                                 MessageLikeEvent::Original(originalmessagelikeevent) => {
-                                    let room_id = originalmessagelikeevent.room_id.clone();
                                     let originalsyncmessagelikeevent =
                                         OriginalSyncMessageLikeEvent::from(
                                             originalmessagelikeevent,
@@ -778,9 +778,18 @@ pub(crate) async fn listen_tail(
                                         &ctx,
                                     );
                                 }
-                                _ => {
-                                    warn!("RoomMessage type is not handled. Not implemented yet.");
-                                    err_count += 1;
+                                MessageLikeEvent::Redacted(redactedmessagelikeevent) => {
+                                    let RedactedMessageLikeEvent {
+                                        event_id, sender, ..
+                                    } = redactedmessagelikeevent;
+                                    if whoami != sender || listen_self {
+                                        println!(
+                                            "Redacted message: room {:?}, sender {:?}, event id {:?}, ",
+                                            room_id, sender, event_id
+                                        );
+                                    } else {
+                                        debug!("Skipping message from itself because --listen-self is not set.");
+                                    }
                                 }
                             }
                         }
@@ -789,37 +798,43 @@ pub(crate) async fn listen_tail(
                                 "Event of type RoomEncrypted received: {:?}",
                                 messagelikeevent
                             );
-                            // messagelikeevent is something like
-                            // RoomEncrypted: Original(OriginalMessageLikeEvent { content: RoomEncryptedEventContent { scheme: MegolmV1AesSha2(MegolmV1AesSha2Content { ciphertext: "xxx", sender_key: "yyy", device_id: "DDD", session_id: "sss" }), relates_to: Some(_Custom) }, event_id: "$eee", sender: "@sss:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!roomid:some.homeserver.org",
-                            //      unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } })
-                            // Cannot be decrypted with jroom.decrypt_event(&anytimelineevent.event).await?;
-                            // because decrypt_event() only decrypts events from sync() and not from messages()
-
-                            match messagelikeevent {
-                                MessageLikeEvent::Original(originalmessagelikeevent) => {
-                                    debug!(
-                                    "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
-                                    originalmessagelikeevent.content,
-                                    originalmessagelikeevent.sender,
-                                    originalmessagelikeevent.room_id,
-                                    originalmessagelikeevent.event_id,
-                                );
-                                    if whoami != originalmessagelikeevent.sender || listen_self {
+                            if whoami != messagelikeevent.sender() || listen_self {
+                                // messagelikeevent is something like
+                                // RoomEncrypted: Original(OriginalMessageLikeEvent { content: RoomEncryptedEventContent { scheme: MegolmV1AesSha2(MegolmV1AesSha2Content { ciphertext: "xxx", sender_key: "yyy", device_id: "DDD", session_id: "sss" }), relates_to: Some(_Custom) }, event_id: "$eee", sender: "@sss:some.homeserver.org", origin_server_ts: MilliSecondsSinceUnixEpoch(123), room_id: "!roomid:some.homeserver.org",
+                                //      unsigned: MessageLikeUnsigned { age: Some(123), transaction_id: None, relations: None } })
+                                // Cannot be decrypted with jroom.decrypt_event(&anytimelineevent.event).await?;
+                                // because decrypt_event() only decrypts events from sync() and not from messages()
+                                match messagelikeevent {
+                                    MessageLikeEvent::Original(originalmessagelikeevent) => {
+                                        debug!(
+                                            "New message: {:?} from sender {:?}, room {:?}, event_id {:?}",
+                                            originalmessagelikeevent.content,
+                                            originalmessagelikeevent.sender,
+                                            originalmessagelikeevent.room_id,
+                                            originalmessagelikeevent.event_id,
+                                        );
                                         // The compiler knows that it is RoomMessageEventContent, because it comes from room::messages()
                                         // print_type_of(&originalmessagelikeevent.content); // ruma_common::events::room::message::RoomEncryptedEventContent
                                         println!(
                                             "Message: type Encrypted: body {:?}, room {:?}, sender {:?}, event_id {:?}, message could not be decrypted",
                                             originalmessagelikeevent.content, originalmessagelikeevent.room_id, originalmessagelikeevent.sender, originalmessagelikeevent.event_id,
                                         );
-                                        // has originalmessagelikeevent.content.relates_to.unwrap()
-                                    } else {
-                                        debug!("Skipping message from itself because --listen-self is not set.");
+                                    }
+                                    MessageLikeEvent::Redacted(redactedmessagelikeevent) => {
+                                        let RedactedMessageLikeEvent {
+                                            event_id,
+                                            sender,
+                                            room_id,
+                                            ..
+                                        } = redactedmessagelikeevent;
+                                        println!(
+                                            "Redacted message: room {:?}, sender {:?}, event id {:?}, ",
+                                            room_id, sender, event_id
+                                        );
                                     }
                                 }
-                                _ => {
-                                    warn!("RoomMessage type is not handled. Not implemented yet.");
-                                    err_count += 1;
-                                }
+                            } else {
+                                debug!("Skipping message from itself because --listen-self is not set.");
                             }
                         }
                         AnyMessageLikeEvent::RoomRedaction(messagelikeevent) => {
