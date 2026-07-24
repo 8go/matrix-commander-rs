@@ -30,7 +30,7 @@ use matrix_sdk::{
     event_handler::Ctx,
     // SessionMeta,
     room::MessagesOptions,
-    // room,
+    // room
     room::Room,
     // ruma::
     ruma::{
@@ -53,7 +53,8 @@ use matrix_sdk::{
                     VideoMessageEventContent,
                 },
                 redaction::{
-                    OriginalSyncRoomRedactionEvent, RedactedSyncRoomRedactionEvent,
+                    OriginalRoomRedactionEvent, OriginalSyncRoomRedactionEvent,
+                    RedactedRoomRedactionEvent, RedactedSyncRoomRedactionEvent, RoomRedactionEvent,
                     SyncRoomRedactionEvent,
                 },
             },
@@ -67,6 +68,45 @@ use matrix_sdk::{
 
 /// Declare the items used from main.rs
 use crate::{Error, Output};
+
+/// Utility function to handle RoomRedactionEvent events.
+fn handle_roomredactionevent(ev: &RoomRedactionEvent, context: &Ctx<EvHandlerContext>) {
+    // This function is only called by `listen_tail` which doesn't support
+    // the `--output json` flag.
+    if context.whoami == ev.sender() && !context.listen_self {
+        debug!("Skipping redaction event from myself because --listen-self is not set.");
+        return;
+    }
+    match ev {
+        RoomRedactionEvent::Redacted(redactedmessageevent) => {
+            let RedactedRoomRedactionEvent {
+                content,
+                event_id,
+                sender,
+                room_id,
+                ..
+            } = redactedmessageevent;
+            println!(
+                "RoomRedaction: content: {:?}, room {:?}, sender {:?}, event id {:?}, ",
+                content, room_id, sender, event_id
+            );
+        }
+        RoomRedactionEvent::Original(redactedmessageevent) => {
+            let OriginalRoomRedactionEvent {
+                content,
+                redacts,
+                event_id,
+                sender,
+                room_id,
+                ..
+            } = redactedmessageevent;
+            println!(
+                "RoomRedaction: content: {:?}, redacts {:?}, room {:?}, sender {:?}, event id {:?}, ",
+                content, redacts, room_id, sender, event_id
+            );
+        }
+    }
+}
 
 /// Lower-level utility function to handle originalsyncmessagelikeevent
 fn handle_originalsyncmessagelikeevent(
@@ -796,8 +836,7 @@ pub(crate) async fn listen_tail(
                             }
                         }
                         AnyMessageLikeEvent::RoomRedaction(messagelikeevent) => {
-                            warn!("Event of type RoomRedaction received. Not implemented yet. value: {:?}", messagelikeevent);
-                            err_count += 1;
+                            handle_roomredactionevent(&messagelikeevent, &ctx);
                         }
                         // and many more
                         _ => {
