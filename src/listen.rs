@@ -87,7 +87,7 @@ fn handle_roomredactionevent(ev: &RoomRedactionEvent, context: &Ctx<EvHandlerCon
                 ..
             } = redactedmessageevent;
             println!(
-                "RoomRedaction: content: {:?}, room {:?}, sender {:?}, event id {:?}, ",
+                "RoomRedaction: content: {:?}, room {:?}, sender {:?}, event id {:?}",
                 content, room_id, sender, event_id
             );
         }
@@ -101,7 +101,7 @@ fn handle_roomredactionevent(ev: &RoomRedactionEvent, context: &Ctx<EvHandlerCon
                 ..
             } = redactedmessageevent;
             println!(
-                "RoomRedaction: content: {:?}, redacts {:?}, room {:?}, sender {:?}, event id {:?}, ",
+                "RoomRedaction: content: {:?}, redacts {:?}, room {:?}, sender {:?}, event id {:?}",
                 content, redacts, room_id, sender, event_id
             );
         }
@@ -136,7 +136,7 @@ fn handle_originalsyncmessagelikeevent(
                     ..
                 } = textmessageeventcontent;
                 println!(
-                    "Message: type Text: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
+                    "Message: type Text: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}",
                     body, room_id, ev.sender, ev.event_id, formatted,
                 );
             }
@@ -191,7 +191,7 @@ fn handle_originalsyncmessagelikeevent(
                     body, formatted, ..
                 } = noticemessageeventcontent;
                 println!(
-                    "Message: type Notice: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
+                    "Message: type Notice: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}",
                     body, room_id, ev.sender, ev.event_id, formatted,
                 );
             }
@@ -200,7 +200,7 @@ fn handle_originalsyncmessagelikeevent(
                     body, formatted, ..
                 } = emotemessageeventcontent;
                 println!(
-                    "Message: type Emote: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}, ",
+                    "Message: type Emote: body {:?}, room {:?}, sender {:?}, event id {:?}, formatted {:?}",
                     body, room_id, ev.sender, ev.event_id, formatted,
                 );
             }
@@ -213,7 +213,7 @@ fn handle_originalsyncmessagelikeevent(
                     ..
                 } = locationmessageeventcontent;
                 println!(
-                    "Message: type Location: body {:?}, room {:?}, sender {:?}, event id {:?}, geo_uri {:?}, message {:?}, location {:?}, ",
+                    "Message: type Location: body {:?}, room {:?}, sender {:?}, event id {:?}, geo_uri {:?}, message {:?}, location {:?}",
                     body, room_id, ev.sender, ev.event_id, geo_uri, message, location
                 );
             }
@@ -797,7 +797,7 @@ pub(crate) async fn listen_tail(
                                     } = redactedmessagelikeevent;
                                     if whoami != sender || listen_self {
                                         println!(
-                                            "Redacted message: room {:?}, sender {:?}, event id {:?}, ",
+                                            "Redacted message: room {:?}, sender {:?}, event id {:?}",
                                             room_id, sender, event_id
                                         );
                                     } else {
@@ -841,7 +841,7 @@ pub(crate) async fn listen_tail(
                                             ..
                                         } = redactedmessagelikeevent;
                                         println!(
-                                            "Redacted message: room {:?}, sender {:?}, event id {:?}, ",
+                                            "Redacted message: room {:?}, sender {:?}, event id {:?}",
                                             room_id, sender, event_id
                                         );
                                     }
