@@ -1063,10 +1063,11 @@ pub struct Args {
     /// default room for future actions.
     /// Details::
     /// If not specified for --login, it
-    /// will be queried via the keyboard. --login stores the specified room
-    /// as default room in your credentials file. This option is only used
-    /// in combination with --login. A default room is needed. Specify a
-    /// valid room either with --room-default or provide it via keyboard.
+    /// will be queried via the keyboard. Press Enter at the prompt to leave
+    /// the default room unset. --login stores the specified room as default
+    /// room in your credentials file. This option is only used in combination
+    /// with --login. Without a default room, room-based actions must use
+    /// --room explicitly and cannot use the '-' default-room shortcut.
     #[arg(long)]
     room_default: Option<String>,
 
@@ -2085,6 +2086,7 @@ pub struct Credentials {
     access_token: String,
     device_id: OwnedDeviceId,
     // room_id (was room_default); renamed to room_id to make it compatible with Python version
+    #[serde(default)]
     room_id: String,
     refresh_token: Option<String>,
 }
@@ -2680,7 +2682,8 @@ fn get_device(ap: &mut Args) {
 fn get_room_default(ap: &mut Args) {
     while ap.room_default.is_none() {
         print!(
-            "Enter name of one of your Matrix rooms that you want to use as default room  \
+            "Enter name of one of your Matrix rooms that you want to use as default room \
+            (press Enter to leave it unset) \
             (e.g. someRoomId, !someRoomId:some.homeserver.org or \
             #someRoomAlias:some.homeserver.org): "
         );
@@ -2694,7 +2697,8 @@ fn get_room_default(ap: &mut Args) {
         }
         let trimmed_input = input.trim();
         if trimmed_input.is_empty() {
-            error!("Error: Empty name of default room is not allowed!");
+            debug!("No default room was specified.");
+            ap.room_default = Some(String::new());
         } else if trimmed_input.contains(':') && !trimmed_input.starts_with(['!', '#']) {
             // A full identifier without sigil is ambiguous: 'abc:server' could be
             // the room id '!abc:server' or the room alias '#abc:server'. Unlike
@@ -2726,7 +2730,7 @@ fn get_room_default(ap: &mut Args) {
 /// On error return None.
 fn set_rooms(ap: &mut Args, default_room: &str) {
     debug!("set_rooms()");
-    if ap.room.is_empty() {
+    if ap.room.is_empty() && !default_room.is_empty() {
         ap.room.push(default_room.to_string()); // since --room is empty, use default room from credentials
     }
 }
@@ -2744,6 +2748,9 @@ fn set_rooms(ap: &mut Args, default_room: &str) {
 /// On error return None.
 async fn get_room_default_from_credentials(client: &Client, credentials: &Credentials) -> String {
     let mut room = credentials.room_id.clone();
+    if room.trim().is_empty() {
+        return String::new();
+    }
     convert_to_full_room_id(
         client,
         &mut room,
@@ -2809,7 +2816,11 @@ fn replace_minus_with_default_room(vecstr: &mut Vec<String>, default_room: &str)
     // Hence it is not possible to say "if vector is empty let's use the default room".
     // The user has to specify something, we used "-".
     if vecstr.iter().any(|x| x.trim() == "-") {
-        vecstr.push(default_room.to_string());
+        if default_room.is_empty() {
+            error!("No default room is configured; specify a room instead of using '-'.");
+        } else {
+            vecstr.push(default_room.to_string());
+        }
     }
     vecstr.retain(|x| x.trim() != "-");
 }
@@ -4360,6 +4371,38 @@ mod tests {
         ($e:expr) => {
             tokio_test::block_on($e)
         };
+    }
+
+    #[test]
+    fn test_set_rooms_without_default_room() {
+        let mut args = Args::default();
+        set_rooms(&mut args, "");
+        assert!(args.room.is_empty());
+
+        set_rooms(&mut args, "!default:example.org");
+        assert_eq!(args.room, ["!default:example.org"]);
+    }
+
+    #[test]
+    fn test_default_room_shortcut_without_default_room() {
+        let mut rooms = vec!["-".to_string(), "!explicit:example.org".to_string()];
+        replace_minus_with_default_room(&mut rooms, "");
+        assert_eq!(rooms, ["!explicit:example.org"]);
+    }
+
+    #[test]
+    fn test_credentials_without_default_room() {
+        let credentials: Credentials = serde_json::from_str(
+            r#"{
+                "homeserver": "https://example.org",
+                "user_id": "@alice:example.org",
+                "access_token": "token",
+                "device_id": "DEVICE",
+                "refresh_token": null
+            }"#,
+        )
+        .unwrap();
+        assert!(credentials.room_id.is_empty());
     }
 
     #[test]

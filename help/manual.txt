@@ -296,10 +296,11 @@ Options:
       --room-default <ROOM_DEFAULT>
           Optionally specify a room as the default room for future actions.
           Details:: If not specified for --login, it will be queried via the
-          keyboard. --login stores the specified room as default room in your
-          credentials file. This option is only used in combination with
-          --login. A default room is needed. Specify a valid room either with
-          --room-default or provide it via keyboard
+          keyboard. Press Enter at the prompt to leave the default room unset.
+          --login stores the specified room as default room in your credentials
+          file. This option is only used in combination with --login. Without a
+          default room, room-based actions must use --room explicitly and
+          cannot use the '-' default-room shortcut
 
       --devices
           Print the list of devices. Details:: All device of this account will
