@@ -27,6 +27,7 @@ clap = { version = "4.6", features = [
 colored = "3.1"
 directories = "6.0"
 futures-util = "0.3"
+image = "0.25"
 json = "0.12"
 matrix-sdk = { version = "0.18", features = ["markdown", "anyhow", "bundled-sqlite"] }
 mime = "0.3"
