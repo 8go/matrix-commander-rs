@@ -3072,15 +3072,13 @@ fn get_video_metadata(file_path: &Path) -> Option<(u32, u32, Duration)> {
 fn generate_video_thumbnail(file_path: &Path) -> Option<Vec<u8>> {
     let output = Command::new("ffmpeg")
         .arg("-ss")          // seek to position
-        .arg("00:00:01")     // 1 second in
+        .arg("0")            // 1st frame, can cause black frame in some cases
         .arg("-i")           // input file
         .arg(file_path)
         .arg("-frames:v")    // number of video frames
         .arg("1")            // just one frame
         .arg("-f")           // output format
         .arg("image2")       // raw image
-        .arg("-vf")          // video filter for scaling
-        .arg("scale=320:-1") // 320px wide, maintain aspect ratio
         .arg("pipe:1")       // output to stdout
         .output()
         .ok()?;
