@@ -10,6 +10,7 @@
 //! logging in, logging out, verifying, sending messages, sending files, etc.
 //! It excludes receiving and listening (see listen.rs).
 
+use image::GenericImageView;
 use mime::Mime;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
@@ -19,16 +20,24 @@ use std::fs::File;
 // use std::ops::Deref;
 // use std::path::Path;
 use std::io::{stdin, IsTerminal};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 // use thiserror::Error;
 // use directories::ProjectDirs;
 // use serde::{Deserialize, Serialize};
-//use serde_json::Result;
+use serde_json;
 use url::Url;
+use std::process::Command;
 
 use matrix_sdk::{
-    attachment::AttachmentConfig,
+    attachment::{
+        AttachmentConfig,
+        AttachmentInfo,
+        BaseImageInfo,
+        BaseAudioInfo,
+        BaseVideoInfo,
+        BaseFileInfo,
+        Thumbnail},
     // encryption::CryptoStoreError,
     // deserialized_responses::RawSyncOrStrippedState,
     authentication::{matrix::MatrixSession, SessionTokens},
@@ -80,7 +89,7 @@ use matrix_sdk::{
         OwnedMxcUri,
         OwnedRoomAliasId,
         OwnedRoomId,
-        // UInt,
+        UInt,
         OwnedUserId,
         RoomAliasId,
         RoomId,
@@ -2591,6 +2600,67 @@ pub(crate) async fn file(
                 error!("No data to send. Data is empty.");
                 err_count += 1;
             } else {
+                
+                let resolved_mime = mime.clone().unwrap_or_else(|| {
+                    mime_guess::from_path(filename)
+                        .first_or(mime::APPLICATION_OCTET_STREAM)
+                });
+
+                let mut config = AttachmentConfig::new();
+
+                if resolved_mime.type_() == mime::IMAGE {
+                    if let Some((w, h)) = get_image_dimensions(&data) {
+                        config.info = Some(AttachmentInfo::Image(BaseImageInfo {
+                            width: Some(UInt::from(w)),
+                            height: Some(UInt::from(h)),
+                            size: Some(UInt::from(data.len() as u32)),
+                            ..Default::default()
+                        }));
+                    }
+                } else if resolved_mime.type_() == mime::AUDIO {
+                    if filename.to_str().unwrap() != "-" {
+                        if let Some(duration) = get_audio_duration(filename) {
+                            config.info = Some(AttachmentInfo::Audio(BaseAudioInfo {
+                                duration: Some(duration),
+                                size: Some(UInt::from(data.len() as u32)),
+                                ..Default::default()
+                            }));
+                        }
+                    }
+                } else if resolved_mime.type_() == mime::VIDEO{
+                    if filename.to_str().unwrap() != "-" {
+                        if let Some((w, h, duration)) = get_video_metadata(filename) {
+                            let video_info = BaseVideoInfo {
+                                width: Some(UInt::from(w)),
+                                height: Some(UInt::from(h)),
+                                duration: Some(duration),
+                                size: Some(UInt::from(data.len() as u32)),
+                                ..Default::default()
+                            };
+
+                            if let Some(thumb_bytes) = generate_video_thumbnail(filename) {
+                                if let Some((tw, th)) = get_image_dimensions(&thumb_bytes) {
+                                    let thumb_size = thumb_bytes.len() as u32;
+                                    config.thumbnail = Some(Thumbnail {
+                                        data: thumb_bytes,
+                                        content_type: mime::IMAGE_JPEG,
+                                        height: UInt::from(th),
+                                        width: UInt::from(tw),
+                                        size: UInt::from(thumb_size),
+                                    });
+                                }
+                            }
+                            config.info = Some(AttachmentInfo::Video(video_info));
+                        }
+                    }
+                } else {
+                    config.info = Some(AttachmentInfo::File(BaseFileInfo {
+                        size: Some(UInt::from(data.len() as u32)),
+                        ..Default::default()
+                    }));
+                    
+                }
+
                 match room
                     .send_attachment(
                         label
@@ -2598,12 +2668,9 @@ pub(crate) async fn file(
                             .or_else(|| filename.file_name().as_ref().map(|o| o.to_string_lossy()))
                             .ok_or(Error::InvalidFile)?
                             .as_ref(),
-                        mime.as_ref().unwrap_or(
-                            &mime_guess::from_path(filename)
-                                .first_or(mime::APPLICATION_OCTET_STREAM),
-                        ),
+                        &resolved_mime,
                         data,
-                        AttachmentConfig::new(),
+                        config,
                     )
                     .await
                 {
@@ -2936,5 +3003,89 @@ pub(crate) async fn media_mxc_to_http(
         Ok(())
     } else {
         Err(Error::MediaMxcToHttpFailed)
+    }
+}
+
+fn get_image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    let img = image::load_from_memory(data).ok()?;
+    Some(img.dimensions())
+}
+
+fn get_audio_duration(file_path: &Path) -> Option<Duration> {
+    // note this does not work for files piped in.
+    // Run: ffprobe -v quiet -print_format json -show_entries format=duration <file>
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("quiet")
+        .arg("-print_format")
+        .arg("json")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg(file_path)
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    
+    // Parse JSON like: {"format": {"duration": "123.456"}}
+    let json: serde_json::Value = serde_json::from_str(&stdout).ok()?;
+    
+    let duration_str = json.get("format")?
+                          .get("duration")?
+                          .as_str()?;
+    
+    let secs_f64: f64 = duration_str.parse().ok()?;
+    Some(Duration::from_secs_f64(secs_f64))
+}
+
+fn get_video_metadata(file_path: &Path) -> Option<(u32, u32, Duration)> {
+    // note this does not work for files piped in.
+    // Run: ffprobe -v quiet -print_format json -show_entries format=duration <file>
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("quiet")
+        .arg("-print_format")
+        .arg("json")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-show_entries")
+        .arg("stream=width,height")
+        .arg(file_path)
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    
+    // Parse JSON like: {"format": {"duration": "123.456"}}
+    let json: serde_json::Value = serde_json::from_str(&stdout).ok()?;
+    
+    let duration_str = json.get("format")?
+                          .get("duration")?
+                          .as_str()?;
+    let width = json.get("streams")?.as_array()?.first()?.get("width")?.as_u64()? as u32;
+    let height = json.get("streams")?.as_array()?.first()?.get("height")?.as_u64()? as u32;
+    
+    let secs_f64: f64 = duration_str.parse().ok()?;
+    Some((width, height, Duration::from_secs_f64(secs_f64)))
+}
+
+fn generate_video_thumbnail(file_path: &Path) -> Option<Vec<u8>> {
+    let output = Command::new("ffmpeg")
+        .arg("-ss")          // seek to position
+        .arg("0")            // 1st frame, can cause black frame in some cases
+        .arg("-i")           // input file
+        .arg(file_path)
+        .arg("-frames:v")    // number of video frames
+        .arg("1")            // just one frame
+        .arg("-f")           // output format
+        .arg("image2")       // raw image
+        .arg("pipe:1")       // output to stdout
+        .output()
+        .ok()?;
+
+    if output.status.success() && !output.stdout.is_empty() {
+        Some(output.stdout)
+    } else {
+        None
     }
 }
