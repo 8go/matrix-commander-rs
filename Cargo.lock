@@ -2008,9 +2008,9 @@ dependencies = [
 
 [[package]]
 name = "matrix-sdk"
-version = "0.19.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d41d3631bac5de5c2fdd8dad2edb84a9077a12836d50ef0fb5c3465335cc49ed"
+checksum = "2afc652a144822f6fbe24084e08bc59cb483fd0b504396d492131dec0749396e"
 dependencies = [
  "anyhow",
  "anymap2",
