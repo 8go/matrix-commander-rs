@@ -714,6 +714,7 @@ pub(crate) async fn listen_tail(
     let ctx = Ctx(context);
 
     let mut err_count = 0u32;
+    let mut utd_count = 0u32;
     for roomid in roomids.iter() {
         let mut options = MessagesOptions::backward(); // .from("t47429-4392820_219380_26003_2265");
         options.limit = UInt::new(number).unwrap();
@@ -767,7 +768,10 @@ pub(crate) async fn listen_tail(
                             roomid, sender, event_id,
                         );
                     }
-                    err_count += 1;
+                    // Count UTD events separately (not in err_count), so that
+                    // undecryptable history does not make the command return
+                    // NotImplementedYet and exit non-zero.
+                    utd_count += 1;
                     continue;
                 }
             };
@@ -863,6 +867,12 @@ pub(crate) async fn listen_tail(
                 _ => debug!("State event, not interested in that."),
             }
         }
+    }
+    if utd_count != 0 {
+        warn!(
+            "Skipped {} undecryptable event(s) (missing room key) while reading the tail.",
+            utd_count
+        );
     }
     if err_count != 0 {
         Err(Error::NotImplementedYet)
