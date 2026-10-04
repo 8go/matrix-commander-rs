@@ -4406,6 +4406,35 @@ mod tests {
     }
 
     #[test]
+    fn test_message_and_file_with_invalid_room_return_error() {
+        let client = aw!(Client::builder()
+            .homeserver_url("https://example.org")
+            .build())
+        .unwrap();
+        let rooms = vec!["zz002".to_string()];
+        let result = aw!(message(
+            &client,
+            &["hello".to_string()],
+            &rooms,
+            false,
+            false,
+            false,
+            false,
+            false,
+        ));
+        assert!(matches!(result, Err(Error::InvalidRoom)));
+        let result = aw!(file(
+            &client,
+            &[PathBuf::from("file.txt")],
+            &rooms,
+            None,
+            None,
+            &PathBuf::from("file"),
+        ));
+        assert!(matches!(result, Err(Error::InvalidRoom)));
+    }
+
+    #[test]
     fn test_usage() {
         assert_eq!(usage(), ());
     }

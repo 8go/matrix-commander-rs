@@ -2515,7 +2515,17 @@ pub(crate) async fn message(
     }
     let mut err_count = 0u32;
     for roomname in roomnames.iter() {
-        let proom = RoomId::parse(roomname.replace("\\!", "!")).unwrap(); // remove possible escape
+        let proom = match RoomId::parse(roomname.replace("\\!", "!")) {
+            // remove possible escape
+            Ok(id) => id,
+            Err(ref e) => {
+                error!(
+                    "Error: invalid room id {:?}. Error reported is {:?}.",
+                    roomname, e
+                );
+                return Err(Error::InvalidRoom);
+            }
+        };
         debug!("In message(): parsed room name is {:?}", proom);
         let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for fmsg in fmsgs.iter() {
@@ -2560,7 +2570,17 @@ pub(crate) async fn file(
     let mut err_count = 0u32;
     let mut pb: PathBuf;
     for roomname in roomnames.iter() {
-        let proom = RoomId::parse(roomname.replace("\\!", "!")).unwrap(); // remove possible escape
+        let proom = match RoomId::parse(roomname.replace("\\!", "!")) {
+            // remove possible escape
+            Ok(id) => id,
+            Err(ref e) => {
+                error!(
+                    "Error: invalid room id {:?}. Error reported is {:?}.",
+                    roomname, e
+                );
+                return Err(Error::InvalidRoom);
+            }
+        };
         debug!("In file(): parsed room name is {:?}", proom);
         let room = client.get_room(&proom).ok_or(Error::InvalidRoom)?;
         for mut filename in filenames.iter() {
