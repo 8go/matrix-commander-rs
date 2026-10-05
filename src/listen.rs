@@ -948,7 +948,16 @@ pub(crate) async fn listen_all(
 
     let mut roomids: Vec<OwnedRoomId> = Vec::new();
     for roomname in roomnames {
-        roomids.push(RoomId::parse(roomname.clone()).unwrap());
+        roomids.push(match RoomId::parse(roomname.clone()) {
+            Ok(id) => id,
+            Err(ref e) => {
+                error!(
+                    "Error: invalid room id {:?}. Error reported is {:?}.",
+                    roomname, e
+                );
+                return Err(Error::InvalidRoom);
+            }
+        });
     }
     let ownedroomidvecoption: Option<Vec<OwnedRoomId>> = Some(roomids);
     // Filter by rooms. This works.

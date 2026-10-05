@@ -4435,6 +4435,18 @@ mod tests {
     }
 
     #[test]
+    fn test_listen_all_with_invalid_room_returns_error() {
+        let client = aw!(Client::builder()
+            .homeserver_url("https://example.org")
+            .build())
+        .unwrap();
+        let rooms = vec!["test".to_string()];
+        let whoami = OwnedUserId::try_from("@alice:example.org").unwrap();
+        let result = aw!(listen_all(&client, &rooms, false, whoami, Output::Text));
+        assert!(matches!(result, Err(Error::InvalidRoom)));
+    }
+
+    #[test]
     fn test_usage() {
         assert_eq!(usage(), ());
     }
