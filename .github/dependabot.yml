@@ -12,5 +12,5 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      # Check for updates managed by Composer once a week
-      interval: "weekly"
+      # Check for updates managed by Composer once a day
+      interval: "daily"
