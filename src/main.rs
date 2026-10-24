@@ -412,7 +412,7 @@ impl FromStr for Version {
     }
 }
 
-/// Creates .to_string() for Sync for --sync option
+/// Creates .to_string() for Version for --version option
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -520,7 +520,7 @@ impl FromStr for Logout {
     }
 }
 
-/// Creates .to_string() for Sync for --sync option
+/// Creates .to_string() for Logout for --logout option
 impl fmt::Display for Logout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -636,7 +636,7 @@ impl LogLevel {
 //     }
 // }
 
-/// Creates .to_string() for Listen for --listen option
+/// Creates .to_string() for LogLevel for --log-level option
 impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -685,7 +685,7 @@ impl FromStr for Output {
     }
 }
 
-/// Creates .to_string() for Listen for --listen option
+/// Creates .to_string() for Output for --output option
 impl fmt::Display for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
