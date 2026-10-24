@@ -533,7 +533,7 @@ impl fmt::Display for Logout {
 #[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 enum Listen {
     // None: only useful if one needs to know if option was used or not.
-    // Sort of like an or instead of an Option<Sync>.
+    // Sort of like an or instead of an Option<Listen>.
     // We do not need to know if user used the option or not,
     // we just need to know the value.
     /// Never: Indicates to not listen, default
@@ -649,7 +649,7 @@ impl fmt::Display for LogLevel {
 #[derive(Clone, Debug, Copy, PartialEq, Default, ValueEnum)]
 pub enum Output {
     // None: only useful if one needs to know if option was used or not.
-    // Sort of like an or instead of an Option<Sync>.
+    // Sort of like an or instead of an Option<Output>.
     // We do not need to know if user used the option or not,
     // we just need to know the value.
     /// Text: Indicates to print human readable text, default
