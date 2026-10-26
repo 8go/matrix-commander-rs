@@ -123,12 +123,25 @@ pub(crate) fn replace_star_with_rooms(client: &Client, vecstr: &mut Vec<String>)
     }
 }
 
+/// Is this the local part of a hash based room id?
+/// Room ids of room version 12 and later (MSC4291) are the unpadded URL-safe base64
+/// of a SHA-256 hash, i.e. 43 characters, and they have no server part,
+/// e.g. !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac.
+pub(crate) fn is_hashed_room_id(localpart: &str) -> bool {
+    localpart.len() == 43
+        && localpart
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 /// Convert partial room id, partial room alias, room alias to
 /// full room id.
 /// !irywieryiwre => !irywieryiwre:matrix.server.com
 /// john => !irywieryiwre:matrix.server.com
 /// #john => !irywieryiwre:matrix.server.com
 /// #john:matrix.server.com => !irywieryiwre:matrix.server.com
+/// A room id of room version 12 or later is already complete and is kept as it is.
+/// !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac => !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac
 pub(crate) async fn convert_to_full_room_id(
     client: &Client,
     room: &mut String,
@@ -148,6 +161,15 @@ pub(crate) async fn convert_to_full_room_id(
         room.insert(0, '#');
     }
     if !room.contains(':') {
+        if is_hashed_room_id(room.strip_prefix('!').unwrap_or("")) {
+            // A room id of room version 12 or later is complete without a server part.
+            // Appending the homeserver would turn it into an id of a room that does not exist.
+            debug!(
+                "Room id {:?} has no server part, keeping it as it is.",
+                room
+            );
+            return;
+        }
         room.push(':');
         room.push_str(default_host);
     }
@@ -197,6 +219,8 @@ pub(crate) async fn convert_to_full_room_id(
 /// john => !irywieryiwre:matrix.server.com
 /// #john => !irywieryiwre:matrix.server.com
 /// #john:matrix.server.com => !irywieryiwre:matrix.server.com
+/// A room id of room version 12 or later is already complete and is kept as it is.
+/// !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac => !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac
 pub(crate) async fn convert_to_full_room_ids(
     client: &Client,
     vecstr: &mut Vec<String>,
