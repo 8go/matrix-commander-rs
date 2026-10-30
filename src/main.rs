@@ -81,8 +81,8 @@ use crate::mclient::{
     bootstrap, convert_to_full_alias_ids, convert_to_full_mxc_uris, convert_to_full_room_id,
     convert_to_full_room_ids, convert_to_full_user_ids, delete_devices_pre, devices, file,
     get_avatar, get_avatar_url, get_display_name, get_masterkey, get_profile, get_room_info,
-    invited_rooms, joined_members, joined_rooms, left_rooms, login, logout, logout_local,
-    media_delete, media_download, media_mxc_to_http, media_upload, message,
+    invited_rooms, is_hashed_room_id, joined_members, joined_rooms, left_rooms, login, logout,
+    logout_local, media_delete, media_download, media_mxc_to_http, media_upload, message,
     replace_star_with_rooms, restore_credentials, restore_login, room_ban, room_create,
     room_enable_encryption, room_forget, room_get_state, room_get_visibility, room_invite,
     room_join, room_kick, room_leave, room_resolve_alias, room_unban, rooms, set_avatar,
@@ -2712,6 +2712,9 @@ fn get_room_default(ap: &mut Args) {
             // Otherwise keep any '!'/'#' sigil (default '!') and append the homeserver.
             let full_room = if trimmed_input.contains(':') {
                 trimmed_input.to_string()
+            } else if is_hashed_room_id(trimmed_input) {
+                // A room id of room version 12 or later has no server part.
+                trimmed_input.to_string()
             } else {
                 let host = ap.homeserver.as_ref().and_then(Url::host_str).unwrap();
                 if trimmed_input.starts_with(['!', '#']) {
@@ -4444,6 +4447,51 @@ mod tests {
         let whoami = OwnedUserId::try_from("@alice:example.org").unwrap();
         let result = aw!(listen_all(&client, &rooms, false, whoami, Output::Text));
         assert!(matches!(result, Err(Error::InvalidRoom)));
+    }
+
+    #[test]
+    fn test_convert_to_full_room_id_keeps_hash_based_room_id() {
+        let client = aw!(Client::builder()
+            .homeserver_url("https://example.org")
+            .build())
+        .unwrap();
+        let mut room = "!9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac".to_string();
+        aw!(convert_to_full_room_id(&client, &mut room, "example.org"));
+        assert_eq!(room, "!9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac");
+    }
+
+    #[test]
+    fn test_convert_to_full_room_id_completes_short_room_id() {
+        let client = aw!(Client::builder()
+            .homeserver_url("https://example.org")
+            .build())
+        .unwrap();
+        let mut room = "!irywieryiwre".to_string();
+        aw!(convert_to_full_room_id(&client, &mut room, "example.org"));
+        assert_eq!(room, "!irywieryiwre:example.org");
+
+        // One character short of a hash based room id, so the server part is still added.
+        let mut room = format!("!{}", "a".repeat(42));
+        aw!(convert_to_full_room_id(&client, &mut room, "example.org"));
+        assert_eq!(room, format!("!{}:example.org", "a".repeat(42)));
+    }
+
+    #[test]
+    fn test_is_hashed_room_id() {
+        // 43 characters of URL-safe base64, as used by room version 12 and later.
+        assert!(is_hashed_room_id(
+            "!9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac"
+        ));
+        assert!(!is_hashed_room_id(&format!("!{}", "a".repeat(42))));
+        assert!(!is_hashed_room_id(&format!("!{}", "a".repeat(44))));
+        assert!(!is_hashed_room_id("!irywieryiwre"));
+        assert!(!is_hashed_room_id("!"));
+        // Without the '!' sigil it is not a room id.
+        assert!(!is_hashed_room_id(
+            "9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac"
+        ));
+        // A colon or a dot never belongs to the local part of a room id.
+        assert!(!is_hashed_room_id(&format!("!{}:a", "a".repeat(41))));
     }
 
     #[test]
