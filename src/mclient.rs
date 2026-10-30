@@ -123,11 +123,12 @@ pub(crate) fn replace_star_with_rooms(client: &Client, vecstr: &mut Vec<String>)
     }
 }
 
-/// Is this the local part of a hash based room id?
+/// Is this a hash based room id?
 /// Room ids of room version 12 and later (MSC4291) are the unpadded URL-safe base64
-/// of a SHA-256 hash, i.e. 43 characters, and they have no server part,
+/// of a SHA-256 hash, i.e. 43 characters after the '!' sigil, and they have no server part,
 /// e.g. !9jgx65CdGz1ZuqZ1DIS8Gj_zkCo2osIxxiZCuFBUzac.
-pub(crate) fn is_hashed_room_id(localpart: &str) -> bool {
+pub(crate) fn is_hashed_room_id(room: &str) -> bool {
+    let localpart = room.strip_prefix('!').unwrap_or("");
     localpart.len() == 43
         && localpart
             .bytes()
@@ -161,7 +162,7 @@ pub(crate) async fn convert_to_full_room_id(
         room.insert(0, '#');
     }
     if !room.contains(':') {
-        if is_hashed_room_id(room.strip_prefix('!').unwrap_or("")) {
+        if is_hashed_room_id(room) {
             // A room id of room version 12 or later is complete without a server part.
             // Appending the homeserver would turn it into an id of a room that does not exist.
             debug!(
